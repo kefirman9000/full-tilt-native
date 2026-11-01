@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "pb.h"
+#include <fstream>
 
 
 #include "control.h"
@@ -36,6 +37,7 @@ float pb::time_now = 0, pb::time_next = 0, pb::time_ticks_remainder = 0;
 float pb::BallMaxSpeed, pb::BallHalfRadius, pb::BallToBallCollisionDistance;
 float pb::IdleTimerMs = 0;
 bool pb::FT2Table = false;
+bool pb::FT2FullScreen = false;
 bool pb::FullTiltMode = false, pb::FullTiltDemoMode = false, pb::cheat_mode = false, pb::demo_mode = false, pb::CreditsActive = false;
 std::string pb::DatFileName, pb::BasePath;
 ImU32 pb::TextBoxColor;
@@ -86,7 +88,7 @@ int pb::init()
 	render::init(nullptr, resInfo->TableWidth, resInfo->TableHeight);
 	// FT2 tables: the "table" sprite is the full-screen playfield; the "background" record is not a backdrop
 	// (it shows up as white blocks wherever sprites are redrawn), so start from black instead.
-	if (!FT2Table)
+	if (!FT2FullScreen)
 	gdrv::copy_bitmap(
 		render::vscreen,
 		backgroundBmp->Width,
@@ -135,6 +137,25 @@ int pb::uninit()
 	return 0;
 }
 
+// FT2 tables (score_box record) fill the whole screen; FT1 tables keep the Space Cadet table + side panel layout
+void pb::DetectFT2Layout(const std::string& datFilePath)
+{
+	std::ifstream file(datFilePath, std::ios::binary);
+	std::string data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+	static const char marker[] = "score_box";
+	FT2FullScreen = data.find(std::string(marker, sizeof marker)) != std::string::npos;
+	if (FT2FullScreen)
+	{
+		// FT2 table backgrounds fill the whole screen (640x480 / 800x600 / 1024x768)
+		for (auto& r : fullscrn::resolution_array)
+		{
+			r.TableWidth = r.ScreenWidth;
+			r.TableHeight = r.ScreenHeight;
+		}
+	}
+	printf("Table layout: %s\n", FT2FullScreen ? "Full Tilt 2 (full screen)" : "Space Cadet (table + side panel)");
+}
+
 void pb::SelectDatFile(const std::vector<const char*>& dataSearchPaths)
 {
 	DatFileName.clear();
@@ -146,19 +167,13 @@ void pb::SelectDatFile(const std::vector<const char*>& dataSearchPaths)
 		"PINBALL.DAT",
 		"DEMO.DAT",
 	};
-	// Experimental: FT2_DAT=ALIEN.DAT (or HERO.DAT / MAD.DAT) loads a Full Tilt! 2 table in Full Tilt mode
+	// Experimental: FT2_DAT=ALIEN.DAT (HERO/MAD, or Full Tilt 1's PIRATES/DRAGON) loads another table in Full Tilt
+	// mode, with generic rules (ft2_control) instead of Space Cadet's
 	const char* ft2Dat = getenv("FT2_DAT");
 	FT2Table = ft2Dat && *ft2Dat;
+	FT2FullScreen = false;
 	if (FT2Table)
-	{
 		datFileNames[0] = ft2Dat;
-		// FT2 table backgrounds fill the whole screen (640x480 / 800x600 / 1024x768)
-		for (auto& r : fullscrn::resolution_array)
-		{
-			r.TableWidth = r.ScreenWidth;
-			r.TableHeight = r.ScreenHeight;
-		}
-	}
 
 	// Default game data test order: CADET.DAT, PINBALL.DAT, DEMO.DAT
 	if (options::Options.Prefer3DPBGameData)
@@ -188,6 +203,8 @@ void pb::SelectDatFile(const std::vector<const char*>& dataSearchPaths)
 					DatFileName = fileName;
 					if (datFileName == "CADET.DAT" || (ft2Dat && *ft2Dat && datFileName == ft2Dat))
 						FullTiltMode = true;
+					if (FT2Table && datFileName == ft2Dat)
+						DetectFT2Layout(datFilePath);
 					if (datFileName == "DEMO.DAT")
 						FullTiltDemoMode = FullTiltMode = true;
 					printf("Loading game from: %s\n", datFilePath.c_str());
@@ -686,7 +703,8 @@ void pb::InputDown(GameInput input)
 
 void pb::launch_ball()
 {
-	MainTable->Plunger->Message(MessageCode::PlungerLaunchBall, 0.0f);
+	if (MainTable->Plunger)
+		MainTable->Plunger->Message(MessageCode::PlungerLaunchBall, 0.0f);
 }
 
 void pb::end_game()

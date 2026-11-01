@@ -58,7 +58,7 @@ TTableLayer::TTableLayer(TPinballTable* table): TCollisionComponent(table, -1, f
 
 	// FT2 tables: the world is rotated 180 degrees relative to Space Cadet (camera distance is positive instead of
 	// negative, flipping both screen axes), so "down the table" is -Y and gravity must point the other way.
-	if (pb::FT2Table)
+	if (pb::FT2FullScreen)
 	{
 		GraityDirX = -GraityDirX;
 		GraityDirY = -GraityDirY;

@@ -25,7 +25,7 @@ scoreStruct* score::create(LPCSTR fieldName, gdrv_bitmap8* renderBgBmp)
 	score->BackgroundBmp = renderBgBmp;
 
 	// Experimental: FT2 tables name these records differently (score_box, ballcount_box, player_box)
-	if (pb::FT2Table)
+	if (pb::FT2FullScreen)
 	{
 		if (!strcmp(fieldName, "score1")) fieldName = "score_box";
 		else if (!strcmp(fieldName, "ballcount1")) fieldName = "ballcount_box";
@@ -43,7 +43,7 @@ scoreStruct* score::create(LPCSTR fieldName, gdrv_bitmap8* renderBgBmp)
 	}
 	int groupIndex = *dimensions++;
 	// FT2 fonts are ASCII tables starting at ' ', so digit 0 is 16 glyphs in
-	if (pb::FT2Table)
+	if (pb::FT2FullScreen)
 		groupIndex += '0' - ' ';
 	score->OffsetX = *dimensions++;
 	score->OffsetY = *dimensions++;

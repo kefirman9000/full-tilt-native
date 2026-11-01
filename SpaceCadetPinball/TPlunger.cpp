@@ -29,7 +29,7 @@ TPlunger::TPlunger(TPinballTable* table, int groupIndex) : TCollisionComponent(t
     {
         MaxPullback = 50;
         // FT2 tables give the plunger strength in attribute 402 (500..1000; their world is ~10x Cadet's)
-        if (pb::FT2Table)
+        if (pb::FT2FullScreen)
         {
             auto strength = loader::query_float_attribute(groupIndex, 0, 402);
             if (strength)
@@ -50,7 +50,7 @@ TPlunger::TPlunger(TPinballTable* table, int groupIndex) : TCollisionComponent(t
 	float* floatArr = loader::query_float_attribute(groupIndex, 0, 601);
 	table->PlungerPosition = {floatArr[0], floatArr[1]};
 
-	if (pb::FT2Table)
+	if (pb::FT2FullScreen)
 	{
 		// Plunger shape (attribute 600: count, then x/y pairs): center and size, used by FT2Launch
 		auto wall = loader::query_float_attribute(groupIndex, 0, 600);
@@ -201,7 +201,7 @@ int TPlunger::Message(MessageCode code, float value)
 				timer::kill(PullbackTimer_);
 			PullbackTimer_ = 0;
 			loader::play_sound(SoundIndexP2, this, "TPlunger3");
-			if (pb::FT2Table)
+			if (pb::FT2FullScreen)
 				FT2Launch();
 			SpriteSet(0);
 			timer::set(PullbackDelay, this, ReleasedTimer);

@@ -207,8 +207,8 @@ TPinballTable::TPinballTable(): TPinballComponent(nullptr, -1, false)
 	}
 
 	render::build_occlude_list();
-	pb::InfoTextBox = pb::FT2Table ? nullptr : dynamic_cast<TTextBox*>(find_component("info_text_box"));
-	pb::MissTextBox = pb::FT2Table ? nullptr : dynamic_cast<TTextBox*>(find_component("mission_text_box"));
+	pb::InfoTextBox = pb::FT2FullScreen ? nullptr : dynamic_cast<TTextBox*>(find_component("info_text_box"));
+	pb::MissTextBox = pb::FT2FullScreen ? nullptr : dynamic_cast<TTextBox*>(find_component("mission_text_box"));
 	// FT2 tables have no text box groups (text is drawn by the table's own code): use zero-size dummies
 	if (pb::FT2Table)
 	{
@@ -232,8 +232,10 @@ TPinballTable::TPinballTable(): TPinballComponent(nullptr, -1, false)
 			}
 			return box;
 		};
-		pb::InfoTextBox = makeBox("notify_box");
-		pb::MissTextBox = makeBox("mode_box");
+		if (!pb::InfoTextBox)
+			pb::InfoTextBox = pb::FT2FullScreen ? makeBox("notify_box") : new TTextBox(this, -1);
+		if (!pb::MissTextBox)
+			pb::MissTextBox = pb::FT2FullScreen ? makeBox("mode_box") : pb::InfoTextBox;
 	}
 	control::make_links(this);
 }
@@ -395,7 +397,8 @@ int TPinballTable::Message(MessageCode code, float value)
 		break;
 	case MessageCode::PlungerInputPressed:
 	case MessageCode::PlungerInputReleased:
-		Plunger->Message(code, value);
+		if (Plunger)
+			Plunger->Message(code, value);
 		break;
 	case MessageCode::Pause:
 	case MessageCode::Resume:
@@ -418,7 +421,8 @@ int TPinballTable::Message(MessageCode code, float value)
 	case MessageCode::StartGamePlayer1:
 		LightGroup->Message(MessageCode::TLightGroupReset, 0.0);
 		LightGroup->Message(MessageCode::TLightResetAndTurnOff, 0.0);
-		Plunger->Message(MessageCode::PlungerStartFeedTimer, 0.0);
+		if (Plunger)
+			Plunger->Message(MessageCode::PlungerStartFeedTimer, 0.0);
 		if (Demo && Demo->ActiveFlag)
 			rc_text = pb::get_rc_string(Msg::STRING131);
 		else

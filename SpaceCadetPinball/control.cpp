@@ -1121,6 +1121,28 @@ void control::cheat_bump_rank()
 
 void control::UnstuckBall(TBall& ball, int dt)
 {
+	if (pb::FT2Table)
+	{
+		// Generic version for other tables: Cadet's flip1/flip2/plunger links are not set up for them
+		for (TCollisionComponent* cmp : {static_cast<TCollisionComponent*>(TableG->FlipperL),
+		                                 static_cast<TCollisionComponent*>(TableG->FlipperR),
+		                                 static_cast<TCollisionComponent*>(TableG->Plunger)})
+			if (cmp && CheckBallInControlBounds(ball, *cmp))
+				return;
+		if (ball.StuckCounter <= 20 || !TableG->Plunger)
+		{
+			// "Up the table" is -Y in Space Cadet-style tables and +Y in FT2 full-screen tables
+			vector3 throwDir{0.0f, pb::FT2FullScreen ? 1.0f : -1.0f, 0.0f};
+			ball.throw_ball(&throwDir, 90.0f, 1.0f, 0.0f);
+		}
+		else
+		{
+			ball.Disable();
+			TableG->MultiballCount--;
+			TableG->Plunger->Message(MessageCode::PlungerRelaunchBall, 0);
+		}
+		return;
+	}
 	if (!CheckBallInControlBounds(ball, *flip1) &&
 		!CheckBallInControlBounds(ball, *flip2) &&
 		!CheckBallInControlBounds(ball, *plunger))
