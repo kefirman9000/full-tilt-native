@@ -8,18 +8,19 @@ Based on the [SpaceCadetPinball decompilation](https://github.com/k4zmu2a/SpaceC
 k4zmu2a and contributors (full history kept; their original README is in `README_SpaceCadetPinball.md`).
 
 ## Status
-- All three tables load their components (physics, art, sounds) on the decomp engine.
-- Not yet confirmed to draw correctly on screen. No table rules yet (missions, scoring, lights).
-- Notes, format findings and DAT tools: [`ft2/`](ft2/), see `ft2/PROGRESS.md`.
+- Alien and Mad are playable with generic rules (launch, scoring, drain, next ball, game over). Hero partly.
+- Full Tilt 1's Dragon's Keep and Skulduggery load too (work in progress).
+- No real table rules yet (missions, lights, modes). Notes: `ft2/PROGRESS.md`, plan: `ft2/ROADMAP.md`.
 
 ## Plan
 1. Playable build: table picker, working physics, generic scoring, ball count, game over.
 2. Windows release built by GitHub Actions (64-bit, MSVC), no DLL shims or exe patching.
 3. Rebuild each table's real rules from the original exes, one table at a time (Alien first).
 
-## Running (current experimental build)
-Put the table's `.DAT` next to the binary and set `FT2_DAT`, e.g. `FT2_DAT=ALIEN.DAT ./SpaceCadetPinball`.
-The game data is not included; you need your own copy of Full Tilt! 2.
+## Running
+Put the table's `.DAT` in the working folder and run `SpaceCadetPinball --table ALIEN.DAT`
+(or HERO.DAT, MAD.DAT, Full Tilt 1's DRAGON.DAT / PIRATES.DAT). Without `--table`, CADET.DAT plays Space Cadet with
+its full original rules. Game data is not included; you need your own copy of the games.
 
 ## Support
 If you enjoy this project, you can support it through [GitHub Sponsors](https://github.com/sponsors/kefirman9000).

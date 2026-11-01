@@ -54,6 +54,19 @@ int winmain::CursorIdleCounter = 0;
 
 int winmain::WinMain(LPCSTR lpCmdLine)
 {
+	// --table NAME.DAT : play another table (FT2: ALIEN/HERO/MAD.DAT, FT1: DRAGON/PIRATES.DAT) with generic rules
+	{
+		std::string args = lpCmdLine ? lpCmdLine : "";
+		auto pos = args.find("--table ");
+		if (pos != std::string::npos)
+		{
+			auto name = args.substr(pos + 8);
+			name = name.substr(0, name.find(' '));
+			if (!name.empty())
+				SDL_setenv("FT2_DAT", name.c_str(), 1);
+		}
+	}
+
 	std::set_new_handler(memalloc_failure);
 
 	printf("Game version: %s\n", Version);

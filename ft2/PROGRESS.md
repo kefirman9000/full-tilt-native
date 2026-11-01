@@ -36,6 +36,31 @@ Rules are switched off for these tables (see below), so this is a physics sandbo
   attrs 700/701/702/501). Currently skipped.
 - tools/datx.py (detailed group dump), tools/objs.py (table_objects with types), tools/orphans.py.
 
+
+## 2026-11-01 (later): playable sandbox
+Run: `SpaceCadetPinball --table ALIEN.DAT` (or HERO/MAD/DRAGON/PIRATES) with the .DAT in the working folder.
+Without `--table`, CADET.DAT runs Space Cadet with its full original rules.
+
+Findings and fixes:
+- White boxes beside sprites: empty pixels of spliced sprites (z 0xFFFF) were painted over empty screen (z 0xFFFF).
+  zdrv::paint now skips z 0xFFFF source pixels. The FT2 "background" record is not a backdrop; FT2 starts from black.
+- Score digits: FT2 fonts are ASCII tables starting at ' '; digit 0 is +16 glyphs.
+- Message text: FT2 has no info/mission text boxes; messages go to the table's notify_box / mode_box areas.
+- **World orientation**: Space Cadet's camera distance is negative (flips both screen axes); FT2's is positive.
+  So the FT2 world is rotated 180 degrees vs Cadet: down the table is -Y. Gravity is inverted for FT2 layout tables.
+  FT1 extra tables (Pirates/Dragon) have negative camera distance like Cadet.
+- World scale ~10x Cadet (ball radius 3.3 vs 0.3; gravity mult 200 vs 25). Most engine constants derive from ball radius.
+- Plunger: strength is attribute 402 (Alien 500, Hero 1000, Mad 600). Alien's ray-gun plunger is angled and fires the
+  ball up-left through a one-way gate; FT2 launch pushes the resting ball away from the nearest plunger face.
+- Gates made of two back-to-back one-ways (s_onew01/s_onew03 at Alien's lane exit): rules switch one off. Sandbox
+  switches the later one off.
+- Ball in a kickout sits at the kickout's Z (attribute 408 [3]): 0 for Alien's stun kickout (half sunk), -3.3 for s_kout01.
+- Layout detection: a table with a `score_box` record is an FT2 full-screen table (pb::FT2FullScreen).
+- Tools: tools/wallmap.py (SVG plot of walls), tools/hitwall.py (walls crossing a line), tools/at.py (sprites at a pixel).
+
+Status: Alien and Mad play (launch, scoring, drain, next ball). Hero launches but the shot returns down the lane.
+Dragon's Keep draws with its side panel, ball not launching. Skulduggery hangs on load. See ROADMAP.md.
+
 ## Not done / unknown
 - Rules for each table (missions, lights, scoring, ramps' behaviour, multiball) live in each table's exe. Recovering them
   (Ghidra) is the big remaining job and has not been started.
