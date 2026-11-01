@@ -152,6 +152,7 @@ optionsStruct options::Options
 	{"FontFileName", ""},
 	{"Language", translations::GetCurrentLanguage()->ShortName},
 	{"Hide Cursor", false},
+	{"Shift Keys Flip", true},
 };
 
 void options::InitPrimary()
@@ -452,6 +453,16 @@ std::vector<GameBindings> options::MapGameInput(GameInput key)
 				break;
 			}
 		}
+	}
+	// Alternate control style: Left/Right Shift work the flippers too (on by default, Options menu toggles it)
+	if (Options.ShiftFlippers && key.Type == InputTypes::Keyboard)
+	{
+		if (key.Value == SDLK_LSHIFT &&
+			std::find(result.begin(), result.end(), GameBindings::LeftFlipper) == result.end())
+			result.push_back(GameBindings::LeftFlipper);
+		if (key.Value == SDLK_RSHIFT &&
+			std::find(result.begin(), result.end(), GameBindings::RightFlipper) == result.end())
+			result.push_back(GameBindings::RightFlipper);
 	}
 	return result;
 }

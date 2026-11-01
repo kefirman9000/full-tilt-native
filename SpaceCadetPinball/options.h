@@ -289,4 +289,5 @@ struct optionsStruct
 	StringOption FontFileName;
 	StringOption Language;
 	BoolOption HideCursor;
+	BoolOption ShiftFlippers; // Left/Right Shift also work the flippers (alternate pinball control style)
 };

@@ -35,6 +35,8 @@ struct Table
 	fs::path Folder;
 	SDL_Texture* Texture = nullptr;
 	bool DataFound = false;
+	long long HighScore = 0;
+	std::string HighScoreName;
 };
 
 static std::string Trim(const std::string& s)
@@ -214,6 +216,59 @@ static void EnsureMusicFolder(const fs::path& tableFolder, const std::string& ta
 		"FullTiltEngine.log (main folder) lists which file or MIDI track each music slot used.\n";
 }
 
+
+// High scores live in the engine's settings file (%APPDATA%\SpaceCadetPinball\imgui_pb.ini): "ALIEN.DAT 0.Score=..."
+// for extra tables, plain "0.Score" for Space Cadet.
+static void LoadHighScores(std::vector<Table>& tables)
+{
+	char* pref = SDL_GetPrefPath("", "SpaceCadetPinball");
+	if (!pref)
+		return;
+	fs::path ini = fs::path(pref) / "imgui_pb.ini";
+	SDL_free(pref);
+	std::ifstream in(ini);
+	std::vector<std::pair<std::string, std::string>> values;
+	std::string line;
+	while (std::getline(in, line))
+	{
+		auto eq = line.find('=');
+		if (eq != std::string::npos)
+			values.emplace_back(Trim(line.substr(0, eq)), Trim(line.substr(eq + 1)));
+	}
+	auto find = [&](const std::string& key) -> std::string
+	{
+		for (auto& kv : values)
+			if (kv.first == key)
+				return kv.second;
+		return "";
+	};
+	for (auto& t : tables)
+	{
+		std::string prefix;
+		if (t.Args.find("--table") != std::string::npos)
+		{
+			prefix = t.Data;
+			std::transform(prefix.begin(), prefix.end(), prefix.begin(), ::toupper);
+			prefix += " ";
+		}
+		t.HighScore = std::atoll(find(prefix + "0.Score").c_str());
+		t.HighScoreName = find(prefix + "0.Name");
+	}
+}
+
+static std::string WithCommas(long long value)
+{
+	auto digits = std::to_string(value);
+	std::string out;
+	for (size_t i = 0; i < digits.size(); i++)
+	{
+		if (i && (digits.size() - i) % 3 == 0)
+			out += ',';
+		out += digits[i];
+	}
+	return out;
+}
+
 static void OpenFolder(const fs::path& folder)
 {
 #ifdef _WIN32
@@ -306,6 +361,7 @@ int main(int, char**)
 		});
 		for (auto& t : tables)
 			EnsureMusicFolder(t.Folder, t.Name);
+		LoadHighScores(tables);
 		for (auto& t : tables)
 			for (auto picture : {t.Preview, std::string("icon.bmp")})
 			{
@@ -355,6 +411,10 @@ int main(int, char**)
 				running = false;
 			if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE)
 				running = false;
+			// Back from a game: refresh the high scores shown on the cards
+			if (event.type == SDL_WINDOWEVENT &&
+				(event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED || event.window.event == SDL_WINDOWEVENT_RESTORED))
+				LoadHighScores(tables);
 		}
 		ImGui_ImplSDLRenderer_NewFrame();
 		ImGui_ImplSDL2_NewFrame();
@@ -459,7 +519,11 @@ int main(int, char**)
 			}
 			ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardW);
 			ImGui::Text("%s", t.Name.c_str());
-			ImGui::TextDisabled("%s", t.Game.c_str());
+			if (t.HighScore > 0)
+				ImGui::TextDisabled("%s  -  High score %s %s", t.Game.c_str(), WithCommas(t.HighScore).c_str(),
+				                    t.HighScoreName.c_str());
+			else
+				ImGui::TextDisabled("%s", t.Game.c_str());
 			if (!t.DataFound)
 				ImGui::TextColored({1, 0.45f, 0.4f, 1}, "Missing %s", t.Data.c_str());
 			else if (t.Status.rfind("Playable", 0) == 0)
@@ -473,7 +537,7 @@ int main(int, char**)
 
 		ImGui::Spacing();
 		ImGui::Separator();
-		ImGui::TextDisabled("In a table: F2 new game, Space plunger, Z / slash flippers, X . Up nudge, F3 pause, F4 fullscreen.");
+		ImGui::TextDisabled("In a table: F2 new game, Space plunger, Z / slash or Left/Right Shift flippers, X . Up nudge, F3 pause, F4 fullscreen.");
 		{
 			auto update = updater::Get();
 			ImGui::TextDisabled("Version %s", updater::CurrentVersion);

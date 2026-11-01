@@ -72,6 +72,7 @@ namespace
 			t->Message(MessageCode::GameOver, 0.0);
 			if (pb::InfoTextBox)
 				pb::InfoTextBox->Display(pb::get_rc_string(Msg::STRING135), -1.0);
+			pb::chk_highscore(); // asks for a name when the score makes this table's top 5
 		}
 		else if (t->Plunger)
 		{

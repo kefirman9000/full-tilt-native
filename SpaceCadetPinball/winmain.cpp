@@ -668,6 +668,10 @@ void winmain::RenderUi()
 				}
 				ImGui::Separator();
 
+				if (ImGui::MenuItem("Shift Keys Flip (Left/Right Shift)", nullptr, Options.ShiftFlippers))
+				{
+					Options.ShiftFlippers ^= true;
+				}
 				if (ImGui::MenuItem("Hide Cursor", nullptr, Options.HideCursor))
 				{
 					Options.HideCursor ^= true;

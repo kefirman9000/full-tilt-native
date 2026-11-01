@@ -7,11 +7,9 @@
 **Game data is not included.** Copy your original game folders into `Put game files here` and start `FullTiltPinball.exe`: tables are found and sorted automatically.
 
 **New in this version**
-- Fix: tables picked in the launcher failed with "The .dat file is missing" on Windows
-- Music: Full Tilt 2 and Full Tilt 1 tables now play their own MIDI music
-- CD audio: every table folder has a `Music` folder. Put the table's CD tracks there (mp3/ogg/wav/flac, played in name
-  order: 01.mp3, 02.mp3 ...) and they replace the MIDI tracks. Tracks without a file keep the MIDI music.
-- Starting FullTiltEngine.exe by itself opens the table library instead of an error
+- Shift keys flip: Left/Right Shift work the flippers as well as Z and / (Options > "Shift Keys Flip" to turn off)
+- High scores per table, shown on each table's card in the launcher; extra tables now ask for your name at game over
+- From v0.2.2: table loading fixed on Windows, table MIDI music, `Music` folder per table for CD audio tracks
 
 **Status**
 - Alien Daze, Mad Scientist: playable with simple placeholder rules (points, 3 balls, game over)

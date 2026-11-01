@@ -12,9 +12,19 @@ high_score_entry high_score::DlgData;
 std::vector<high_score_entry> high_score::ScoreQueue;
 high_score_struct high_score::highscore_table[5];
 
+// Each extra table keeps its own high scores ("ALIEN.DAT 0.Score"...); Space Cadet keeps the original keys
+static std::string TableKeyPrefix()
+{
+	if (!pb::FT2Table)
+		return "";
+	std::string name = pb::DatFileName;
+	std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+	return name + " ";
+}
+
 int high_score::read()
 {
-	char Buffer[20];
+	char Buffer[64];
 
 	int checkSum = 0;
 	clear_table();
@@ -22,12 +32,12 @@ int high_score::read()
 	{
 		auto& tablePtr = highscore_table[position];
 
-		snprintf(Buffer, sizeof Buffer, "%d", position);
+		snprintf(Buffer, sizeof Buffer, "%s%d", TableKeyPrefix().c_str(), position);
 		strcat(Buffer, ".Name");
 		auto name = options::GetSetting(Buffer, "");
 		strncpy(tablePtr.Name, name.c_str(), sizeof tablePtr.Name);
 
-		snprintf(Buffer, sizeof Buffer, "%d", position);
+		snprintf(Buffer, sizeof Buffer, "%s%d", TableKeyPrefix().c_str(), position);
 		strcat(Buffer, ".Score");
 		tablePtr.Score = options::get_int(Buffer, tablePtr.Score);
 
@@ -37,7 +47,7 @@ int high_score::read()
 		checkSum += tablePtr.Score;
 	}
 
-	auto verification = options::get_int("Verification", 7);
+	auto verification = options::get_int((TableKeyPrefix() + "Verification").c_str(), 7);
 	if (checkSum != verification)
 		clear_table();
 	return 0;
@@ -45,18 +55,18 @@ int high_score::read()
 
 int high_score::write()
 {
-	char Buffer[20];
+	char Buffer[64];
 
 	int checkSum = 0;
 	for (auto position = 0; position < 5; ++position)
 	{
 		auto& tablePtr = highscore_table[position];
 
-		snprintf(Buffer, sizeof Buffer, "%d", position);
+		snprintf(Buffer, sizeof Buffer, "%s%d", TableKeyPrefix().c_str(), position);
 		strcat(Buffer, ".Name");
 		options::SetSetting(Buffer, tablePtr.Name);
 
-		snprintf(Buffer, sizeof Buffer, "%d", position);
+		snprintf(Buffer, sizeof Buffer, "%s%d", TableKeyPrefix().c_str(), position);
 		strcat(Buffer, ".Score");
 		options::set_int(Buffer, tablePtr.Score);
 
@@ -66,7 +76,7 @@ int high_score::write()
 		checkSum += tablePtr.Score;
 	}
 
-	options::set_int("Verification", checkSum);
+	options::set_int((TableKeyPrefix() + "Verification").c_str(), checkSum);
 	return 0;
 }
 
