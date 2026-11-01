@@ -14,8 +14,11 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include <cctype>
+#include <cstring>
 
 #ifdef _WIN32
+#define NOMINMAX
 #include <windows.h>
 #else
 #include <unistd.h>
@@ -70,6 +73,134 @@ static Table ReadTable(const fs::path& folder)
 		}
 	t.DataFound = !t.Data.empty() && fs::exists(folder / t.Data);
 	return t;
+}
+
+
+// ---------------------------------------------------------------------------------------------------------------
+// Importer: everything dropped into "Put game files here" (whole install folders are fine) is searched for table
+// data (.DAT files with a PARTOUT header). Each table found is copied with its sound folder and icon into
+// tables/<Folder>/, and gets a table.ini if it has none. Originals are left untouched.
+// ---------------------------------------------------------------------------------------------------------------
+struct KnownTable
+{
+	const char* Dat;
+	const char* Folder;
+	const char* Name;
+	const char* Game;
+	const char* Status;
+	bool UseTableArg; // false = the engine's default table search (Space Cadet runs with its full original rules)
+	int Order;
+};
+
+static const KnownTable KnownTables[] =
+{
+	{"ALIEN.DAT", "Alien", "Alien Daze", "Full Tilt! 2", "Playable - simple rules", true, 10},
+	{"HERO.DAT", "Hero", "Captain Hero", "Full Tilt! 2", "Work in progress - launch rolls back", true, 20},
+	{"MAD.DAT", "Mad", "Mad Scientist", "Full Tilt! 2", "Playable - simple rules", true, 30},
+	{"CADET.DAT", "SpaceCadet", "Space Cadet", "Full Tilt! Pinball", "Playable - full original rules", false, 40},
+	{"DRAGON.DAT", "DragonsKeep", "Dragon's Keep", "Full Tilt! Pinball", "Work in progress - ball won't launch", true, 50},
+	{"PIRATES.DAT", "Skulduggery", "Skulduggery", "Full Tilt! Pinball", "Work in progress - may freeze on load", true, 60},
+	{"PINBALL.DAT", "SpaceCadetWindows", "3D Pinball Space Cadet", "Windows XP Pinball", "Playable - full original rules", false, 45},
+};
+
+static std::string Upper(std::string s)
+{
+	std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+	return s;
+}
+
+static bool IsTableData(const fs::path& file)
+{
+	std::ifstream in(file, std::ios::binary);
+	char header[8]{};
+	in.read(header, 7);
+	return std::strncmp(header, "PARTOUT", 7) == 0;
+}
+
+// Full Tilt 1 icons say they use 257 colours, which image loaders reject; fix that in the copy.
+static void CopyIcon(const fs::path& from, const fs::path& to)
+{
+	std::ifstream in(from, std::ios::binary);
+	std::vector<char> data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+	if (data.size() > 54 && data[0] == 'B' && data[1] == 'M')
+	{
+		uint32_t used;
+		std::memcpy(&used, &data[46], 4);
+		if (used > 256)
+		{
+			used = 256;
+			std::memcpy(&data[46], &used, 4);
+			uint32_t important = 0;
+			std::memcpy(&data[50], &important, 4);
+		}
+	}
+	std::ofstream out(to, std::ios::binary);
+	out.write(data.data(), static_cast<std::streamsize>(data.size()));
+}
+
+static int ImportGameFiles(const fs::path& dropDir, const fs::path& tablesDir, std::string& report)
+{
+	std::error_code ec;
+	fs::create_directories(dropDir, ec);
+	fs::create_directories(tablesDir, ec);
+	int imported = 0;
+	for (auto it = fs::recursive_directory_iterator(dropDir, fs::directory_options::skip_permission_denied, ec);
+	     it != fs::recursive_directory_iterator(); it.increment(ec))
+	{
+		if (ec || !it->is_regular_file(ec) || Upper(it->path().extension().string()) != ".DAT")
+			continue;
+		auto dat = it->path();
+		auto datName = Upper(dat.filename().string());
+		if (datName == "DEMO.DAT" || !IsTableData(dat))
+			continue;
+
+		const KnownTable* known = nullptr;
+		for (auto& k : KnownTables)
+			if (datName == k.Dat)
+				known = &k;
+		auto stem = dat.stem().string();
+		auto target = tablesDir / (known ? known->Folder : stem);
+		auto targetDat = target / dat.filename();
+		if (fs::exists(targetDat, ec) && fs::file_size(targetDat, ec) == fs::file_size(dat, ec))
+			continue; // already imported
+
+		fs::create_directories(target, ec);
+		fs::copy_file(dat, targetDat, fs::copy_options::overwrite_existing, ec);
+		for (auto& sibling : fs::directory_iterator(dat.parent_path(), ec))
+		{
+			auto name = Upper(sibling.path().filename().string());
+			if (sibling.is_directory(ec) && name == "SOUND")
+				fs::copy(sibling.path(), target / sibling.path().filename(),
+				         fs::copy_options::recursive | fs::copy_options::skip_existing, ec);
+			else if (sibling.is_regular_file(ec) && name == Upper(stem) + ".BMP")
+				CopyIcon(sibling.path(), target / "icon.bmp");
+		}
+		if (!fs::exists(target / "table.ini", ec))
+		{
+			std::ofstream ini(target / "table.ini");
+			ini << "[Table]\n";
+			ini << "Name=" << (known ? known->Name : stem) << "\n";
+			ini << "Game=" << (known ? known->Game : "Other") << "\n";
+			ini << "Data=" << dat.filename().string() << "\n";
+			ini << "Args=" << (known && !known->UseTableArg ? "" : "--table " + dat.filename().string()) << "\n";
+			ini << "Preview=preview.bmp\n";
+			ini << "Status=" << (known ? known->Status : "Untested") << "\n";
+			ini << "Order=" << (known ? known->Order : 100) << "\n";
+		}
+		report += (report.empty() ? "" : ", ") + std::string(known ? known->Name : stem);
+		imported++;
+	}
+	return imported;
+}
+
+static void OpenFolder(const fs::path& folder)
+{
+#ifdef _WIN32
+	ShellExecuteA(nullptr, "open", folder.string().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+#else
+	std::string url = "file://" + folder.string();
+	SDL_OpenURL(url.c_str());
+#endif
 }
 
 static std::string Launch(const fs::path& exe, const Table& t)
@@ -131,21 +262,43 @@ int main(int, char**)
 
 	std::vector<Table> tables;
 	auto tablesDir = basePath / "tables";
-	if (fs::exists(tablesDir))
-		for (auto& entry : fs::directory_iterator(tablesDir))
-			if (entry.is_directory())
-				tables.push_back(ReadTable(entry.path()));
-	std::sort(tables.begin(), tables.end(), [](const Table& a, const Table& b)
+	auto dropDir = basePath / "Put game files here";
+	auto loadTables = [&]()
 	{
-		return a.Order != b.Order ? a.Order < b.Order : a.Name < b.Name;
-	});
-	for (auto& t : tables)
-		if (!t.Preview.empty())
-			if (auto surface = SDL_LoadBMP((t.Folder / t.Preview).string().c_str()))
+		for (auto& t : tables)
+			if (t.Texture)
+				SDL_DestroyTexture(t.Texture);
+		tables.clear();
+		std::error_code ec;
+		if (fs::exists(tablesDir, ec))
+			for (auto& entry : fs::directory_iterator(tablesDir, ec))
+				if (entry.is_directory(ec))
+					tables.push_back(ReadTable(entry.path()));
+		std::sort(tables.begin(), tables.end(), [](const Table& a, const Table& b)
+		{
+			return a.Order != b.Order ? a.Order < b.Order : a.Name < b.Name;
+		});
+		for (auto& t : tables)
+			for (auto picture : {t.Preview, std::string("icon.bmp")})
 			{
-				t.Texture = SDL_CreateTextureFromSurface(renderer, surface);
-				SDL_FreeSurface(surface);
+				if (picture.empty() || t.Texture)
+					continue;
+				if (auto surface = SDL_LoadBMP((t.Folder / picture).string().c_str()))
+				{
+					t.Texture = SDL_CreateTextureFromSurface(renderer, surface);
+					SDL_FreeSurface(surface);
+				}
 			}
+	};
+	std::string importReport;
+	auto scan = [&]()
+	{
+		std::string found;
+		int count = ImportGameFiles(dropDir, tablesDir, found);
+		importReport = count ? "Added: " + found : "";
+		loadTables();
+	};
+	scan();
 
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
@@ -189,10 +342,20 @@ int main(int, char**)
 		ImGui::SetWindowFontScale(1.0f);
 		ImGui::TextDisabled("Table library  -  click a table or use the arrow keys and Enter.  Esc quits.");
 		ImGui::Spacing();
+		if (ImGui::Button("Open \"Put game files here\" folder"))
+			OpenFolder(dropDir);
+		ImGui::SameLine();
+		if (ImGui::Button("Scan for new game files"))
+			scan();
+		ImGui::SameLine();
+		ImGui::TextDisabled("Drop game folders in, they get sorted.");
+		if (!importReport.empty())
+			ImGui::TextColored({0.55f, 0.85f, 0.55f, 1}, "%s", importReport.c_str());
 		if (!message.empty())
 			ImGui::TextColored({1, 0.45f, 0.4f, 1}, "%s", message.c_str());
 		if (tables.empty())
-			ImGui::TextWrapped("No tables found. Put table folders inside: %s", tablesDir.string().c_str());
+			ImGui::TextWrapped("No tables yet. Click \"Open \"Put game files here\" folder\", copy your Full Tilt game folders "
+			                   "into it, then click \"Scan for new game files\".");
 		ImGui::Separator();
 		ImGui::Spacing();
 
@@ -213,7 +376,17 @@ int main(int, char**)
 			ImGui::PushID(static_cast<int>(i));
 			bool clicked;
 			if (t.Texture)
-				clicked = ImGui::ImageButton("card", t.Texture, {cardW, imgH});
+			{
+				int tw, th;
+				SDL_QueryTexture(t.Texture, nullptr, nullptr, &tw, &th);
+				float fit = std::min(cardW / tw, imgH / th);
+				ImVec2 size{tw * fit, th * fit};
+				ImVec2 cursor = ImGui::GetCursorPos();
+				ImGui::Dummy({cardW + 8, imgH + 8});
+				ImGui::SetCursorPos({cursor.x + (cardW - size.x) / 2, cursor.y + (imgH - size.y) / 2});
+				clicked = ImGui::ImageButton("card", t.Texture, size);
+				ImGui::SetCursorPos({cursor.x, cursor.y + imgH + 12});
+			}
 			else
 				clicked = ImGui::Button(t.Name.c_str(), {cardW + 8, imgH + 8});
 			if (clicked)

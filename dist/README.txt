@@ -1,18 +1,23 @@
 FULL TILT NATIVE (Windows 10/11, 64-bit)
-================
+========================================
 One launcher + one engine that play Full Tilt! Pinball tables natively. The original game programs are never run.
 
-The game data is NOT included. Copy it from your own copy of the games into the matching tables\ folder:
-  tables\Alien        ALIEN.DAT    + the Sound folder     (Full Tilt! 2, Alien folder)
-  tables\Hero         HERO.DAT     + the Sound folder     (Full Tilt! 2, Hero folder)
-  tables\Mad          MAD.DAT      + the Sound folder     (Full Tilt! 2, Mad folder)
-  tables\SpaceCadet   CADET.DAT    + the SOUND folder     (Full Tilt! Pinball, CADET folder)
-  tables\DragonsKeep  DRAGON.DAT   + the SOUND folder     (Full Tilt! Pinball, DRAGON folder)
-  tables\Skulduggery  PIRATES.DAT  + the SOUND folder     (Full Tilt! Pinball, PIRATES folder)
-Optional: a 320x240 preview.bmp in a table folder shows as that table's card picture.
+SETUP (once)
+  1. Unzip this folder anywhere and keep everything together.
+  2. Copy your original game folders into "Put game files here" (whole install folders are fine).
+  3. Double-click FullTiltPinball.exe. Your tables are found, sorted into "tables", and shown as cards.
+     Added more later? Click "Scan for new game files" in the launcher.
 
-Then double-click FullTiltPinball.exe and click a table. F2 new game, hold/release Space to launch, Z and / flippers.
-If Windows says "Windows protected your PC": More info > Run anyway (new, unsigned program).
+PLAY
+  Click a table. F2 new game, hold and release Space to launch, Z and / flippers, X . Up nudge,
+  F3 pause, F4 fullscreen, Game > Options for keys, resolution and sound.
+  If Windows says "Windows protected your PC": More info > Run anyway (new, unsigned program).
 
-Status: Alien Daze and Mad Scientist playable with simple placeholder rules; Space Cadet with full original rules;
-Captain Hero, Dragon's Keep, Skulduggery work in progress.
+TABLES IT KNOWS
+  Full Tilt! 2:        Alien Daze (playable, simple rules), Mad Scientist (playable, simple rules),
+                       Captain Hero (work in progress)
+  Full Tilt! Pinball:  Space Cadet (full original rules), Dragon's Keep and Skulduggery (work in progress)
+  Windows XP 3D Pinball (PINBALL.DAT) works too. Other table files show up as "Untested".
+
+Optional: put a 320x240 preview.bmp in a table's folder to use it as the card picture.
+Source: https://github.com/kefirman9000/full-tilt-native
