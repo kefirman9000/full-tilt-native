@@ -374,7 +374,7 @@ void pb::timed_frame(float timeDelta)
 	if (FT2Table && getenv("FT2_DEBUG"))
 	{
 		static int dbgCount;
-		if (++dbgCount % 30 == 0)
+		if (++dbgCount % (getenv("FT2_TRACE") ? 1 : 30) == 0)
 			for (auto ball : MainTable->BallList)
 				if (ball->ActiveFlag)
 					fprintf(stderr, "FT2DBG ball pos %.2f %.2f %.2f speed %.2f mask %d\n", ball->Position.X,

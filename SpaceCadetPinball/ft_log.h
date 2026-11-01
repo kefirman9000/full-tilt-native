@@ -16,4 +16,6 @@ namespace ftlog
 	// The engine was started without a table (e.g. FullTiltEngine.exe double-clicked) and no Space Cadet data is next
 	// to it: open the table library launcher instead. Returns true if the launcher was started.
 	bool StartLauncherInstead(const char* commandLine);
+	// Start the table library launcher (FullTiltPinball.exe next to the engine). Returns true if started.
+	bool StartLauncher();
 }

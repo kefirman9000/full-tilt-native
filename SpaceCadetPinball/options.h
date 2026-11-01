@@ -289,5 +289,6 @@ struct optionsStruct
 	StringOption FontFileName;
 	StringOption Language;
 	BoolOption HideCursor;
-	BoolOption ShiftFlippers; // Left/Right Shift also work the flippers (alternate pinball control style)
+	IntOption FlipperKeys; // 0 = both, 1 = the configured keys only (Z and / by default), 2 = Left/Right Shift only
+	StringOption BallStyle; // "" = standard ball, else a ball set from the table data, e.g. "slime"
 };

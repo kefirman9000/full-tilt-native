@@ -147,6 +147,17 @@ namespace ftlog
 		for (auto dat : {"CADET.DAT", "cadet.dat", "PINBALL.DAT", "pinball.dat", "DEMO.DAT", "demo.dat"})
 			if (FileExists(dat) || FileExists(dir + dat))
 				return false;
+		if (!StartLauncher())
+			return false;
+		Line("No table given: opened the table library (FullTiltPinball.exe) instead");
+		return true;
+	}
+
+	bool StartLauncher()
+	{
+		char* base = SDL_GetBasePath();
+		std::string dir = base ? base : "";
+		SDL_free(base);
 #ifdef _WIN32
 		std::string launcher = dir + "FullTiltPinball.exe";
 		if (!FileExists(launcher))
@@ -166,7 +177,6 @@ namespace ftlog
 			return false;
 		CloseHandle(pi.hThread);
 		CloseHandle(pi.hProcess);
-		Line("No table given: opened the table library (FullTiltPinball.exe) instead");
 		return true;
 #else
 		return false;

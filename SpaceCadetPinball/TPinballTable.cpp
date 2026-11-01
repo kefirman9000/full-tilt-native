@@ -104,9 +104,11 @@ TPinballTable::TPinballTable(): TPinballComponent(nullptr, -1, false)
 				break;
 			case 1003:
 				FlipperL = new TFlipper(this, groupIndex);
+				FlippersL.push_back(FlipperL);
 				break;
 			case 1004:
 				FlipperR = new TFlipper(this, groupIndex);
+				FlippersR.push_back(FlipperR);
 				break;
 			case 1005:
 				new TBumper(this, groupIndex);
@@ -374,25 +376,29 @@ int TPinballTable::Message(MessageCode code, float value)
 	case MessageCode::LeftFlipperInputPressed:
 		if (!TiltLockFlag)
 		{
-			FlipperL->Message(MessageCode::TFlipperExtend, value);
+			for (auto flipper : FlippersL)
+				flipper->Message(MessageCode::TFlipperExtend, value);
 		}
 		break;
 	case MessageCode::LeftFlipperInputReleased:
 		if (!TiltLockFlag)
 		{
-			FlipperL->Message(MessageCode::TFlipperRetract, value);
+			for (auto flipper : FlippersL)
+				flipper->Message(MessageCode::TFlipperRetract, value);
 		}
 		break;
 	case MessageCode::RightFlipperInputPressed:
 		if (!TiltLockFlag)
 		{
-			FlipperR->Message(MessageCode::TFlipperExtend, value);
+			for (auto flipper : FlippersR)
+				flipper->Message(MessageCode::TFlipperExtend, value);
 		}
 		break;
 	case MessageCode::RightFlipperInputReleased:
 		if (!TiltLockFlag)
 		{
-			FlipperR->Message(MessageCode::TFlipperRetract, value);
+			for (auto flipper : FlippersR)
+				flipper->Message(MessageCode::TFlipperRetract, value);
 		}
 		break;
 	case MessageCode::PlungerInputPressed:

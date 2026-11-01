@@ -152,7 +152,8 @@ optionsStruct options::Options
 	{"FontFileName", ""},
 	{"Language", translations::GetCurrentLanguage()->ShortName},
 	{"Hide Cursor", false},
-	{"Shift Keys Flip", true},
+	{"Flipper Keys", 0},
+	{"Ball Style", ""},
 };
 
 void options::InitPrimary()
@@ -454,8 +455,15 @@ std::vector<GameBindings> options::MapGameInput(GameInput key)
 			}
 		}
 	}
-	// Alternate control style: Left/Right Shift work the flippers too (on by default, Options menu toggles it)
-	if (Options.ShiftFlippers && key.Type == InputTypes::Keyboard)
+	// Flipper keys (Options > Flipper Keys): 0 = configured keys and Left/Right Shift, 1 = configured keys only,
+	// 2 = Left/Right Shift only. Applies to every flipper on the table.
+	auto flipperKeys = Options.FlipperKeys.V;
+	if (flipperKeys == 2 && key.Type == InputTypes::Keyboard)
+		result.erase(std::remove_if(result.begin(), result.end(), [](GameBindings b)
+		{
+			return b == GameBindings::LeftFlipper || b == GameBindings::RightFlipper;
+		}), result.end());
+	if (flipperKeys != 1 && key.Type == InputTypes::Keyboard)
 	{
 		if (key.Value == SDLK_LSHIFT &&
 			std::find(result.begin(), result.end(), GameBindings::LeftFlipper) == result.end())

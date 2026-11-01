@@ -45,6 +45,8 @@ public:
 	static void tilt_timeout(int timerId, void* caller);
 
 	TFlipper* FlipperL;
+	// Every flipper per side (FT2 tables have more than one; Alien Daze has two on each side)
+	std::vector<TFlipper*> FlippersL, FlippersR;
 	TFlipper* FlipperR;
 	scoreStruct* CurScoreStruct;
 	scoreStruct* ScoreBallcount;

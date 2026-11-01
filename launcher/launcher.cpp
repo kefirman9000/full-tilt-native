@@ -24,9 +24,16 @@
 #include <windows.h>
 #else
 #include <unistd.h>
+#include <sys/wait.h>
 #endif
 
 namespace fs = std::filesystem;
+
+#ifdef _WIN32
+static HANDLE RunningGame = nullptr;
+#else
+static pid_t RunningGame = 0;
+#endif
 
 struct Table
 {
@@ -279,7 +286,28 @@ static void OpenFolder(const fs::path& folder)
 #endif
 }
 
-static std::string Launch(const fs::path& exe, const Table& t)
+
+// True once the game started from the launcher has closed (then the launcher window comes back)
+static bool GameJustClosed()
+{
+#ifdef _WIN32
+	if (RunningGame && WaitForSingleObject(RunningGame, 0) == WAIT_OBJECT_0)
+	{
+		CloseHandle(RunningGame);
+		RunningGame = nullptr;
+		return true;
+	}
+#else
+	if (RunningGame > 0 && waitpid(RunningGame, nullptr, WNOHANG) == RunningGame)
+	{
+		RunningGame = 0;
+		return true;
+	}
+#endif
+	return false;
+}
+
+static std::string Launch(const fs::path& exe, const Table& t, const std::string& windowSpot)
 {
 	ftlog::Line("Launching " + t.Name + " in " + t.Folder.string() + ": " + exe.string() + " " + t.Args);
 	if (!fs::exists(exe))
@@ -287,7 +315,7 @@ static std::string Launch(const fs::path& exe, const Table& t)
 	if (!t.DataFound)
 		return "Table data not found: " + (t.Folder / t.Data).string();
 #ifdef _WIN32
-	std::string cmd = "\"" + exe.string() + "\" " + t.Args;
+	std::string cmd = "\"" + exe.string() + "\" " + t.Args + " --from-launcher --window " + windowSpot;
 	std::string dir = t.Folder.string();
 	STARTUPINFOA si{};
 	si.cb = sizeof si;
@@ -295,9 +323,14 @@ static std::string Launch(const fs::path& exe, const Table& t)
 	if (!CreateProcessA(nullptr, cmd.data(), nullptr, nullptr, FALSE, 0, nullptr, dir.c_str(), &si, &pi))
 		return "Could not start the game (error " + std::to_string(GetLastError()) + ")";
 	CloseHandle(pi.hThread);
-	CloseHandle(pi.hProcess);
+	if (RunningGame)
+		CloseHandle(RunningGame);
+	RunningGame = pi.hProcess;
 #else
-	if (fork() == 0)
+	auto pid = fork();
+	if (pid > 0)
+		RunningGame = pid;
+	if (pid == 0)
 	{
 		if (chdir(t.Folder.c_str()) != 0)
 			_exit(1);
@@ -307,6 +340,9 @@ static std::string Launch(const fs::path& exe, const Table& t)
 			if (c == ' ') { if (!part.empty()) parts.push_back(part); part.clear(); }
 			else part += c;
 		std::vector<char*> argv{const_cast<char*>(exe.c_str())};
+		parts.push_back("--from-launcher");
+		parts.push_back("--window");
+		parts.push_back(windowSpot);
 		for (auto& p : parts) argv.push_back(p.data());
 		argv.push_back(nullptr);
 		execv(exe.c_str(), argv.data());
@@ -416,6 +452,23 @@ int main(int, char**)
 				(event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED || event.window.event == SDL_WINDOWEVENT_RESTORED))
 				LoadHighScores(tables);
 		}
+		if (GameJustClosed())
+		{
+			ftlog::Line("Game closed, back to the table library");
+			// Reappear where the table window was
+			std::ifstream spot(basePath / "FullTiltWindow.txt");
+			int x, y, width, height;
+			char comma;
+			if (spot >> x >> comma >> y >> comma >> width >> comma >> height && width > 100 && height > 100)
+			{
+				SDL_SetWindowSize(window, width, height);
+				SDL_SetWindowPosition(window, x, y);
+			}
+			SDL_ShowWindow(window);
+			SDL_RestoreWindow(window);
+			SDL_RaiseWindow(window);
+			LoadHighScores(tables);
+		}
 		ImGui_ImplSDLRenderer_NewFrame();
 		ImGui_ImplSDL2_NewFrame();
 		ImGui::NewFrame();
@@ -511,11 +564,15 @@ int main(int, char**)
 				clicked = ImGui::Button(t.Name.c_str(), {cardW + 8, imgH + 8});
 			if (clicked)
 			{
-				message = Launch(gameExe, t);
+				int wx, wy, ww, wh;
+				SDL_GetWindowPosition(window, &wx, &wy);
+				SDL_GetWindowSize(window, &ww, &wh);
+				message = Launch(gameExe, t, std::to_string(wx) + "," + std::to_string(wy) + "," + std::to_string(ww) + "," +
+				                 std::to_string(wh));
 				if (!message.empty())
 					ftlog::Line("Launch failed: " + message);
 				if (message.empty())
-					SDL_MinimizeWindow(window);
+					SDL_HideWindow(window); // one window: the table takes this spot until it closes
 			}
 			ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardW);
 			ImGui::Text("%s", t.Name.c_str());

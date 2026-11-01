@@ -1,5 +1,7 @@
 #include "pch.h"
 #include "winmain.h"
+#include "TBall.h"
+#include "TPinballTable.h"
 #include "ft_log.h"
 
 #include "control.h"
@@ -21,6 +23,10 @@ ImGuiIO* winmain::ImIO = nullptr;
 
 int winmain::return_value = 0;
 bool winmain::bQuit = false;
+static bool StartedFromLauncher = false;
+// Window spot handed over by the launcher (--window x,y,w,h), so the table opens exactly where the library was
+static int HandoverX, HandoverY, HandoverW, HandoverH;
+static bool HasHandover = false;
 bool winmain::activated = false;
 bool winmain::DispFrameRate = false;
 bool winmain::DispGRhistory = false;
@@ -53,11 +59,28 @@ winmain::DurationMs winmain::SpinThreshold = DurationMs(0.005);
 WelfordState winmain::SleepState{};
 int winmain::CursorIdleCounter = 0;
 
+
+// Close this table and go back to the table library: the launcher that started us brings its window back by itself
+// when we exit; if we were started some other way, open the launcher first.
+static void BackToTableLibrary()
+{
+	if (!StartedFromLauncher)
+		ftlog::StartLauncher();
+	ftlog::Line("Back to table library");
+	SDL_Event event{SDL_QUIT};
+	SDL_PushEvent(&event);
+}
+
 int winmain::WinMain(LPCSTR lpCmdLine)
 {
 	// --table NAME.DAT : play another table (FT2: ALIEN/HERO/MAD.DAT, FT1: DRAGON/PIRATES.DAT) with generic rules
 	{
 		std::string args = lpCmdLine ? lpCmdLine : "";
+		StartedFromLauncher = args.find("--from-launcher") != std::string::npos;
+		auto win = args.find("--window ");
+		if (win != std::string::npos)
+			HasHandover = sscanf(args.c_str() + win + 9, "%d,%d,%d,%d", &HandoverX, &HandoverY, &HandoverW, &HandoverH) == 4 &&
+				HandoverW > 100 && HandoverH > 100;
 		auto pos = args.find("--table ");
 		if (pos != std::string::npos)
 		{
@@ -272,6 +295,11 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 		{
 			auto resInfo = &fullscrn::resolution_array[fullscrn::GetResolution()];
 			SDL_SetWindowSize(MainWindow, resInfo->TableWidth, resInfo->TableHeight);
+			if (HasHandover)
+			{
+				SDL_SetWindowSize(MainWindow, HandoverW, HandoverH);
+				SDL_SetWindowPosition(MainWindow, HandoverX, HandoverY);
+			}
 		}
 		SDL_ShowWindow(window);
 		fullscrn::set_screen_mode(Options.FullScreen);
@@ -303,6 +331,21 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 
 	SDL_free(basePath);
 	SDL_free(prefPath);
+	// Hand the window spot back to the launcher, so the library reappears where the table was
+	if (StartedFromLauncher && !(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN_DESKTOP))
+	{
+		int x, y, width, height;
+		SDL_GetWindowPosition(window, &x, &y);
+		SDL_GetWindowSize(window, &width, &height);
+		char* exeDir = SDL_GetBasePath();
+		std::string handover = std::string(exeDir ? exeDir : "") + "FullTiltWindow.txt";
+		SDL_free(exeDir);
+		if (auto file = fopenu(handover.c_str(), "w"))
+		{
+			fprintf(file, "%d,%d,%d,%d\n", x, y, width, height);
+			fclose(file);
+		}
+	}
 	SDL_DestroyRenderer(renderer);
 	SDL_DestroyWindow(window);
 	SDL_Quit();
@@ -525,6 +568,9 @@ void winmain::RenderUi()
 				end_pause();
 				pb::toggle_demo();
 			}
+			ImGui::Separator();
+			if (ImGui::MenuItem("Back to Table Library", "F12"))
+				BackToTableLibrary();
 			ImGuiMenuItemWShortcut(GameBindings::Exit);
 			ImGui::EndMenu();
 		}
@@ -668,9 +714,41 @@ void winmain::RenderUi()
 				}
 				ImGui::Separator();
 
-				if (ImGui::MenuItem("Shift Keys Flip (Left/Right Shift)", nullptr, Options.ShiftFlippers))
+				if (pb::MainTable && ImGui::BeginMenu("Ball"))
 				{
-					Options.ShiftFlippers ^= true;
+					auto pick = [](const std::string& style)
+					{
+						Options.BallStyle.V = style;
+						for (auto ball : pb::MainTable->BallList)
+							ball->SetStyle(style);
+					};
+					auto styles = TBall::AvailableStyles();
+					if (ImGui::MenuItem("Standard", nullptr, Options.BallStyle.V.empty() ||
+						std::find(styles.begin(), styles.end(), Options.BallStyle.V) == styles.end()))
+						pick("");
+					for (auto& style : styles)
+					{
+						auto label = style;
+						std::replace(label.begin(), label.end(), '_', ' ');
+						if (!label.empty())
+							label[0] = static_cast<char>(toupper(static_cast<unsigned char>(label[0])));
+						if (ImGui::MenuItem(label.c_str(), nullptr, Options.BallStyle.V == style))
+							pick(style);
+					}
+					if (styles.empty())
+						ImGui::TextDisabled("This table has no other balls");
+					ImGui::EndMenu();
+				}
+				if (ImGui::BeginMenu("Flipper Keys"))
+				{
+					if (ImGui::MenuItem("Both (Z and / plus Left/Right Shift)", nullptr, Options.FlipperKeys.V == 0))
+						Options.FlipperKeys.V = 0;
+					if (ImGui::MenuItem("Z and / (your key settings)", nullptr, Options.FlipperKeys.V == 1))
+						Options.FlipperKeys.V = 1;
+					if (ImGui::MenuItem("Left/Right Shift", nullptr, Options.FlipperKeys.V == 2))
+						Options.FlipperKeys.V = 2;
+					ImGui::TextDisabled("Every flipper on the table follows these keys.");
+					ImGui::EndMenu();
 				}
 				if (ImGui::MenuItem("Hide Cursor", nullptr, Options.HideCursor))
 				{
@@ -925,6 +1003,11 @@ int winmain::event_handler(const SDL_Event* event)
 		if (event->key.repeat)
 			break;
 
+		if (event->key.keysym.sym == SDLK_F12 && !options::WaitingForInput())
+		{
+			BackToTableLibrary();
+			break;
+		}
 		pb::InputDown({InputTypes::Keyboard, event->key.keysym.sym});
 		if (!pb::cheat_mode)
 			break;

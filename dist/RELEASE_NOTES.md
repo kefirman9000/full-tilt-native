@@ -7,9 +7,12 @@
 **Game data is not included.** Copy your original game folders into `Put game files here` and start `FullTiltPinball.exe`: tables are found and sorted automatically.
 
 **New in this version**
-- Shift keys flip: Left/Right Shift work the flippers as well as Z and / (Options > "Shift Keys Flip" to turn off)
-- High scores per table, shown on each table's card in the launcher; extra tables now ask for your name at game over
-- From v0.2.2: table loading fixed on Windows, table MIDI music, `Music` folder per table for CD audio tracks
+- One window: picking a table swaps the library for the game in the same spot; **Game > Back to Table Library** (or F12) brings the library back where the game was
+- All flippers work on every table (Alien Daze's lower flippers, Captain Hero's extra left flippers...)
+- **Options > Flipper Keys**: Z and / (your key settings), Left/Right Shift, or both - every flipper follows it
+- **Options > Ball**: pick one of the table's own ball styles (Captain Hero and Mad Scientist: quake, scientist, myst, slime, elastic, evil twin)
+- Alien Daze: the ray-gun shooter now always fires the ball up the shooter lane onto the playfield (a quick tap used to roll back or drain)
+- From v0.3.0: per-table high scores on the cards, table MIDI music and `Music` folders for CD audio
 
 **Status**
 - Alien Daze, Mad Scientist: playable with simple placeholder rules (points, 3 balls, game over)

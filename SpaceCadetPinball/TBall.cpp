@@ -1,4 +1,6 @@
 #include "pch.h"
+#include "GroupData.h"
+#include "options.h"
 #include "TBall.h"
 
 
@@ -52,20 +54,56 @@ TBall::TBall(TPinballTable* table, int groupIndex) : TCollisionComponent(table, 
 	}
 
 	Radius = *loader::query_float_attribute(groupIndex, 0, 500);
+	GroupIndex = groupIndex;
+	SetStyle(options::Options.BallStyle.V);
+	RenderSprite = new render_sprite(VisualTypes::Ball, nullptr, nullptr, 0, 0, nullptr);
+	PinballTable->CollisionCompOffset = Radius;
+	Position.Z = Radius;
+}
 
+static int BallGroup(const std::string& style)
+{
+	std::string name = (style.empty() ? "" : style + "_") + "ball";
+	auto group = loader::query_handle(name.c_str());
+	if (group < 0)
+		group = loader::query_handle((name + std::to_string(fullscrn::GetResolution())).c_str());
+	return group;
+}
+
+void TBall::SetStyle(const std::string& style)
+{
+	// Picture only: the ball's size and physics stay those of the standard ball
+	auto groupIndex = BallGroup(style);
+	if (groupIndex < 0)
+		groupIndex = BallGroup("");
+	if (groupIndex < 0)
+		return;
+	visualStruct visual{};
+	ListBitmap->clear();
 	auto visualCount = loader::query_visual_states(groupIndex);
-	for (auto index = 0; index < visualCount; ++index)
+	for (auto index = 0; index < visualCount && index < 50; ++index)
 	{
 		loader::query_visual(groupIndex, index, &visual);
 		ListBitmap->push_back(visual.Bitmap);
 		auto visVec = reinterpret_cast<vector3*>(loader::query_float_attribute(groupIndex, index, 501));
-		auto zDepth = proj::z_distance(*visVec);
-		VisualZArray[index] = zDepth;
+		VisualZArray[index] = visVec ? proj::z_distance(*visVec) : 0.0f;
 	}
-	RenderSprite = new render_sprite(VisualTypes::Ball, nullptr, nullptr, 0, 0, nullptr);
-	PinballTable->CollisionCompOffset = Radius;
-	Position.Z = Radius;
-	GroupIndex = groupIndex;
+}
+
+std::vector<std::string> TBall::AvailableStyles()
+{
+	// Ball sets in the table data are named "<style>_ball<resolution>" next to the standard "ball<resolution>"
+	std::vector<std::string> styles;
+	auto suffix = "_ball" + std::to_string(fullscrn::GetResolution());
+	for (auto group : loader::loader_table->Groups)
+	{
+		if (!group)
+			continue;
+		auto& name = group->GroupName;
+		if (name.size() > suffix.size() && name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0)
+			styles.push_back(name.substr(0, name.size() - suffix.size()));
+	}
+	return styles;
 }
 
 void TBall::Repaint()

@@ -104,7 +104,10 @@ void TPlunger::FT2Launch()
 		}
 		if (bestDist > ball->Radius * 1.5f)
 			continue;
-		auto speed = RandFloat() * Boost * 0.05f + Boost;
+		// FT2 shooter lanes climb (Alien's runs up-left past aim_wall), so a weak shot rolls back or dribbles into the
+		// drain. Like the tables' ray-gun style shooters, every release fires at 80-100% of full strength.
+		auto pull = MaxPullback > 0 ? std::min(1.0f, Boost / MaxPullback) : 1.0f;
+		auto speed = MaxPullback * (0.8f + 0.2f * pull) * (1.0f + RandFloat() * 0.03f);
 		ball->Direction.X = bestNormal.X;
 		ball->Direction.Y = bestNormal.Y;
 		ball->Speed = speed;

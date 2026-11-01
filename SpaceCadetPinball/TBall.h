@@ -7,6 +7,9 @@ class TBall : public TCollisionComponent, public TEdgeSegment
 {
 public :
 	TBall(TPinballTable* table, int groupIndex);
+	// Ball look: "" = standard, else a ball set in the table data ("<style>_ball<res>", e.g. Hero/Mad's slime ball)
+	void SetStyle(const std::string& style);
+	static std::vector<std::string> AvailableStyles();
 	void Repaint();
 	void not_again(TEdgeSegment* edge);
 	bool already_hit(const TEdgeSegment& edge) const;
