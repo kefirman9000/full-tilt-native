@@ -20,8 +20,8 @@ k4zmu2a and contributors (full history kept; their original README is in `README
 3. Rebuild each table's real rules from the original exes, one table at a time (Alien first).
 
 ## Running
-Easiest: download the latest release, then copy each table's `.DAT` and sound folder from your own copy of the games into
-`tables/<Table>/` (see the release README) and start `FullTiltPinball.exe` (the table library launcher).
+Easiest: download the latest release, copy your original game folders into `Put game files here`, and start
+`FullTiltPinball.exe` (the table library launcher). It finds each table's data and sounds and sorts them into `tables/`.
 
 By hand: put the table's `.DAT` in the working folder and run `FullTiltEngine --table ALIEN.DAT`
 (or HERO.DAT, MAD.DAT, Full Tilt 1's DRAGON.DAT / PIRATES.DAT). Without `--table`, CADET.DAT plays Space Cadet with

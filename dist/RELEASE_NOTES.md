@@ -4,7 +4,7 @@ First release of **Full Tilt Native**: Full Tilt! Pinball tables running nativel
 - `FullTiltPinball.exe` — table library launcher (a card per table)
 - `FullTiltEngine.exe` — the game engine (built on the SpaceCadetPinball decompilation)
 
-**Game data is not included.** Copy each table's `.DAT` and sound folder from your own copy of the games into `tables\<Table>\` (see README.txt in the zip).
+**Game data is not included.** Copy your original game folders into `Put game files here` and start `FullTiltPinball.exe`: tables are found and sorted automatically.
 
 **Status**
 - Alien Daze, Mad Scientist: playable with simple placeholder rules (points, 3 balls, game over)
