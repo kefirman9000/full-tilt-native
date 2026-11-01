@@ -87,6 +87,13 @@ void TBall::Repaint()
 		if (VisualZArray[index] <= zDepth) break;
 	}
 
+	if (pb::FT2Table && getenv("FT2_DEBUG"))
+	{
+		static int n;
+		if (++n % 60 == 0)
+			fprintf(stderr, "FT2DBG repaint 2d %d %d z %.2f idx %u/%zu zarr0 %.2f last %.2f\n", pos2D.X, pos2D.Y, zDepth, index,
+			        ListBitmap->size(), VisualZArray[0], VisualZArray[ListBitmap->size() - 1]);
+	}
 	SpriteSetBall(index, pos2D, zDepth);
 }
 

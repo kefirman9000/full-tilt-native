@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "control.h"
+#include "ft2_control.h"
 
 #include "midi.h"
 #include "pb.h"
@@ -895,7 +896,10 @@ TPinballComponent* control::make_component_link(component_tag_base& tag)
 void control::handler(MessageCode code, TPinballComponent* cmp)
 {
 	if (pb::FT2Table)
+	{
+		ft2_control::handler(code, cmp);
 		return;
+	}
 	component_control* control = cmp->Control;
 	
 	if (control)

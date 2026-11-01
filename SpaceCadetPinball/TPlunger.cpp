@@ -28,6 +28,13 @@ TPlunger::TPlunger(TPinballTable* table, int groupIndex) : TCollisionComponent(t
     if (pb::FullTiltMode)
     {
         MaxPullback = 50;
+        // FT2 tables give the plunger strength in attribute 402 (500..1000; their world is ~10x Cadet's)
+        if (pb::FT2Table)
+        {
+            auto strength = loader::query_float_attribute(groupIndex, 0, 402);
+            if (strength)
+                MaxPullback = strength[0];
+        }
         PullbackIncrement = MaxPullback / (ListBitmap->size() * 8.0f);
     }
     else
@@ -42,6 +49,68 @@ TPlunger::TPlunger(TPinballTable* table, int groupIndex) : TCollisionComponent(t
 	PullbackDelay = 0.025f;
 	float* floatArr = loader::query_float_attribute(groupIndex, 0, 601);
 	table->PlungerPosition = {floatArr[0], floatArr[1]};
+
+	if (pb::FT2Table)
+	{
+		// Plunger shape (attribute 600: count, then x/y pairs): center and size, used by FT2Launch
+		auto wall = loader::query_float_attribute(groupIndex, 0, 600);
+		if (wall)
+		{
+			int count = static_cast<int>(wall[0]);
+			float minX = 1e9f, minY = 1e9f, maxX = -1e9f, maxY = -1e9f;
+			for (int i = 0; i < count; i++)
+			{
+				FT2Shape.push_back({wall[1 + i * 2], wall[2 + i * 2]});
+				minX = std::min(minX, wall[1 + i * 2]);
+				maxX = std::max(maxX, wall[1 + i * 2]);
+				minY = std::min(minY, wall[2 + i * 2]);
+				maxY = std::max(maxY, wall[2 + i * 2]);
+			}
+			FT2Center = {(minX + maxX) / 2, (minY + maxY) / 2};
+			FT2Reach = std::max(maxX - minX, maxY - minY);
+		}
+	}
+}
+
+void TPlunger::FT2Launch()
+{
+	// FT2 plungers are angled shapes (Alien's ray gun fires the ball sideways through a one-way gate) that the resting
+	// ball barely touches, so the Cadet-style "hit during the release window" rarely happens. Instead, push any ball
+	// resting against the plunger away from the nearest face of the plunger shape.
+	if (FT2Shape.size() < 2)
+		return;
+	for (auto ball : PinballTable->BallList)
+	{
+		if (!ball->ActiveFlag || ball->CollisionComp)
+			continue;
+		float bestDist = 1e9f;
+		vector2 bestNormal{};
+		for (size_t i = 0; i + 1 < FT2Shape.size(); i++)
+		{
+			auto a = FT2Shape[i], b = FT2Shape[i + 1];
+			vector2 ab{b.X - a.X, b.Y - a.Y};
+			auto len2 = ab.X * ab.X + ab.Y * ab.Y;
+			if (len2 <= 0.0f)
+				continue;
+			auto t = std::max(0.0f, std::min(1.0f, ((ball->Position.X - a.X) * ab.X + (ball->Position.Y - a.Y) * ab.Y) / len2));
+			vector2 closest{a.X + ab.X * t, a.Y + ab.Y * t};
+			vector2 away{ball->Position.X - closest.X, ball->Position.Y - closest.Y};
+			auto dist = std::sqrt(away.X * away.X + away.Y * away.Y);
+			if (dist < bestDist && dist > 0.0f)
+			{
+				bestDist = dist;
+				bestNormal = {away.X / dist, away.Y / dist};
+			}
+		}
+		if (bestDist > ball->Radius * 1.5f)
+			continue;
+		auto speed = RandFloat() * Boost * 0.05f + Boost;
+		ball->Direction.X = bestNormal.X;
+		ball->Direction.Y = bestNormal.Y;
+		ball->Speed = speed;
+		if (getenv("FT2_DEBUG"))
+			fprintf(stderr, "FT2DBG plunger launch speed %.1f dir %.2f %.2f gap %.2f\n", speed, bestNormal.X, bestNormal.Y, bestDist);
+	}
 }
 
 void TPlunger::Collision(TBall* ball, vector2* nextPosition, vector2* direction, float distance, TEdgeSegment* edge)
@@ -132,6 +201,8 @@ int TPlunger::Message(MessageCode code, float value)
 				timer::kill(PullbackTimer_);
 			PullbackTimer_ = 0;
 			loader::play_sound(SoundIndexP2, this, "TPlunger3");
+			if (pb::FT2Table)
+				FT2Launch();
 			SpriteSet(0);
 			timer::set(PullbackDelay, this, ReleasedTimer);
 		}

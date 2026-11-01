@@ -12,4 +12,5 @@ public:
 	               TEdgeSegment* edge) override;
 
 	TLine* Line;
+	vector2 Pt0{}, Pt1{};
 };

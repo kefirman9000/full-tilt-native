@@ -20,6 +20,8 @@ TOneway::TOneway(TPinballTable* table, int groupIndex) : TCollisionComponent(tab
 		linePt2.Y = visual.FloatArr[1];
 		linePt1.X = visual.FloatArr[2];
 		linePt1.Y = visual.FloatArr[3];
+		Pt0 = linePt2;
+		Pt1 = linePt1;
 
 		auto line = new TLine(this, &ActiveFlag, visual.CollisionGroup, linePt2, linePt1);
 		if (line)

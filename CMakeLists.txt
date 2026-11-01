@@ -46,6 +46,8 @@ endforeach()
 set(SOURCE_FILES
         SpaceCadetPinball/control.cpp
         SpaceCadetPinball/control.h
+        SpaceCadetPinball/ft2_control.cpp
+        SpaceCadetPinball/ft2_control.h
         SpaceCadetPinball/EmbeddedData.cpp
         SpaceCadetPinball/EmbeddedData.h
         SpaceCadetPinball/font_selection.cpp

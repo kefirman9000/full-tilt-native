@@ -56,6 +56,14 @@ TTableLayer::TTableLayer(TPinballTable* table): TCollisionComponent(table, -1, f
 	GraityDirX = cos(PinballTable->GravityAnglY) * sin(PinballTable->GravityAngleX) * PinballTable->GravityDirVectMult;
 	GraityDirY = sin(PinballTable->GravityAnglY) * sin(PinballTable->GravityAngleX) * PinballTable->GravityDirVectMult;
 
+	// FT2 tables: the world is rotated 180 degrees relative to Space Cadet (camera distance is positive instead of
+	// negative, flipping both screen axes), so "down the table" is -Y and gravity must point the other way.
+	if (pb::FT2Table)
+	{
+		GraityDirX = -GraityDirX;
+		GraityDirY = -GraityDirY;
+	}
+
 	/*Full tilt hack - GraityMult should be 0.2*/
 	if (!pb::FullTiltMode && !pb::FullTiltDemoMode)
 	{

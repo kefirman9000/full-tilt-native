@@ -24,4 +24,10 @@ public:
 	int SoundIndexP2;
 	bool PullbackStartedFlag{};
 	int SomeCounter{};
+
+	// FT2 tables: launch the ball directly on release (see TPlunger.cpp)
+	void FT2Launch();
+	vector2 FT2Center{};
+	float FT2Reach{};
+	std::vector<vector2> FT2Shape;
 };

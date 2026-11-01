@@ -186,6 +186,26 @@ TPinballTable::TPinballTable(): TPinballComponent(nullptr, -1, false)
 		}
 	}
 
+	if (pb::FT2Table)
+	{
+		// FT2 sandbox (no table rules yet): some gates are two one-ways laid back to back in opposite directions, and
+		// the table's rules switch one of them off. With both on, the ball can pass neither way (e.g. Alien's plunger
+		// lane exit). Until the rules exist, keep the first of each such pair and switch the later one off.
+		std::vector<TOneway*> oneways;
+		for (auto comp : ComponentList)
+			if (auto oneway = dynamic_cast<TOneway*>(comp))
+				oneways.push_back(oneway);
+		auto close = [](vector2 a, vector2 b) { return std::abs(a.X - b.X) < 1.5f && std::abs(a.Y - b.Y) < 1.5f; };
+		for (size_t i = 0; i < oneways.size(); i++)
+			for (size_t j = i + 1; j < oneways.size(); j++)
+				if (oneways[i]->ActiveFlag && oneways[j]->ActiveFlag &&
+					close(oneways[i]->Pt0, oneways[j]->Pt1) && close(oneways[i]->Pt1, oneways[j]->Pt0))
+				{
+					oneways[j]->ActiveFlag = 0;
+					printf("FT2: one-way %s off (back to back with %s)\n", oneways[j]->GroupName, oneways[i]->GroupName);
+				}
+	}
+
 	render::build_occlude_list();
 	pb::InfoTextBox = pb::FT2Table ? nullptr : dynamic_cast<TTextBox*>(find_component("info_text_box"));
 	pb::MissTextBox = pb::FT2Table ? nullptr : dynamic_cast<TTextBox*>(find_component("mission_text_box"));
@@ -629,6 +649,8 @@ int TPinballTable::Message(MessageCode code, float value)
 
 TBall* TPinballTable::AddBall(vector2 position)
 {
+	if (pb::FT2Table && getenv("FT2_DEBUG"))
+		fprintf(stderr, "FT2DBG AddBall %.2f %.2f\n", position.X, position.Y);
 	TBall* ball = nullptr;
 
 	for (auto curBall : BallList)

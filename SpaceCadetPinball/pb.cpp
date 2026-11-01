@@ -352,6 +352,15 @@ void pb::frame(float dtMilliSec)
 
 void pb::timed_frame(float timeDelta)
 {
+	if (FT2Table && getenv("FT2_DEBUG"))
+	{
+		static int dbgCount;
+		if (++dbgCount % 30 == 0)
+			for (auto ball : MainTable->BallList)
+				if (ball->ActiveFlag)
+					fprintf(stderr, "FT2DBG ball pos %.2f %.2f %.2f speed %.2f mask %d\n", ball->Position.X,
+					        ball->Position.Y, ball->Position.Z, ball->Speed, ball->CollisionMask);
+	}
 	for (auto ball : MainTable->BallList)
 	{
 		if (!ball->ActiveFlag || ball->HasGroupFlag || ball->CollisionComp || ball->Speed >= 0.8f)
@@ -473,6 +482,12 @@ void pb::timed_frame(float timeDelta)
 						break;
 					}
 
+					if (FT2Table && getenv("FT2_DEBUG") && ball->Speed > 40.0f)
+					{
+						auto comp = edge->CollisionComponent;
+						fprintf(stderr, "FT2DBG hit at %.1f %.1f speed %.0f comp group %d %s\n", ball->Position.X, ball->Position.Y,
+						        ball->Speed, comp ? comp->GroupIndex : -1, comp && comp->GroupName ? comp->GroupName : "");
+					}
 					edge->EdgeCollision(ball, distance);
 					if (distance <= 0.0f || ball->CollisionDisabledFlag)
 						break;
