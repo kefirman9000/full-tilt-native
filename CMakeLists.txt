@@ -49,6 +49,8 @@ set(SOURCE_FILES
         SpaceCadetPinball/ft2_control.cpp
         SpaceCadetPinball/ft_log.cpp
         SpaceCadetPinball/ft_log.h
+        SpaceCadetPinball/ft_music.cpp
+        SpaceCadetPinball/ft_music.h
         SpaceCadetPinball/ft2_control.h
         SpaceCadetPinball/EmbeddedData.cpp
         SpaceCadetPinball/EmbeddedData.h

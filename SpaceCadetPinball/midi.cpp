@@ -3,6 +3,7 @@
 
 
 #include "pb.h"
+#include "ft_music.h"
 
 
 std::vector<Mix_Music*> midi::LoadedTracks{};
@@ -70,7 +71,37 @@ int midi::music_init(bool mixOpen, int volume)
 	IsPlaying = false;
 	track1 = track2 = track3 = nullptr;
 
-	if (pb::FullTiltMode)
+	if (pb::FT2Table)
+	{
+		// Other Full Tilt tables: files in the table's Music folder (CD audio replacements, played in name order)
+		// replace MIDI tracks 1, 2, 3...; any track without a file keeps the table's own MIDI music.
+		auto cdFiles = ftmusic::ListAudioFiles(pb::make_path_name("Music"));
+		auto prefix = ftmusic::FindMidiPrefix(pb::make_path_name("SOUND"));
+		Mix_Music** tracks[] = {&track1, &track2, &track3};
+		for (int i = 0; i < 3; i++)
+		{
+			if (i < static_cast<int>(cdFiles.size()) && MixOpen && !pb::quickFlag)
+			{
+				if (auto music = Mix_LoadMUS(cdFiles[i].c_str()))
+				{
+					LoadedTracks.push_back(music);
+					*tracks[i] = music;
+					printf("Music track %d: %s\n", i + 1, cdFiles[i].c_str());
+					continue;
+				}
+				printf("Music track %d: could not play %s (%s), using MIDI\n", i + 1, cdFiles[i].c_str(), Mix_GetError());
+			}
+			if (!prefix.empty())
+			{
+				*tracks[i] = load_track(prefix + std::to_string(i + 1));
+				if (*tracks[i])
+					printf("Music track %d: MIDI %s%d\n", i + 1, prefix.c_str(), i + 1);
+			}
+		}
+		if (!track1)
+			printf("Music: no Music folder files and no MIDI tracks found for this table\n");
+	}
+	else if (pb::FullTiltMode)
 	{
 		track1 = load_track("TABA1");
 		track2 = load_track("TABA2");

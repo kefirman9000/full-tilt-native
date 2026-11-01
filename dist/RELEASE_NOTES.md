@@ -8,8 +8,10 @@
 
 **New in this version**
 - Fix: tables picked in the launcher failed with "The .dat file is missing" on Windows
+- Music: Full Tilt 2 and Full Tilt 1 tables now play their own MIDI music
+- CD audio: every table folder has a `Music` folder. Put the table's CD tracks there (mp3/ogg/wav/flac, played in name
+  order: 01.mp3, 02.mp3 ...) and they replace the MIDI tracks. Tracks without a file keep the MIDI music.
 - Starting FullTiltEngine.exe by itself opens the table library instead of an error
-- From v0.2.0: built-in updater, log files, "Put game files here" folder
 
 **Status**
 - Alien Daze, Mad Scientist: playable with simple placeholder rules (points, 3 balls, game over)

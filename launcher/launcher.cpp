@@ -195,6 +195,25 @@ static int ImportGameFiles(const fs::path& dropDir, const fs::path& tablesDir, s
 	return imported;
 }
 
+
+// Every table gets a Music folder for CD-audio replacement files (see the README written into it)
+static void EnsureMusicFolder(const fs::path& tableFolder, const std::string& tableName)
+{
+	std::error_code ec;
+	auto music = tableFolder / "Music";
+	if (fs::exists(music / "README.txt", ec))
+		return;
+	fs::create_directories(music, ec);
+	std::ofstream readme(music / "README.txt");
+	readme << "MUSIC FOR " << tableName << "\n"
+		"==========\n"
+		"Put this table's CD audio tracks here (mp3, ogg, wav or flac) to play them instead of the MIDI music.\n"
+		"Files play in name order: the 1st file replaces the table's 1st music track, the 2nd the 2nd, and so on.\n"
+		"Name them so they sort right, e.g. 01.mp3, 02.mp3, 03.mp3.\n"
+		"Tracks without a file keep the original MIDI music. Empty folder = original MIDI music.\n"
+		"FullTiltEngine.log (main folder) lists which file or MIDI track each music slot used.\n";
+}
+
 static void OpenFolder(const fs::path& folder)
 {
 #ifdef _WIN32
@@ -285,6 +304,8 @@ int main(int, char**)
 		{
 			return a.Order != b.Order ? a.Order < b.Order : a.Name < b.Name;
 		});
+		for (auto& t : tables)
+			EnsureMusicFolder(t.Folder, t.Name);
 		for (auto& t : tables)
 			for (auto picture : {t.Preview, std::string("icon.bmp")})
 			{
