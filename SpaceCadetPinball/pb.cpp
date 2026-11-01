@@ -84,6 +84,9 @@ int pb::init()
 	}
 
 	render::init(nullptr, resInfo->TableWidth, resInfo->TableHeight);
+	// FT2 tables: the "table" sprite is the full-screen playfield; the "background" record is not a backdrop
+	// (it shows up as white blocks wherever sprites are redrawn), so start from black instead.
+	if (!FT2Table)
 	gdrv::copy_bitmap(
 		render::vscreen,
 		backgroundBmp->Width,

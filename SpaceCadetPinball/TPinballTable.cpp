@@ -4,6 +4,8 @@
 
 #include "control.h"
 #include "loader.h"
+#include "GroupData.h"
+#include "fullscrn.h"
 #include "midi.h"
 #include "pb.h"
 #include "render.h"
@@ -190,8 +192,28 @@ TPinballTable::TPinballTable(): TPinballComponent(nullptr, -1, false)
 	// FT2 tables have no text box groups (text is drawn by the table's own code): use zero-size dummies
 	if (pb::FT2Table)
 	{
-		if (!pb::InfoTextBox) pb::InfoTextBox = new TTextBox(this, -1);
-		if (!pb::MissTextBox) pb::MissTextBox = new TTextBox(this, -1);
+		// Place them in the table's own message areas (records: font, x, y, w, h, align; one per resolution)
+		auto makeBox = [this](const char* recordName)
+		{
+			auto box = new TTextBox(this, -1);
+			auto groupIndex = loader::query_handle(recordName);
+			if (groupIndex > 0)
+			{
+				auto resGroup = groupIndex + fullscrn::GetResolution();
+				auto dims = reinterpret_cast<int16_t*>(loader::loader_table->field(resGroup, FieldTypes::ShortArray));
+				int arrLength = dims ? loader::loader_table->field_size(resGroup, FieldTypes::ShortArray) / 2 : 0;
+				if (dims && arrLength >= 5)
+				{
+					box->OffsetX = dims[1];
+					box->OffsetY = dims[2];
+					box->Width = dims[3];
+					box->Height = dims[4] * 2;
+				}
+			}
+			return box;
+		};
+		pb::InfoTextBox = makeBox("notify_box");
+		pb::MissTextBox = makeBox("mode_box");
 	}
 	control::make_links(this);
 }

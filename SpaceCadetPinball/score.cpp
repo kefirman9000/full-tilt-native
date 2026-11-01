@@ -42,6 +42,9 @@ scoreStruct* score::create(LPCSTR fieldName, gdrv_bitmap8* renderBgBmp)
 		return nullptr;
 	}
 	int groupIndex = *dimensions++;
+	// FT2 fonts are ASCII tables starting at ' ', so digit 0 is 16 glyphs in
+	if (pb::FT2Table)
+		groupIndex += '0' - ' ';
 	score->OffsetX = *dimensions++;
 	score->OffsetY = *dimensions++;
 	score->Width = *dimensions++;

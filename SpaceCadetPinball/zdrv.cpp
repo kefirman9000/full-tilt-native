@@ -58,7 +58,8 @@ void zdrv::paint(int width, int height, gdrv_bitmap8* dstBmp, int dstBmpXOff, in
 	{
 		for (int x = width; x > 0; --x)
 		{
-			if (*dstPtrZ >= *srcPtrZ)
+			// 0xFFFF = empty pixel of a spliced sprite; skip it so it never paints over empty screen areas
+			if (*srcPtrZ != 0xFFFF && *dstPtrZ >= *srcPtrZ)
 			{
 				*dstPtr = *srcPtr;
 				*dstPtrZ = *srcPtrZ;
