@@ -220,6 +220,23 @@ endif()
 
 target_link_libraries(SpaceCadetPinball ${SDL2_LIBRARY} ${SDL2_MIXER_LIBRARY})
 
+
+# Table library launcher (shows every table under tables/ and starts the game for it)
+add_executable(FullTiltLauncher
+        launcher/launcher.cpp
+        SpaceCadetPinball/imgui.cpp
+        SpaceCadetPinball/imgui_draw.cpp
+        SpaceCadetPinball/imgui_tables.cpp
+        SpaceCadetPinball/imgui_widgets.cpp
+        SpaceCadetPinball/imgui_impl_sdl.cpp
+        SpaceCadetPinball/imgui_impl_sdlrenderer.cpp)
+set_target_properties(FullTiltLauncher PROPERTIES CXX_STANDARD 17)
+target_include_directories(FullTiltLauncher PRIVATE SpaceCadetPinball)
+target_link_libraries(FullTiltLauncher ${SDL2_LIBRARY})
+if(WIN32)
+    set_target_properties(FullTiltLauncher PROPERTIES WIN32_EXECUTABLE TRUE)
+endif()
+
 # On Windows, copy DLL to output
 if(WIN32)
     list(GET SDL2_LIBRARY -1 SDL2_DLL_PATH)
