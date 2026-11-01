@@ -12,7 +12,7 @@ int fullscrn::screen_mode;
 int fullscrn::display_changed;
 
 int fullscrn::resolution = 0;
-const resolution_info fullscrn::resolution_array[3] =
+resolution_info fullscrn::resolution_array[3] =
 {
 	{640, 480, 600, 416, 501},
 	{800, 600, 752, 520, 502},

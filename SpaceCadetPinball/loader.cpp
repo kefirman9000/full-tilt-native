@@ -43,7 +43,7 @@ int loader::sound_count = 1;
 int loader::loader_sound_count;
 DatFile* loader::loader_table;
 DatFile* loader::sound_record_table;
-soundListStruct loader::sound_list[65];
+soundListStruct loader::sound_list[256];
 
 int loader::error(int errorCode, int captionCode)
 {
@@ -90,7 +90,7 @@ void loader::loadfrom(DatFile* datFile)
 		auto value = reinterpret_cast<int16_t*>(datFile->field(groupIndex, FieldTypes::ShortValue));
 		if (value && *value == 202)
 		{
-			if (sound_count < 65)
+			if (sound_count < 256)
 			{
 				sound_list[sound_count] = {nullptr, groupIndex, 0, 0};
 				sound_count++;
@@ -242,6 +242,7 @@ float* loader::query_float_attribute(int groupIndex, int groupIndexOffset, int f
 {
 	if (groupIndex < 0)
 	{
+		if (getenv("FT2_DAT")) { fprintf(stderr, "FT2: query attr %d with groupIndex %d\n", firstValue, groupIndex); return nullptr; }
 		error(0, 22);
 		return nullptr;
 	}
@@ -249,6 +250,7 @@ float* loader::query_float_attribute(int groupIndex, int groupIndexOffset, int f
 	int stateId = state_id(groupIndex, groupIndexOffset);
 	if (stateId < 0)
 	{
+		if (getenv("FT2_DAT")) { fprintf(stderr, "FT2: query attr %d group %d: no state id\n", firstValue, groupIndex); return nullptr; }
 		error(16, 22);
 		return nullptr;
 	}
@@ -263,6 +265,11 @@ float* loader::query_float_attribute(int groupIndex, int groupIndexOffset, int f
 			return floatArr + 1;
 	}
 
+	if (getenv("FT2_DAT"))
+	{
+		fprintf(stderr,"FT2: group %d (+%d) has no float attribute %d\n", groupIndex, groupIndexOffset, firstValue);
+		return nullptr;
+	}
 	error(13, 22);
 	return nullptr;
 }
@@ -405,10 +412,18 @@ int loader::kicker(int groupIndex, visualKickerStruct* kicker)
 		case 406:
 			kicker->HardHitSoundId = get_sound_id(static_cast<int>(floor(*floatArr)));
 			break;
+		case 410:
+			// Not in the Cadet decomp. FT2 tables: 410 is followed by 8 floats, which look like
+			// two (x, y, radius, 0) groups. Meaning unknown, values skipped.
+			floatArr += 8;
+			index += 9;
+			break;
 		default:
+			if (getenv("FT2_DAT"))
+				printf("FT2: kicker group %d unknown attribute %d\n", groupIndex, floorVal);
 			return error(10, 20);
 		}
-		if (floorVal != 404)
+		if (floorVal != 404 && floorVal != 410)
 		{
 			floatArr++;
 			index += 2;

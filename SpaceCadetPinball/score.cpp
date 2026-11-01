@@ -24,6 +24,14 @@ scoreStruct* score::create(LPCSTR fieldName, gdrv_bitmap8* renderBgBmp)
 	score->Score = -9999;
 	score->BackgroundBmp = renderBgBmp;
 
+	// Experimental: FT2 tables name these records differently (score_box, ballcount_box, player_box)
+	if (getenv("FT2_DAT"))
+	{
+		if (!strcmp(fieldName, "score1")) fieldName = "score_box";
+		else if (!strcmp(fieldName, "ballcount1")) fieldName = "ballcount_box";
+		else if (!strcmp(fieldName, "player_number1")) fieldName = "player_box";
+	}
+
 	/*Full tilt: score box dimensions index is offset by resolution*/
 	auto dimensionsId = pb::record_table->record_labeled(fieldName) + fullscrn::GetResolution();
 	auto dimensions = reinterpret_cast<int16_t*>(loader::loader_table->field(dimensionsId,

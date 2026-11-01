@@ -123,13 +123,29 @@ void GroupData::SplitSplicedBitmap(const gdrv_bitmap8& srcBmp, gdrv_bitmap8& bmp
 		// Stride is in terms of dst stride, hardcoded to match vScreen width in current resolution
 		if (stride > bmp.Width)
 		{
-			stride += bmp.Width - tableWidth;
+			if (getenv("FT2_DAT"))
+			{
+				// FT2: a jump can span several screen rows plus a column offset (stride = k*tableWidth + c).
+				// Convert it to k*bmp.Width + c. For k == 1 this is identical to the original formula.
+				int rows = (stride + tableWidth / 2) / tableWidth;
+				int cols = stride - rows * tableWidth;
+				stride = rows * bmp.Width + cols;
+			}
+			else
+				stride += bmp.Width - tableWidth;
 			assertm(stride >= 0, "Spliced bitmap: negative computed stride");
 		}
 
 		dstInd += stride;
 		for (auto count = *src++; count; count--)
 		{
+			if (getenv("FT2_DAT") && (dstInd < 0 || dstInd >= bmp.Stride * bmp.Height))
+			{
+				fprintf(stderr, "FT2: spliced sprite overflow: group %d res %u size %dx%d (src %dx%d @%d,%d) stride=%d dstInd=%d tableW=%d\n",
+				        -1, srcBmp.Resolution, bmp.Width, bmp.Height, srcBmp.Width, srcBmp.Height,
+				        srcBmp.XPosition, srcBmp.YPosition, stride, dstInd, tableWidth);
+				return;
+			}
 			auto depth = *src++;
 			bmp.IndexedBmpPtr[dstInd] = **srcChar;
 			zMap.ZPtr1[dstInd] = depth;

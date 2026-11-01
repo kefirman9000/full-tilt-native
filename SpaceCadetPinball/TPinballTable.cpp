@@ -187,6 +187,12 @@ TPinballTable::TPinballTable(): TPinballComponent(nullptr, -1, false)
 	render::build_occlude_list();
 	pb::InfoTextBox = dynamic_cast<TTextBox*>(find_component("info_text_box"));
 	pb::MissTextBox = dynamic_cast<TTextBox*>(find_component("mission_text_box"));
+	// FT2 tables have no text box groups (text is drawn by the table's own code): use zero-size dummies
+	if (getenv("FT2_DAT"))
+	{
+		if (!pb::InfoTextBox) pb::InfoTextBox = new TTextBox(this, -1);
+		if (!pb::MissTextBox) pb::MissTextBox = new TTextBox(this, -1);
+	}
 	control::make_links(this);
 }
 

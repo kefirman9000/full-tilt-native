@@ -27,7 +27,9 @@ TCollisionComponent::TCollisionComponent(TPinballTable* table, int groupIndex, b
 		{
 			float offset = table->CollisionCompOffset;
 			float* floatArr = loader::query_float_attribute(groupIndex, 0, 600);
-			TEdgeSegment::install_wall(floatArr, this, &ActiveFlag, visual.CollisionGroup, offset, 0);
+			// FT2 animation-only components (e.g. gate flaps) have no wall; their wall is a separate object
+			if (floatArr)
+				TEdgeSegment::install_wall(floatArr, this, &ActiveFlag, visual.CollisionGroup, offset, 0);
 		}
 	}
 

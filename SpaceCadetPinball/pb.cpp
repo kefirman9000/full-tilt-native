@@ -142,6 +142,18 @@ void pb::SelectDatFile(const std::vector<const char*>& dataSearchPaths)
 		"PINBALL.DAT",
 		"DEMO.DAT",
 	};
+	// Experimental: FT2_DAT=ALIEN.DAT (or HERO.DAT / MAD.DAT) loads a Full Tilt! 2 table in Full Tilt mode
+	const char* ft2Dat = getenv("FT2_DAT");
+	if (ft2Dat && *ft2Dat)
+	{
+		datFileNames[0] = ft2Dat;
+		// FT2 table backgrounds fill the whole screen (640x480 / 800x600 / 1024x768)
+		for (auto& r : fullscrn::resolution_array)
+		{
+			r.TableWidth = r.ScreenWidth;
+			r.TableHeight = r.ScreenHeight;
+		}
+	}
 
 	// Default game data test order: CADET.DAT, PINBALL.DAT, DEMO.DAT
 	if (options::Options.Prefer3DPBGameData)
@@ -169,7 +181,7 @@ void pb::SelectDatFile(const std::vector<const char*>& dataSearchPaths)
 				{
 					fclose(datFile);
 					DatFileName = fileName;
-					if (datFileName == "CADET.DAT")
+					if (datFileName == "CADET.DAT" || (ft2Dat && *ft2Dat && datFileName == ft2Dat))
 						FullTiltMode = true;
 					if (datFileName == "DEMO.DAT")
 						FullTiltDemoMode = FullTiltMode = true;

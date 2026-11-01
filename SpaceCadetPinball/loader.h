@@ -111,5 +111,5 @@ private:
 	static DatFile* sound_record_table;
 	static int sound_count;
 	static int loader_sound_count;
-	static soundListStruct sound_list[65];
+	static soundListStruct sound_list[256];
 };
