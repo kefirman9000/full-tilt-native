@@ -300,3 +300,8 @@ _deps
 build.ninja
 # Build directory
 /build
+
+# Build output
+bn/
+bin/
+*.DAT
