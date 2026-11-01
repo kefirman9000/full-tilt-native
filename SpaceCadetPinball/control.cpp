@@ -847,7 +847,7 @@ void control::make_links(TPinballTable* table)
 {
 	TableG = table;
 	// FT2 sandbox: Space Cadet's rules are hard-coded to Cadet's components, so link nothing
-	if (getenv("FT2_DAT"))
+	if (pb::FT2Table)
 		return;
 
 	for (auto& score_component : score_components)
@@ -894,7 +894,7 @@ TPinballComponent* control::make_component_link(component_tag_base& tag)
 
 void control::handler(MessageCode code, TPinballComponent* cmp)
 {
-	if (getenv("FT2_DAT"))
+	if (pb::FT2Table)
 		return;
 	component_control* control = cmp->Control;
 	
@@ -2906,7 +2906,7 @@ void control::BallDrainControl(MessageCode code, TPinballComponent* caller)
 
 void control::table_control_handler(MessageCode code)
 {
-	if (getenv("FT2_DAT"))
+	if (pb::FT2Table)
 		return;
 	if (code == MessageCode::SetTiltLock)
 	{

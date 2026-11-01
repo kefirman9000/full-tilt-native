@@ -51,6 +51,8 @@ public:
 	static DatFile* record_table;
 	static TPinballTable* MainTable;
 	static bool FullTiltMode, FullTiltDemoMode;
+	// Full Tilt! 2 table (ALIEN/HERO/MAD.DAT) loaded on the Full Tilt engine
+	static bool FT2Table;
 	static std::string DatFileName, BasePath;
 	static ImU32 TextBoxColor;
 	static int quickFlag;

@@ -35,6 +35,7 @@ GameModes pb::game_mode = GameModes::GameOver;
 float pb::time_now = 0, pb::time_next = 0, pb::time_ticks_remainder = 0;
 float pb::BallMaxSpeed, pb::BallHalfRadius, pb::BallToBallCollisionDistance;
 float pb::IdleTimerMs = 0;
+bool pb::FT2Table = false;
 bool pb::FullTiltMode = false, pb::FullTiltDemoMode = false, pb::cheat_mode = false, pb::demo_mode = false, pb::CreditsActive = false;
 std::string pb::DatFileName, pb::BasePath;
 ImU32 pb::TextBoxColor;
@@ -144,7 +145,8 @@ void pb::SelectDatFile(const std::vector<const char*>& dataSearchPaths)
 	};
 	// Experimental: FT2_DAT=ALIEN.DAT (or HERO.DAT / MAD.DAT) loads a Full Tilt! 2 table in Full Tilt mode
 	const char* ft2Dat = getenv("FT2_DAT");
-	if (ft2Dat && *ft2Dat)
+	FT2Table = ft2Dat && *ft2Dat;
+	if (FT2Table)
 	{
 		datFileNames[0] = ft2Dat;
 		// FT2 table backgrounds fill the whole screen (640x480 / 800x600 / 1024x768)
@@ -782,6 +784,9 @@ std::string pb::make_path_name(const std::string& fileName)
 void pb::ShowMessageBox(Uint32 flags, LPCSTR title, LPCSTR message)
 {
 	fprintf(flags == SDL_MESSAGEBOX_ERROR ? stderr : stdout, "BL error: %s\n%s\n", title, message);
+	// FT2 tables: warnings (missing optional components) are logged, not shown
+	if (FT2Table && flags != SDL_MESSAGEBOX_ERROR)
+		return;
 	SDL_ShowSimpleMessageBox(flags, title, message, winmain::MainWindow);
 }
 

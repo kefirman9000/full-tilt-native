@@ -25,7 +25,7 @@ scoreStruct* score::create(LPCSTR fieldName, gdrv_bitmap8* renderBgBmp)
 	score->BackgroundBmp = renderBgBmp;
 
 	// Experimental: FT2 tables name these records differently (score_box, ballcount_box, player_box)
-	if (getenv("FT2_DAT"))
+	if (pb::FT2Table)
 	{
 		if (!strcmp(fieldName, "score1")) fieldName = "score_box";
 		else if (!strcmp(fieldName, "ballcount1")) fieldName = "ballcount_box";

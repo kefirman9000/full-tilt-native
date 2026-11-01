@@ -242,7 +242,7 @@ float* loader::query_float_attribute(int groupIndex, int groupIndexOffset, int f
 {
 	if (groupIndex < 0)
 	{
-		if (getenv("FT2_DAT")) { fprintf(stderr, "FT2: query attr %d with groupIndex %d\n", firstValue, groupIndex); return nullptr; }
+		if (pb::FT2Table) { fprintf(stderr, "FT2: query attr %d with groupIndex %d\n", firstValue, groupIndex); return nullptr; }
 		error(0, 22);
 		return nullptr;
 	}
@@ -250,7 +250,7 @@ float* loader::query_float_attribute(int groupIndex, int groupIndexOffset, int f
 	int stateId = state_id(groupIndex, groupIndexOffset);
 	if (stateId < 0)
 	{
-		if (getenv("FT2_DAT")) { fprintf(stderr, "FT2: query attr %d group %d: no state id\n", firstValue, groupIndex); return nullptr; }
+		if (pb::FT2Table) { fprintf(stderr, "FT2: query attr %d group %d: no state id\n", firstValue, groupIndex); return nullptr; }
 		error(16, 22);
 		return nullptr;
 	}
@@ -265,9 +265,8 @@ float* loader::query_float_attribute(int groupIndex, int groupIndexOffset, int f
 			return floatArr + 1;
 	}
 
-	if (getenv("FT2_DAT"))
+	if (pb::FT2Table)
 	{
-		fprintf(stderr,"FT2: group %d (+%d) has no float attribute %d\n", groupIndex, groupIndexOffset, firstValue);
 		return nullptr;
 	}
 	error(13, 22);
@@ -419,7 +418,7 @@ int loader::kicker(int groupIndex, visualKickerStruct* kicker)
 			index += 9;
 			break;
 		default:
-			if (getenv("FT2_DAT"))
+			if (pb::FT2Table)
 				printf("FT2: kicker group %d unknown attribute %d\n", groupIndex, floorVal);
 			return error(10, 20);
 		}
