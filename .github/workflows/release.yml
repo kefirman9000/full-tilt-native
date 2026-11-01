@@ -1,0 +1,62 @@
+name: Full Tilt Native release
+
+# Push a tag like v0.1.0 to build the Windows release on GitHub (MSVC, x64) and publish it.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get SDL2 and SDL2_mixer (Visual C++ development packages)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path Libs | Out-Null
+          Invoke-WebRequest https://github.com/libsdl-org/SDL/releases/download/release-2.30.9/SDL2-devel-2.30.9-VC.zip -OutFile sdl2.zip
+          Invoke-WebRequest https://github.com/libsdl-org/SDL_mixer/releases/download/release-2.8.0/SDL2_mixer-devel-2.8.0-VC.zip -OutFile mixer.zip
+          Expand-Archive sdl2.zip -DestinationPath Libs
+          Expand-Archive mixer.zip -DestinationPath Libs
+          Rename-Item Libs/SDL2-2.30.9 SDL2
+          Rename-Item Libs/SDL2_mixer-2.8.0 SDL2_mixer
+
+      - name: Build
+        shell: pwsh
+        run: |
+          cmake -S . -B build -A x64 -DCMAKE_WIN32_EXECUTABLE:BOOL=1
+          cmake --build build --config Release
+
+      - name: Package
+        id: pkg
+        shell: pwsh
+        run: |
+          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { "dev-$($env:GITHUB_SHA.Substring(0,7))" }
+          $out = "FullTiltNative"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Copy-Item bin/Release/FullTiltPinball.exe, bin/Release/FullTiltEngine.exe, bin/Release/SDL2.dll, bin/Release/SDL2_mixer.dll $out
+          Copy-Item dist/README.txt $out
+          Copy-Item dist/tables $out -Recurse
+          $zip = "FullTiltNative-$version-windows-x64.zip"
+          Compress-Archive -Path $out -DestinationPath $zip -Force
+          "zip=$zip" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FullTiltNative-windows-x64
+          path: ${{ steps.pkg.outputs.zip }}
+
+      - name: Publish release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.pkg.outputs.version }}" "${{ steps.pkg.outputs.zip }}" --title "Full Tilt Native ${{ steps.pkg.outputs.version }}" --notes-file dist/RELEASE_NOTES.md
