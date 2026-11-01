@@ -7,9 +7,8 @@
 **Game data is not included.** Copy your original game folders into `Put game files here` and start `FullTiltPinball.exe`: tables are found and sorted automatically.
 
 **New in this version**
-- Built-in updater: the launcher checks GitHub for a newer release and updates itself when you click *Update now*
-- Logs: `FullTiltPinball.log` and `FullTiltEngine.log` in the main folder record errors and crashes
-- "Put game files here" folder: drop your original game folders in and tables are sorted automatically
+- Starting FullTiltEngine.exe by itself now opens the table library (FullTiltPinball.exe) instead of a "missing .dat" error
+- Built-in updater, log files (FullTiltPinball.log / FullTiltEngine.log) and the "Put game files here" folder from v0.2.0
 
 **Status**
 - Alien Daze, Mad Scientist: playable with simple placeholder rules (points, 3 balls, game over)

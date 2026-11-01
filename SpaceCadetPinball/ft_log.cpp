@@ -125,4 +125,51 @@ namespace ftlog
 #endif
 		atexit(OnExit);
 	}
+
+	static bool FileExists(const std::string& path)
+	{
+		if (auto file = fopen(path.c_str(), "rb"))
+		{
+			fclose(file);
+			return true;
+		}
+		return false;
+	}
+
+	bool StartLauncherInstead(const char* commandLine)
+	{
+		std::string args = commandLine ? commandLine : "";
+		if (args.find("--table") != std::string::npos)
+			return false;
+		char* base = SDL_GetBasePath();
+		std::string dir = base ? base : "";
+		SDL_free(base);
+		for (auto dat : {"CADET.DAT", "cadet.dat", "PINBALL.DAT", "pinball.dat", "DEMO.DAT", "demo.dat"})
+			if (FileExists(dat) || FileExists(dir + dat))
+				return false;
+#ifdef _WIN32
+		std::string launcher = dir + "FullTiltPinball.exe";
+		if (!FileExists(launcher))
+			return false;
+		int size = MultiByteToWideChar(CP_UTF8, 0, launcher.c_str(), -1, nullptr, 0);
+		std::wstring wide(size, L'\0');
+		MultiByteToWideChar(CP_UTF8, 0, launcher.c_str(), -1, &wide[0], size);
+		wide.resize(size ? size - 1 : 0);
+		std::wstring cmd = L"\"" + wide + L"\"";
+		int dsize = MultiByteToWideChar(CP_UTF8, 0, dir.c_str(), -1, nullptr, 0);
+		std::wstring wdir(dsize, L'\0');
+		MultiByteToWideChar(CP_UTF8, 0, dir.c_str(), -1, &wdir[0], dsize);
+		STARTUPINFOW si{};
+		si.cb = sizeof si;
+		PROCESS_INFORMATION pi{};
+		if (!CreateProcessW(nullptr, &cmd[0], nullptr, nullptr, FALSE, 0, nullptr, wdir.c_str(), &si, &pi))
+			return false;
+		CloseHandle(pi.hThread);
+		CloseHandle(pi.hProcess);
+		Line("No table given: opened the table library (FullTiltPinball.exe) instead");
+		return true;
+#else
+		return false;
+#endif
+	}
 }

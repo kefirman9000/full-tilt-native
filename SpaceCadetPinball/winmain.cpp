@@ -69,6 +69,8 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 	}
 
 	ftlog::Init("FullTiltEngine.log", "Full Tilt Native engine");
+	if (ftlog::StartLauncherInstead(lpCmdLine))
+		return 0;
 	std::set_new_handler(memalloc_failure);
 
 	printf("Game version: %s\n", Version);
@@ -242,7 +244,8 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 
 		if (pb::init())
 		{
-			std::string message = "The .dat file is missing.\n"
+			std::string message = "The table's .dat file is missing.\n"
+				"Start FullTiltPinball.exe (the table library) and add your game files with its \"Put game files here\" folder.\n\n"
 				"Make sure that the game data is present in any of the following locations:\n";
 			for (auto path : searchPaths)
 			{
