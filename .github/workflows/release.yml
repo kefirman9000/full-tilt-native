@@ -5,6 +5,10 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish, e.g. v0.1.0 (leave empty for a test build without a release)'
+        required: false
 
 permissions:
   contents: write
@@ -37,7 +41,7 @@ jobs:
         id: pkg
         shell: pwsh
         run: |
-          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { "dev-$($env:GITHUB_SHA.Substring(0,7))" }
+          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } elseif ("${{ inputs.version }}") { "${{ inputs.version }}" } else { "dev-$($env:GITHUB_SHA.Substring(0,7))" }
           $out = "FullTiltNative"
           New-Item -ItemType Directory -Force -Path $out | Out-Null
           Copy-Item bin/Release/FullTiltPinball.exe, bin/Release/FullTiltEngine.exe, bin/Release/SDL2.dll, bin/Release/SDL2_mixer.dll $out
@@ -54,9 +58,9 @@ jobs:
           path: ${{ steps.pkg.outputs.zip }}
 
       - name: Publish release
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' || inputs.version != ''
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ steps.pkg.outputs.version }}" "${{ steps.pkg.outputs.zip }}" --title "Full Tilt Native ${{ steps.pkg.outputs.version }}" --notes-file dist/RELEASE_NOTES.md
+          gh release create "${{ steps.pkg.outputs.version }}" "${{ steps.pkg.outputs.zip }}" --title "Full Tilt Native ${{ steps.pkg.outputs.version }}" --notes-file dist/RELEASE_NOTES.md --target "$env:GITHUB_SHA"
