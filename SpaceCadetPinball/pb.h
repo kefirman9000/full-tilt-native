@@ -55,6 +55,8 @@ public:
 	static bool FT2Table;
 	// FT2 table drawn full screen (ALIEN/HERO/MAD); FT1 extra tables (PIRATES/DRAGON) use the Space Cadet layout
 	static bool FT2FullScreen;
+	// Table chosen with --table NAME.DAT (empty = default Space Cadet search)
+	static std::string TableFile;
 	static void DetectFT2Layout(const std::string& datFilePath);
 	static std::string DatFileName, BasePath;
 	static ImU32 TextBoxColor;

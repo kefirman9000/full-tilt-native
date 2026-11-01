@@ -64,7 +64,7 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 			auto name = args.substr(pos + 8);
 			name = name.substr(0, name.find(' '));
 			if (!name.empty())
-				SDL_setenv("FT2_DAT", name.c_str(), 1);
+				pb::TableFile = name; // not an environment variable: on Windows SDL_setenv is invisible to getenv
 		}
 	}
 

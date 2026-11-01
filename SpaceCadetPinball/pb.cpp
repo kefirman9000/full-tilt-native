@@ -38,6 +38,7 @@ float pb::BallMaxSpeed, pb::BallHalfRadius, pb::BallToBallCollisionDistance;
 float pb::IdleTimerMs = 0;
 bool pb::FT2Table = false;
 bool pb::FT2FullScreen = false;
+std::string pb::TableFile;
 bool pb::FullTiltMode = false, pb::FullTiltDemoMode = false, pb::cheat_mode = false, pb::demo_mode = false, pb::CreditsActive = false;
 std::string pb::DatFileName, pb::BasePath;
 ImU32 pb::TextBoxColor;
@@ -169,7 +170,8 @@ void pb::SelectDatFile(const std::vector<const char*>& dataSearchPaths)
 	};
 	// Experimental: FT2_DAT=ALIEN.DAT (HERO/MAD, or Full Tilt 1's PIRATES/DRAGON) loads another table in Full Tilt
 	// mode, with generic rules (ft2_control) instead of Space Cadet's
-	const char* ft2Dat = getenv("FT2_DAT");
+	// Table from --table (set by winmain); FT2_DAT environment variable still works for development
+	const char* ft2Dat = !TableFile.empty() ? TableFile.c_str() : getenv("FT2_DAT");
 	FT2Table = ft2Dat && *ft2Dat;
 	FT2FullScreen = false;
 	if (FT2Table)
