@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "winmain.h"
+#include "ft_log.h"
 
 #include "control.h"
 #include "EmbeddedData.h"
@@ -67,6 +68,7 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 		}
 	}
 
+	ftlog::Init("FullTiltEngine.log", "Full Tilt Native engine");
 	std::set_new_handler(memalloc_failure);
 
 	printf("Game version: %s\n", Version);

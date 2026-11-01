@@ -9,7 +9,7 @@
 - [ ] Dragon's Keep: ball not launching yet; Skulduggery: hangs on load (no plunger, unknown object types 1034-1038, 1042)
 - [ ] Unknown FT engine object types: 1034-1038, 1042-1045 (skipped today)
 - [ ] Table picker in the game (menu), instead of launch scripts
-- [ ] GitHub Actions: build Windows release with MSVC on every tag; in-app updater (asks before updating)
+- [x] GitHub Actions release build (MSVC) + in-app updater (asks before updating) + log files
 
 ## Next
 - [ ] Optional **Full Tilt 1-style side panel** for FT2 tables (score, ball, player, messages beside the table).

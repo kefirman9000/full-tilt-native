@@ -34,7 +34,8 @@ jobs:
       - name: Build
         shell: pwsh
         run: |
-          cmake -S . -B build -A x64 -DCMAKE_WIN32_EXECUTABLE:BOOL=1
+          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } elseif ("${{ inputs.version }}") { "${{ inputs.version }}" } else { "dev" }
+          cmake -S . -B build -A x64 -DCMAKE_WIN32_EXECUTABLE:BOOL=1 "-DFTN_VERSION=$version"
           cmake --build build --config Release
 
       - name: Package

@@ -7,6 +7,8 @@
 #include "imgui.h"
 #include "imgui_impl_sdl.h"
 #include "imgui_impl_sdlrenderer.h"
+#include "updater.h"
+#include "../SpaceCadetPinball/ft_log.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -205,8 +207,7 @@ static void OpenFolder(const fs::path& folder)
 
 static std::string Launch(const fs::path& exe, const Table& t)
 {
-	printf("Launching %s in %s: %s %s\n", t.Name.c_str(), t.Folder.string().c_str(), exe.string().c_str(), t.Args.c_str());
-	fflush(stdout);
+	ftlog::Line("Launching " + t.Name + " in " + t.Folder.string() + ": " + exe.string() + " " + t.Args);
 	if (!fs::exists(exe))
 		return "Game program not found: " + exe.string();
 	if (!t.DataFound)
@@ -243,11 +244,17 @@ static std::string Launch(const fs::path& exe, const Table& t)
 
 int main(int, char**)
 {
+	ftlog::Init("FullTiltPinball.log", (std::string("Full Tilt Native launcher ") + updater::CurrentVersion).c_str());
 	if (SDL_Init(SDL_INIT_VIDEO) != 0)
+	{
+		ftlog::Line(std::string("Could not start SDL: ") + SDL_GetError());
 		return 1;
+	}
 	char* base = SDL_GetBasePath();
 	fs::path basePath = base ? base : "./";
 	SDL_free(base);
+	updater::CleanupOldFiles(basePath);
+	updater::CheckAsync();
 #ifdef _WIN32
 	fs::path gameExe = basePath / "FullTiltEngine.exe";
 #else
@@ -297,6 +304,10 @@ int main(int, char**)
 		int count = ImportGameFiles(dropDir, tablesDir, found);
 		importReport = count ? "Added: " + found : "";
 		loadTables();
+		ftlog::Line("Tables: " + std::to_string(tables.size()) + (count ? ", imported " + found : ""));
+		for (auto& t : tables)
+			if (!t.DataFound)
+				ftlog::Line("Table " + t.Name + " is missing " + t.Data);
 	};
 	scan();
 
@@ -342,6 +353,34 @@ int main(int, char**)
 		ImGui::SetWindowFontScale(1.0f);
 		ImGui::TextDisabled("Table library  -  click a table or use the arrow keys and Enter.  Esc quits.");
 		ImGui::Spacing();
+		{
+			static bool dismissed = false;
+			auto update = updater::Get();
+			if (update.state == updater::State::Available && !dismissed)
+			{
+				ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.16f, 0.24f, 0.36f, 1));
+				ImGui::BeginChild("update", {0, ImGui::GetTextLineHeightWithSpacing() * 2.6f}, true);
+				ImGui::TextColored({1.0f, 0.82f, 0.3f, 1}, "Update available: %s (you have %s)", update.latestVersion.c_str(),
+				                   updater::CurrentVersion);
+				ImGui::SameLine();
+				if (ImGui::Button("Update now"))
+					updater::InstallAsync(basePath);
+				ImGui::SameLine();
+				if (ImGui::Button("Later"))
+					dismissed = true;
+				ImGui::EndChild();
+				ImGui::PopStyleColor();
+			}
+			else if (update.state == updater::State::Downloading || update.state == updater::State::Installing)
+				ImGui::TextColored({1.0f, 0.82f, 0.3f, 1}, "Updating: %s", update.message.c_str());
+			else if (update.state == updater::State::Done)
+			{
+				if (updater::Restart(basePath))
+					running = false;
+				else
+					ImGui::TextColored({0.55f, 0.85f, 0.55f, 1}, "Updated. Please start FullTiltPinball.exe again.");
+			}
+		}
 		if (ImGui::Button("Open \"Put game files here\" folder"))
 			OpenFolder(dropDir);
 		ImGui::SameLine();
@@ -392,6 +431,8 @@ int main(int, char**)
 			if (clicked)
 			{
 				message = Launch(gameExe, t);
+				if (!message.empty())
+					ftlog::Line("Launch failed: " + message);
 				if (message.empty())
 					SDL_MinimizeWindow(window);
 			}
@@ -412,6 +453,24 @@ int main(int, char**)
 		ImGui::Spacing();
 		ImGui::Separator();
 		ImGui::TextDisabled("In a table: F2 new game, Space plunger, Z / slash flippers, X . Up nudge, F3 pause, F4 fullscreen.");
+		{
+			auto update = updater::Get();
+			ImGui::TextDisabled("Version %s", updater::CurrentVersion);
+			ImGui::SameLine();
+			if (update.state != updater::State::Checking && update.state != updater::State::Downloading &&
+				update.state != updater::State::Installing && ImGui::SmallButton("Check for updates"))
+				updater::CheckAsync();
+			if (!update.message.empty() && update.state != updater::State::Available)
+			{
+				ImGui::SameLine();
+				if (update.state == updater::State::Failed)
+					ImGui::TextColored({1, 0.45f, 0.4f, 1}, "%s", update.message.c_str());
+				else
+					ImGui::TextDisabled("%s", update.message.c_str());
+			}
+			ImGui::SameLine();
+			ImGui::TextDisabled("| Problems? Send FullTiltPinball.log / FullTiltEngine.log from this folder.");
+		}
 		ImGui::End();
 
 		ImGui::Render();

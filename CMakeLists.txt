@@ -47,6 +47,8 @@ set(SOURCE_FILES
         SpaceCadetPinball/control.cpp
         SpaceCadetPinball/control.h
         SpaceCadetPinball/ft2_control.cpp
+        SpaceCadetPinball/ft_log.cpp
+        SpaceCadetPinball/ft_log.h
         SpaceCadetPinball/ft2_control.h
         SpaceCadetPinball/EmbeddedData.cpp
         SpaceCadetPinball/EmbeddedData.h
@@ -226,6 +228,8 @@ set_target_properties(SpaceCadetPinball PROPERTIES OUTPUT_NAME FullTiltEngine)
 # Table library launcher (shows every table under tables/ and starts the game for it)
 add_executable(FullTiltLauncher
         launcher/launcher.cpp
+        launcher/updater.cpp
+        SpaceCadetPinball/ft_log.cpp
         SpaceCadetPinball/imgui.cpp
         SpaceCadetPinball/imgui_draw.cpp
         SpaceCadetPinball/imgui_tables.cpp
@@ -235,8 +239,11 @@ add_executable(FullTiltLauncher
 set_target_properties(FullTiltLauncher PROPERTIES CXX_STANDARD 17 OUTPUT_NAME FullTiltPinball)
 target_include_directories(FullTiltLauncher PRIVATE SpaceCadetPinball)
 target_link_libraries(FullTiltLauncher ${SDL2_LIBRARY})
+set(FTN_VERSION "dev" CACHE STRING "Full Tilt Native version shown in the launcher and used by the updater")
+target_compile_definitions(FullTiltLauncher PRIVATE FTN_VERSION="${FTN_VERSION}")
 if(WIN32)
     set_target_properties(FullTiltLauncher PROPERTIES WIN32_EXECUTABLE TRUE)
+    target_link_libraries(FullTiltLauncher winhttp)
 endif()
 
 # On Windows, copy DLL to output
