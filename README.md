@@ -1,6 +1,8 @@
-# Full Tilt! 2 Pinball — native port (work in progress)
+# Full Tilt Native
 
-Goal: run the three **Full Tilt! 2 Pinball** tables (Alien, Hero, Mad) as one modern, native program,
+Full Tilt! Pinball (Full Tilt 1 and 2) tables running natively on modern Windows: one launcher, one engine, no original exes.
+
+Goal: run the **Full Tilt! 2 Pinball** tables (Alien Daze, Captain Hero, Mad Scientist) and Full Tilt 1's tables as one modern, native program,
 built from readable source. No original table `.exe` is run or patched; the game reads only the
 table data files (`ALIEN.DAT`, `HERO.DAT`, `MAD.DAT`).
 
@@ -18,7 +20,10 @@ k4zmu2a and contributors (full history kept; their original README is in `README
 3. Rebuild each table's real rules from the original exes, one table at a time (Alien first).
 
 ## Running
-Put the table's `.DAT` in the working folder and run `SpaceCadetPinball --table ALIEN.DAT`
+Easiest: download the latest release, then copy each table's `.DAT` and sound folder from your own copy of the games into
+`tables/<Table>/` (see the release README) and start `FullTiltPinball.exe` (the table library launcher).
+
+By hand: put the table's `.DAT` in the working folder and run `FullTiltEngine --table ALIEN.DAT`
 (or HERO.DAT, MAD.DAT, Full Tilt 1's DRAGON.DAT / PIRATES.DAT). Without `--table`, CADET.DAT plays Space Cadet with
 its full original rules. Game data is not included; you need your own copy of the games.
 

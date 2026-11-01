@@ -219,6 +219,8 @@ if(${CMAKE_VERSION} VERSION_GREATER "3.16.0" OR ${CMAKE_VERSION} VERSION_EQUAL "
 endif()
 
 target_link_libraries(SpaceCadetPinball ${SDL2_LIBRARY} ${SDL2_MIXER_LIBRARY})
+# Full Tilt Native: the game engine program
+set_target_properties(SpaceCadetPinball PROPERTIES OUTPUT_NAME FullTiltEngine)
 
 
 # Table library launcher (shows every table under tables/ and starts the game for it)
@@ -230,7 +232,7 @@ add_executable(FullTiltLauncher
         SpaceCadetPinball/imgui_widgets.cpp
         SpaceCadetPinball/imgui_impl_sdl.cpp
         SpaceCadetPinball/imgui_impl_sdlrenderer.cpp)
-set_target_properties(FullTiltLauncher PROPERTIES CXX_STANDARD 17)
+set_target_properties(FullTiltLauncher PROPERTIES CXX_STANDARD 17 OUTPUT_NAME FullTiltPinball)
 target_include_directories(FullTiltLauncher PRIVATE SpaceCadetPinball)
 target_link_libraries(FullTiltLauncher ${SDL2_LIBRARY})
 if(WIN32)
