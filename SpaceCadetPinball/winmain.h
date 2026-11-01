@@ -59,6 +59,36 @@ struct WelfordState
 	}
 };
 
+// Turns real elapsed time into fixed-size simulation steps. What is left over after the steps, as a fraction of
+// a step, says how far the picture should move on from the latest step (frame interpolation).
+struct FixedStepAccumulator
+{
+	// Elapsed time (ms) not simulated yet. Below one step after Advance().
+	double Pending = 0;
+
+	void Reset() { Pending = 0; }
+
+	// Adds elapsed time, at most maxElapsedMs so that a stall cannot cause a burst of updates,
+	// and returns how many steps of stepMs to simulate now.
+	int Advance(double elapsedMs, double stepMs, double maxElapsedMs)
+	{
+		Pending += std::min(elapsedMs, maxElapsedMs);
+		int steps = 0;
+		while (Pending >= stepMs)
+		{
+			Pending -= stepMs;
+			steps++;
+		}
+		return steps;
+	}
+
+	// Progress from the latest step towards the next one, 0..1.
+	float Alpha(double stepMs) const
+	{
+		return static_cast<float>(std::min(std::max(Pending / stepMs, 0.0), 1.0));
+	}
+};
+
 class winmain
 {
 	using Clock = SdlPerformanceClock; // Or std::chrono::steady_clock.
@@ -108,6 +138,8 @@ private:
 	static float gfrWindow;
 	static int CursorIdleCounter;
 
+	// True when frames are presented between fixed physics updates: interpolation is on and FPS is above UPS.
+	static bool UseFrameInterpolation();
 	static void RenderUi();
 	static void RenderFrameTimeDialog();
 	static void HybridSleep(DurationMs seconds);

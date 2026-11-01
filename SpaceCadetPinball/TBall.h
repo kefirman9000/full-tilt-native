@@ -23,6 +23,9 @@ public :
 
 	vector3 Position{};
 	vector3 PrevPosition{};
+	// Position at the start of the latest physics update, used to blend the ball sprite between updates.
+	vector3 RenderPrevPosition{};
+	bool RenderPrevValid{};
 	vector3 Direction{};
 	float Speed;
 	float RayMaxDistance;

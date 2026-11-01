@@ -36,6 +36,7 @@ GameModes pb::game_mode = GameModes::GameOver;
 float pb::time_now = 0, pb::time_next = 0, pb::time_ticks_remainder = 0;
 float pb::BallMaxSpeed, pb::BallHalfRadius, pb::BallToBallCollisionDistance;
 float pb::IdleTimerMs = 0;
+float pb::LastUpdateSec = 0;
 bool pb::FT2Table = false;
 bool pb::FT2FullScreen = false;
 std::string pb::TableFile;
@@ -318,7 +319,7 @@ void pb::ballset(float dx, float dy)
 	}
 }
 
-void pb::frame(float dtMilliSec)
+void pb::frame(float dtMilliSec, bool composite)
 {
 	if (dtMilliSec > 100)
 		dtMilliSec = 100;
@@ -335,6 +336,14 @@ void pb::frame(float dtMilliSec)
 	}
 
 	float dtSec = dtMilliSec * 0.001f;
+	LastUpdateSec = dtSec;
+	// Remember where the balls were, so render_frame can draw them between this update and the one before it.
+	for (auto ball : MainTable->BallList)
+	{
+		ball->RenderPrevPosition = ball->Position;
+		ball->RenderPrevValid = ball->ActiveFlag;
+	}
+
 	time_next = time_now + dtSec;
 	timed_frame(dtSec);
 	time_now = time_next;
@@ -356,8 +365,11 @@ void pb::frame(float dtMilliSec)
 		nudge::nudge_count = nudgeDec;
 	}
 	timer::check();
-	render::update();
-	score::update(MainTable->CurScoreStruct);
+	if (composite)
+	{
+		render::update();
+		score::update(MainTable->CurScoreStruct);
+	}
 	if (!MainTable->TiltLockFlag)
 	{
 		if (nudge::nudge_count > 0.5f)
@@ -367,6 +379,40 @@ void pb::frame(float dtMilliSec)
 		if (nudge::nudge_count > 1.0f)
 			MainTable->tilt(time_now);
 	}
+}
+
+void pb::render_frame(float alpha)
+{
+	if (!MainTable)
+		return;
+
+	alpha = std::min(std::max(alpha, 0.0f), 1.0f);
+	// A ball never legitimately travels farther than this in one update. Larger steps are teleports
+	// (launch, kickout, drain...) and are drawn at the new position instead of being blended across the table.
+	const auto maxStep = BallMaxSpeed * LastUpdateSec * 1.5f;
+	const auto maxStepSq = maxStep * maxStep;
+
+	for (auto ball : MainTable->BallList)
+	{
+		if (!ball->ActiveFlag)
+			continue;
+
+		// Repaint() reads Position (and may write Position.Z), so draw from the blended position and put the real one back.
+		const auto current = ball->Position;
+		const auto prev = ball->RenderPrevPosition;
+		const auto dx = current.X - prev.X, dy = current.Y - prev.Y;
+		if (ball->RenderPrevValid && alpha < 1.0f && dx * dx + dy * dy <= maxStepSq)
+		{
+			ball->Position.X = prev.X + dx * alpha;
+			ball->Position.Y = prev.Y + dy * alpha;
+			ball->Position.Z = prev.Z + (current.Z - prev.Z) * alpha;
+		}
+		ball->Repaint();
+		ball->Position = current;
+	}
+
+	render::update();
+	score::update(MainTable->CurScoreStruct);
 }
 
 void pb::timed_frame(float timeDelta)

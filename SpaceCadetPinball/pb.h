@@ -72,7 +72,12 @@ public:
 	static void toggle_demo();
 	static void replay_level(bool demoMode);
 	static void ballset(float dx, float dy);
-	static void frame(float dtMilliSec);
+	// Advances the game by dtMilliSec. With composite = false only the simulation runs: nothing is drawn, so
+	// render_frame() must be called before the screen is presented.
+	static void frame(float dtMilliSec, bool composite = true);
+	// Draws the table. alpha (0..1) places ball sprites between their positions before (0) and after (1)
+	// the latest simulation update, so frames can be presented between updates.
+	static void render_frame(float alpha);
 	static void timed_frame(float timeDelta);
 	static void pause_continue();
 	static void loose_focus();
@@ -91,5 +96,7 @@ public:
 private:
 	static bool demo_mode;
 	static float IdleTimerMs;
+	// Duration of the latest simulation update, in seconds. Bounds how far a ball may legitimately travel in one update.
+	static float LastUpdateSec;
 	static float BallToBallCollision(const ray_type& ray, const TBall& ball, TEdgeSegment** edge, float collisionDistance);
 };

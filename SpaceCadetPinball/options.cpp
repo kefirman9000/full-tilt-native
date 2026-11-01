@@ -132,6 +132,7 @@ optionsStruct options::Options
 	{"Updates Per Second", DefUps},
 	{"ShowMenu", true},
 	{"Uncapped Updates Per Second", false},
+	{"Frame Interpolation", true},
 	{"Sound Channels", DefSoundChannels},
 	{"HybridSleep", false},
 	{"Prefer 3DPB Game Data", false},
@@ -516,7 +517,9 @@ void options::PostProcessOptions()
 	winmain::ImIO->FontGlobalScale = Options.UIScale;
 	Options.FramesPerSecond = Clamp(Options.FramesPerSecond.V, MinFps, MaxFps);
 	Options.UpdatesPerSecond = Clamp(Options.UpdatesPerSecond.V, MinUps, MaxUps);
-	Options.UpdatesPerSecond = std::max(Options.UpdatesPerSecond.V, Options.FramesPerSecond.V);
+	// Without interpolation every presented frame needs a physics update, so FPS cannot exceed UPS.
+	if (!Options.FrameInterpolation)
+		Options.FramesPerSecond = std::min(Options.FramesPerSecond.V, Options.UpdatesPerSecond.V);
 	Options.SoundChannels = Clamp(Options.SoundChannels.V, MinSoundChannels, MaxSoundChannels);
 	Options.SoundVolume = Clamp(Options.SoundVolume.V, MinVolume, MaxVolume);
 	Options.MusicVolume = Clamp(Options.MusicVolume.V, MinVolume, MaxVolume);

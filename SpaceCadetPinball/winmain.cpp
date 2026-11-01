@@ -361,6 +361,8 @@ void winmain::MainLoop()
 	double UpdateToFrameCounter = 0;
 	DurationMs sleepRemainder(0), frameDuration(TargetFrameTime);
 	auto prevTime = frameStart;
+	FixedStepAccumulator stepper;
+	bool wasInterpolating = false;
 
 	while (true)
 	{
@@ -412,10 +414,20 @@ void winmain::MainLoop()
 				last_mouse_x = x;
 				last_mouse_y = y;
 			}
-			if (!single_step && !no_time_loss)
+			// Frames are presented between fixed-length physics updates only when FPS is above UPS.
+			// Otherwise the original scheme applies: one update per loop pass, drawn every UPS/FPS updates.
+			const auto interpolating = UseFrameInterpolation();
+			if (interpolating != wasInterpolating)
 			{
-				auto dt = static_cast<float>(frameDuration.count());
-				pb::frame(dt);
+				wasInterpolating = interpolating;
+				stepper.Reset();
+				UpdateToFrameCounter = 0;
+			}
+
+			// With composite = false the update is not drawn; pb::render_frame draws it later.
+			auto runUpdate = [&](float dt, bool composite)
+			{
+				pb::frame(dt, composite);
 				if (DispGRhistory)
 				{
 					auto targetSize = static_cast<unsigned>(static_cast<float>(Options.UpdatesPerSecond) * gfrWindow);
@@ -428,10 +440,26 @@ void winmain::MainLoop()
 					gfrOffset = (gfrOffset + 1) % gfrDisplay.size();
 				}
 				updateCounter++;
+			};
+
+			if (!single_step && !no_time_loss)
+			{
+				if (interpolating)
+				{
+					const auto stepMs = TargetFrameTime.count();
+					// Catch up by at most 4 updates per frame, beyond that the game runs slower than real time.
+					const auto steps = stepper.Advance(frameDuration.count(), stepMs, 4 * stepMs);
+					for (auto i = 0; i < steps; i++)
+						runUpdate(static_cast<float>(stepMs), false);
+				}
+				else
+				{
+					runUpdate(static_cast<float>(frameDuration.count()), true);
+				}
 			}
 			no_time_loss = false;
 
-			if (UpdateToFrameCounter >= UpdateToFrameRatio)
+			if (interpolating || UpdateToFrameCounter >= UpdateToFrameRatio)
 			{
 				if (Options.HideCursor && CursorIdleCounter <= 0)
 					ImGui::SetMouseCursor(ImGuiMouseCursor_None);
@@ -439,6 +467,9 @@ void winmain::MainLoop()
 				ImGui_Render_NewFrame();
 				ImGui::NewFrame();
 				RenderUi();
+
+				if (interpolating)
+					pb::render_frame(stepper.Alpha(TargetFrameTime.count()));
 
 				SDL_RenderClear(Renderer);
 				// Alternative clear hack, clear might fail on some systems
@@ -451,7 +482,8 @@ void winmain::MainLoop()
 
 				SDL_RenderPresent(Renderer);
 				frameCounter++;
-				UpdateToFrameCounter -= UpdateToFrameRatio;
+				if (!interpolating)
+					UpdateToFrameCounter -= UpdateToFrameRatio;
 			}
 
 			auto sdlError = SDL_GetError();
@@ -479,8 +511,10 @@ void winmain::MainLoop()
 				}
 			}
 
+			// One loop pass takes one frame when interpolating, otherwise one update.
+			const auto passTime = interpolating ? DurationMs(1000.0 / Options.FramesPerSecond.V) : TargetFrameTime;
 			auto updateEnd = Clock::now();
-			auto targetTimeDelta = TargetFrameTime - DurationMs(updateEnd - frameStart) - sleepRemainder;
+			auto targetTimeDelta = passTime - DurationMs(updateEnd - frameStart) - sleepRemainder;
 
 			TimePoint frameEnd;
 			if (targetTimeDelta > DurationMs::zero() && !Options.UncappedUpdatesPerSecond)
@@ -496,12 +530,13 @@ void winmain::MainLoop()
 				frameEnd = updateEnd;
 			}
 
-			// Limit duration to 2 * target time
-			sleepRemainder = Clamp(DurationMs(frameEnd - updateEnd) - targetTimeDelta, -TargetFrameTime,
-			                       TargetFrameTime);
-			frameDuration = std::min<DurationMs>(DurationMs(frameEnd - frameStart), 2 * TargetFrameTime);
+			// Limit duration to 2 * target time (4 updates when interpolating, matching the catch-up limit)
+			sleepRemainder = Clamp(DurationMs(frameEnd - updateEnd) - targetTimeDelta, -passTime, passTime);
+			frameDuration = std::min<DurationMs>(DurationMs(frameEnd - frameStart),
+			                                     (interpolating ? 4 : 2) * TargetFrameTime);
 			frameStart = frameEnd;
-			UpdateToFrameCounter++;
+			if (!interpolating)
+				UpdateToFrameCounter++;
 
 			CursorIdleCounter = std::max(CursorIdleCounter - static_cast<int>(frameDuration.count()), 0);
 		}
@@ -688,19 +723,37 @@ void winmain::RenderUi()
 				                     ImGuiSliderFlags_AlwaysClamp))
 				{
 					changed = true;
-					Options.FramesPerSecond = std::min(Options.UpdatesPerSecond.V, Options.FramesPerSecond.V);
+					// With frame interpolation FPS may exceed UPS, otherwise it follows UPS down.
+					if (!Options.FrameInterpolation)
+						Options.FramesPerSecond = std::min(Options.UpdatesPerSecond.V, Options.FramesPerSecond.V);
 				}
 				if (ImGui::SliderInt("FPS", &Options.FramesPerSecond.V, options::MinFps, options::MaxFps, "%d",
 				                     ImGuiSliderFlags_AlwaysClamp))
 				{
 					changed = true;
-					Options.UpdatesPerSecond = std::max(Options.UpdatesPerSecond.V, Options.FramesPerSecond.V);
+					// Without frame interpolation UPS follows FPS up (UPS tops out below the FPS maximum).
+					if (!Options.FrameInterpolation)
+					{
+						Options.FramesPerSecond = std::min(Options.FramesPerSecond.V, options::MaxUps);
+						Options.UpdatesPerSecond = std::max(Options.UpdatesPerSecond.V, Options.FramesPerSecond.V);
+					}
 				}
 				snprintf(buffer, sizeof buffer - 1, "Uncapped UPS (FPS ratio %02.02f)", UpdateToFrameRatio);
 				if (ImGui::MenuItem(buffer, nullptr, Options.UncappedUpdatesPerSecond))
 				{
 					Options.UncappedUpdatesPerSecond ^= true;
 				}
+				if (ImGui::MenuItem("Frame Interpolation", nullptr, Options.FrameInterpolation))
+				{
+					Options.FrameInterpolation ^= true;
+					// Without frame interpolation FPS cannot exceed UPS.
+					if (!Options.FrameInterpolation)
+						Options.FramesPerSecond = std::min(Options.FramesPerSecond.V, Options.UpdatesPerSecond.V);
+					changed = true;
+				}
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("Draw frames between physics updates (smooths ball motion).\n"
+					                  "Active while FPS is above UPS.");
 				if (ImGui::MenuItem("Precise Sleep", nullptr, Options.HybridSleep))
 				{
 					Options.HybridSleep ^= true;
@@ -1401,10 +1454,16 @@ void winmain::Restart()
 
 void winmain::UpdateFrameRate()
 {
-	// UPS >= FPS
+	// UPS >= FPS, except with frame interpolation (the ratio is only used when FPS <= UPS)
 	auto fps = Options.FramesPerSecond.V, ups = Options.UpdatesPerSecond.V;
-	UpdateToFrameRatio = static_cast<double>(ups) / fps;
+	UpdateToFrameRatio = std::max(1.0, static_cast<double>(ups) / fps);
 	TargetFrameTime = DurationMs(1000.0 / ups);
+}
+
+bool winmain::UseFrameInterpolation()
+{
+	return Options.FrameInterpolation && !Options.UncappedUpdatesPerSecond &&
+		Options.FramesPerSecond.V > Options.UpdatesPerSecond.V;
 }
 
 void winmain::HandleGameBinding(GameBindings binding, bool shortcut)
