@@ -827,6 +827,23 @@ void winmain::RenderUi()
 					}
 					ImGui::EndMenu();
 				}
+				if (ImGui::BeginMenu("Table Rules"))
+				{
+					if (ImGui::MenuItem("Enhanced Rules", nullptr, Options.EnhancedRules))
+						Options.EnhancedRules ^= true;
+					ImGui::TextDisabled("Target banks reset, lane sets, end-of-ball bonus,");
+					ImGui::TextDisabled("bonus multiplier and an extra ball (tables without");
+					ImGui::TextDisabled("their original rules yet).");
+					ImGui::Separator();
+					ImGui::TextDisabled("Ball Save");
+					for (int secs : {0, 5, 8, 15})
+					{
+						auto label = secs ? std::to_string(secs) + " seconds after launch" : std::string("Off");
+						if (ImGui::MenuItem(label.c_str(), nullptr, Options.BallSave.V == secs))
+							Options.BallSave.V = secs;
+					}
+					ImGui::EndMenu();
+				}
 				if (ImGui::BeginMenu("Flipper Keys"))
 				{
 					if (ImGui::MenuItem("Both (Z and / plus Left/Right Shift)", nullptr, Options.FlipperKeys.V == 0))

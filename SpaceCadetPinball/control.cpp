@@ -2937,7 +2937,10 @@ void control::BallDrainControl(MessageCode code, TPinballComponent* caller)
 void control::table_control_handler(MessageCode code)
 {
 	if (pb::FT2Table)
+	{
+		ft2_control::table_handler(code);
 		return;
+	}
 	if (code == MessageCode::SetTiltLock)
 	{
 		table_unlimited_balls = false;

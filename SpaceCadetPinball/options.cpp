@@ -162,6 +162,8 @@ optionsStruct options::Options
 	{"Scanlines", false},
 	{"Smooth Flippers", true},
 	{"Side Score Panel", false},
+	{"Enhanced Rules", true},
+	{"Ball Save", 8},
 };
 
 void options::InitPrimary()

@@ -10,4 +10,6 @@ class ft2_control
 {
 public:
 	static void handler(MessageCode code, TPinballComponent* caller);
+	// Table-wide events (new game, game over, next player)
+	static void table_handler(MessageCode code);
 };
