@@ -305,3 +305,11 @@ build.ninja
 bn/
 bin/
 *.DAT
+
+# Epic Pinball: code generated from the user's own game files never goes into the repository
+epic/gen/
+epic/gen-local/
+epic/sdk/
+EpicPinball
+EpicPinball.exe
+EpicBuild.log

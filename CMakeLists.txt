@@ -272,6 +272,19 @@ if(WIN32)
     target_link_libraries(FullTiltUpdate winhttp)
 endif()
 
+# Epic Pinball (optional). It is recompiled from the user's own game files and never part of the repository or the
+# release (see epic/README.md): cmake -DEPIC_GAME_DIR=<folder with PINBALL.EXE and EP1-EP13> ...
+set(EPIC_GAME_DIR "" CACHE PATH "Your Epic Pinball folder; builds EpicPinball from it")
+if(EPIC_GAME_DIR)
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    add_custom_target(EpicPinball ALL
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_LIST_DIR}/epic/tools/build_epic.py
+                --game ${EPIC_GAME_DIR} --out ${CMAKE_CURRENT_LIST_DIR}/bin
+        WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+        COMMENT "Recompiling Epic Pinball from ${EPIC_GAME_DIR}"
+        VERBATIM)
+endif()
+
 # On Windows, copy DLL to output
 if(WIN32)
     list(GET SDL2_LIBRARY -1 SDL2_DLL_PATH)

@@ -47,6 +47,14 @@ jobs:
           New-Item -ItemType Directory -Force -Path $out | Out-Null
           Copy-Item bin/Release/FullTiltPinball.exe, bin/Release/FullTiltEngine.exe, bin/Release/FullTiltUpdate.exe, bin/Release/SDL2.dll, bin/Release/SDL2_mixer.dll $out
           Copy-Item dist/README.txt $out
+          # Epic Pinball build tools (no game code): the launcher's "Compile Epic Pinball tables" button runs them
+          New-Item -ItemType Directory -Force -Path "$out/epic/tools/seeds", "$out/epic/runtime", "$out/epic/sdk/lib/x64" | Out-Null
+          Copy-Item epic/README.md "$out/epic"
+          Copy-Item epic/tools/*.py "$out/epic/tools"
+          Copy-Item epic/tools/seeds/* "$out/epic/tools/seeds"
+          Copy-Item epic/runtime/* "$out/epic/runtime"
+          Copy-Item -Recurse Libs/SDL2/include "$out/epic/sdk/include"
+          Copy-Item Libs/SDL2/lib/x64/SDL2.lib, Libs/SDL2/lib/x64/SDL2.dll "$out/epic/sdk/lib/x64"
           New-Item -ItemType Directory -Force -Path "$out/Put game files here", "$out/tables" | Out-Null
           Copy-Item dist/DROP_README.txt "$out/Put game files here/README.txt"
           Set-Content "$out/tables/README.txt" "Tables are added here automatically from the 'Put game files here' folder. One folder per table."
