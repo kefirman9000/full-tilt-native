@@ -28,3 +28,13 @@
 - [ ] A **library of retro decompiled pinball games**: one launcher, many tables/games, each with its own data
       folder and rules module. Keep table-specific code isolated (per-table control files, per-table flags) so new
       games can be added without touching the others.
+
+## Status 2026-11-01 (v0.7.0)
+- [x] All six Full Tilt tables play (simple rules); Space Cadet full rules
+- [x] FT2 sound effects (Sound/high), table MIDI + Music folders for CD audio
+- [x] Graphics: animations (1044/1045), sharp scaling, backdrop, light fades, smooth flippers, scanlines, side score panel
+- [x] Launcher: library, Put game files here, high scores, updater (FullTiltUpdate.exe), one-window flow
+- [~] Alien Daze real rules: rule table found in Alien.exe (63 components: name, rule function, scores);
+      real point values in use (SpaceCadetPinball/ft2_scores.h). Next: port rule functions one by one
+      (decompiled C via Ghidra; source path in exe: alien_src\control.cpp). Hero/Mad keep scores inside rule functions.
+- [ ] Magnets (1042) and light sweeps (1038) need rules; Addiction Pinball needs its own engine
