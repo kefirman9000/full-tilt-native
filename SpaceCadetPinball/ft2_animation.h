@@ -21,6 +21,8 @@ public:
 	int Message(MessageCode code, float value) override;
 	void Start();
 	void Stop();
+	// Mad Scientist's plunger tube bubbles while the plunger is pulled back, not all the time
+	bool PlungerLinked = false;
 
 private:
 	void AddFrames(int groupIndex);

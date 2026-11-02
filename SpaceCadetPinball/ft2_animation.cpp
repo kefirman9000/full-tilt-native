@@ -35,6 +35,9 @@ TFT2Animation::TFT2Animation(TPinballTable* table, int groupIndex) : TPinballCom
 		FrameTime = frameTime[0];
 	auto autoStart = loader::query_float_attribute(groupIndex, 0, 905);
 	AutoStart = autoStart && autoStart[0] > 0.0f;
+	PlungerLinked = BaseName == "bubbling";
+	if (PlungerLinked)
+		AutoStart = false;
 
 	RenderSprite = new render_sprite(VisualTypes::Ball, nullptr, nullptr, X, Y, nullptr);
 	AddFrames(groupIndex);

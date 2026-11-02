@@ -6,7 +6,8 @@
 
 **Game data is not included.** Copy your original game folders into `Put game files here` and start `FullTiltPinball.exe`: tables are found and sorted automatically.
 
-**Fixes in 0.8.1**
+**Fixes in 0.8.1 / 0.8.2**
+- **Mad Scientist's plunger tube only bubbles while you pull the plunger back**, not all the time.
 - **Pockets spit the ball out properly** (Mad Scientist, and pockets on every table that had the same problem): many
   kickouts and sinks describe their eject as a line from the pocket to where the ball should go. That line was
   ignored, so the ball was thrown with no direction. It is now the throw direction.

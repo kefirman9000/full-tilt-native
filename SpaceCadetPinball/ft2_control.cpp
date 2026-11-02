@@ -2,6 +2,7 @@
 #include "ft2_control.h"
 #include "ft2_scores.h"
 #include "ft2_sounds.h"
+#include "ft2_animation.h"
 
 #include "pb.h"
 #include "loader.h"
@@ -431,6 +432,19 @@ void ft2_control::handler(MessageCode code, TPinballComponent* caller)
 		return;
 	}
 
+	if ((code == MessageCode::PlungerInputPressed || code == MessageCode::PlungerInputReleased) &&
+		dynamic_cast<TPlunger*>(caller))
+	{
+		for (auto component : t->ComponentList)
+			if (auto animation = dynamic_cast<TFT2Animation*>(component))
+				if (animation->PlungerLinked)
+				{
+					if (code == MessageCode::PlungerInputPressed)
+						animation->Start();
+					else
+						animation->Stop();
+				}
+	}
 	if (code == MessageCode::PlungerInputReleased && dynamic_cast<TPlunger*>(caller))
 	{
 		play_component_sound(caller);
