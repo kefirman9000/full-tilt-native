@@ -704,6 +704,24 @@ void winmain::RenderUi()
 				{
 					options::toggle(Menu1::WindowIntegerScale);
 				}
+				ImGui::Separator();
+				if (ImGui::MenuItem("Sharp Scaling (crisp on big screens)", nullptr, Options.SharpScaling))
+					Options.SharpScaling ^= true;
+				if (ImGui::MenuItem("Smooth Light Changes", nullptr, Options.SmoothLights))
+					Options.SmoothLights ^= true;
+				if (ImGui::MenuItem("Scanlines (CRT look)", nullptr, Options.Scanlines))
+					Options.Scanlines ^= true;
+				if (ImGui::BeginMenu("Backdrop"))
+				{
+					if (ImGui::MenuItem("Black", nullptr, Options.Backdrop.V == 0))
+						Options.Backdrop.V = 0;
+					if (ImGui::MenuItem("Ambient glow", nullptr, Options.Backdrop.V == 1))
+						Options.Backdrop.V = 1;
+					if (ImGui::MenuItem("Table art (preview.bmp)", nullptr, Options.Backdrop.V == 2))
+						Options.Backdrop.V = 2;
+					ImGui::EndMenu();
+				}
+				ImGui::Separator();
 				if (ImGui::DragFloat("UI Scale", &Options.UIScale.V, 0.005f, 0.8f, 5,
 				                     "%.2f", ImGuiSliderFlags_AlwaysClamp))
 				{

@@ -156,6 +156,10 @@ optionsStruct options::Options
 	{"Flipper Keys", 0},
 	{"Ball Style", ""},
 	{"Flipper Power", 100},
+	{"Smooth Light Changes", true},
+	{"Sharp Scaling", true},
+	{"Backdrop", 1},
+	{"Scanlines", false},
 };
 
 void options::InitPrimary()

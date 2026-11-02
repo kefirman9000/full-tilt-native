@@ -25,6 +25,12 @@ struct render_sprite
 	std::vector<render_sprite*>* OccludedSprites;
 	rectangle_type BoundingRect{};
 	bool DirtyFlag{};
+	// Smooth light changes: lights crossfade between their old and new look instead of snapping
+	bool AllowFade{};
+	bool FadePending{};
+	uint32_t FadeStart{};
+	rectangle_type FadeRect{};
+	std::vector<ColorRgba> FadeFrom;
 
 	render_sprite(VisualTypes visualType, gdrv_bitmap8* bmp, zmap_header_type* zMap,
 	              int xPosition, int yPosition, rectangle_type* boundingRect);
@@ -57,7 +63,7 @@ private:
 	static std::vector<render_sprite*> sprite_list, ball_list;
 	static int offset_x, offset_y;
 	static rectangle_type vscreen_rect;
-	static gdrv_bitmap8* ball_bitmap[20];
+	static gdrv_bitmap8* ball_bitmap[64];
 	static zmap_header_type* zscreen;
 
 	static void repaint(const render_sprite& sprite);

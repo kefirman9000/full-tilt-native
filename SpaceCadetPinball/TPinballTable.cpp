@@ -10,6 +10,7 @@
 #include "pb.h"
 #include "render.h"
 #include "TBall.h"
+#include "ft2_animation.h"
 #include "TBlocker.h"
 #include "TBumper.h"
 #include "TComponentGroup.h"
@@ -182,6 +183,14 @@ TPinballTable::TPinballTable(): TPinballComponent(nullptr, -1, false)
 			case 1033:
 				new TTextBox(this, groupIndex);
 				break;
+			case 1044:
+				if (pb::FT2Table)
+					new TFT2Animation(this, groupIndex);
+				break;
+			case 1045:
+				if (pb::FT2Table)
+					TFT2Animation::AddFrameObject(this, groupIndex);
+				break;
 			case 1034:
 				// Full Tilt launcher without a plunger picture (Skulduggery's cannon, s_launcher1): works as the plunger
 				if (pb::FT2Table && !Plunger)
@@ -220,10 +229,14 @@ TPinballTable::TPinballTable(): TPinballComponent(nullptr, -1, false)
 	if (pb::FT2Table)
 	{
 		// Place them in the table's own message areas (records: font, x, y, w, h, align; one per resolution)
-		auto makeBox = [this](const char* recordName)
+		auto makeBox = [this](std::initializer_list<const char*> recordNames)
 		{
+			// Tables name their message areas differently (Mad Scientist has no notify_box): first one found wins
 			auto box = new TTextBox(this, -1);
-			auto groupIndex = loader::query_handle(recordName);
+			int groupIndex = -1;
+			for (auto recordName : recordNames)
+				if ((groupIndex = loader::query_handle(recordName)) > 0)
+					break;
 			if (groupIndex > 0)
 			{
 				auto resGroup = groupIndex + fullscrn::GetResolution();
@@ -240,9 +253,9 @@ TPinballTable::TPinballTable(): TPinballComponent(nullptr, -1, false)
 			return box;
 		};
 		if (!pb::InfoTextBox)
-			pb::InfoTextBox = pb::FT2FullScreen ? makeBox("notify_box") : new TTextBox(this, -1);
+			pb::InfoTextBox = pb::FT2FullScreen ? makeBox({"notify_box", "time_box", "jackpot_box"}) : new TTextBox(this, -1);
 		if (!pb::MissTextBox)
-			pb::MissTextBox = pb::FT2FullScreen ? makeBox("mode_box") : pb::InfoTextBox;
+			pb::MissTextBox = pb::FT2FullScreen ? makeBox({"mode_box", "brain_box", "super_jackpot_box", "jackpot_box"}) : pb::InfoTextBox;
 	}
 	control::make_links(this);
 }

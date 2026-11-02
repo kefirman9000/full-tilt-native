@@ -6,16 +6,15 @@
 
 **Game data is not included.** Copy your original game folders into `Put game files here` and start `FullTiltPinball.exe`: tables are found and sorted automatically.
 
-**New in this version**
-- All six Full Tilt tables play: Captain Hero's shot now makes it up the downtown ramp, Skulduggery's cannon fires
-  (and no longer crashes on start), Dragon's Keep launches
-- Stronger flippers on Full Tilt 2 tables (they were about a third of Space Cadet's power balance) + **Options > Flipper Power**
-- Alien Daze: full launches can reach the top-left spiral (the hidden Bigfoot targets no longer block the lane)
-- Resting ball at the plunger no longer jitters; Full Tilt 1 tables use the real ball (smiley face is now a Ball option)
-- Smoother graphics: frame interpolation, up to 480 FPS (Options > Graphics)
-- **FullTiltUpdate.exe** in the folder: closes the game, updates, reopens the launcher (Update now uses it too)
-- Launcher fits on one screen, any number of tables
-- Addiction Pinball (Worms, World Rally Fever) is recognised in "Put game files here" and listed (not playable yet)
+**New in this version - graphics**
+- **Animations that never played before**: Mad Scientist's bubbling plunger tube (and the engine now supports the
+  animation types Alien Daze's beams/sockets and Mad's flasks/plasma/lightning use; those start with their table rules)
+- **Sharp Scaling** (on by default): crisp pixels on big screens without blocky edges
+- **Backdrop**: the bars beside the table get a soft ambient glow of the table, or the table's art (Options > Graphics > Backdrop)
+- **Smooth Light Changes**: lights crossfade instead of snapping on/off
+- **Scanlines**: optional CRT look
+- Mad Scientist's messages show in its own message area (they were squeezed into a one-letter column)
+- From v0.5.0: all six tables playable, stronger flippers, FullTiltUpdate.exe, frame interpolation up to 480 FPS
 
 **Status**
 - Alien Daze, Captain Hero, Mad Scientist, Dragon's Keep, Skulduggery: playable with simple placeholder rules
