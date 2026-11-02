@@ -6,14 +6,14 @@
 
 **Game data is not included.** Copy your original game folders into `Put game files here` and start `FullTiltPinball.exe`: tables are found and sorted automatically.
 
-**New: Epic Pinball (1993), native, whole table on screen**
+**New in 0.8.4: Epic Pinball (1993), native, whole table on screen**
 Copy your Epic Pinball folder into `Put game files here`, click **Scan for new game files**, then **Compile Epic
 Pinball tables** (bottom of the launcher; needs Python 3 and a C compiler, takes a few minutes). The original DOS
 programs are recompiled to C on your computer from your own copy, then all 13 tables run natively without DOSBox.
 The whole table fits on screen with no scrolling; **F11** switches to the original scrolling view. No DOS setup
 screens. Sound is not in yet. The game's code is never included in this download (see `epic/README.md`).
 
-**Launcher**: the "Put game files here" and "Scan for new game files" buttons moved to the bottom bar, next to the
+**Launcher (0.8.4)**: the "Put game files here" and "Scan for new game files" buttons moved to the bottom bar, next to the
 new Epic Pinball button.
 
 **Fixes in 0.8.3**
