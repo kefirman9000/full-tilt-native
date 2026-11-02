@@ -27,6 +27,8 @@ struct render_sprite
 	bool DirtyFlag{};
 	// Smooth light changes: lights crossfade between their old and new look instead of snapping
 	bool AllowFade{};
+	uint32_t FadeMs = 70; // lights 70 ms; flippers about one frame (in-between positions at high frame rates)
+	bool IsFlipper{};
 	bool FadePending{};
 	uint32_t FadeStart{};
 	rectangle_type FadeRect{};
@@ -47,6 +49,9 @@ public:
 	static zmap_header_type* background_zmap;
 	static int zmap_offsetX, zmap_offsetY;
 	static SDL_Rect DestinationRect;
+	// Full Tilt 1-style side panel (Options > Graphics > Side Score Panel); zero size when off
+	static SDL_Rect SidePanelRect;
+	static constexpr float SidePanelShare = 0.34f;
 
 	static void init(gdrv_bitmap8* bmp, int width, int height);
 	static void uninit();

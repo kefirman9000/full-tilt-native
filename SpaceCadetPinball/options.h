@@ -298,4 +298,6 @@ struct optionsStruct
 	BoolOption SharpScaling;
 	IntOption Backdrop; // 0 black, 1 ambient glow, 2 table art
 	BoolOption Scanlines;
+	BoolOption SmoothFlippers;
+	BoolOption SidePanel; // Full Tilt 1-style score panel beside FT2 tables
 };

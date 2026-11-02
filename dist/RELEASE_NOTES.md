@@ -6,15 +6,16 @@
 
 **Game data is not included.** Copy your original game folders into `Put game files here` and start `FullTiltPinball.exe`: tables are found and sorted automatically.
 
-**New in this version - graphics**
-- **Animations that never played before**: Mad Scientist's bubbling plunger tube (and the engine now supports the
-  animation types Alien Daze's beams/sockets and Mad's flasks/plasma/lightning use; those start with their table rules)
-- **Sharp Scaling** (on by default): crisp pixels on big screens without blocky edges
-- **Backdrop**: the bars beside the table get a soft ambient glow of the table, or the table's art (Options > Graphics > Backdrop)
-- **Smooth Light Changes**: lights crossfade instead of snapping on/off
-- **Scanlines**: optional CRT look
-- Mad Scientist's messages show in its own message area (they were squeezed into a one-letter column)
-- From v0.5.0: all six tables playable, stronger flippers, FullTiltUpdate.exe, frame interpolation up to 480 FPS
+**New in this version**
+- **Sound effects on the Full Tilt 2 tables**: they were silent. Their effects live in Sound\high (and Sound\lower),
+  which the engine never searched. Alien Daze, Captain Hero and Mad Scientist now have all their sounds.
+- **Alien Daze uses its real point values**, recovered from the original Alien.exe rule table (bumpers 1,500-7,500,
+  drop targets 5,000-50,000, ramps 25,000-500,000...). First step of rebuilding its original rules.
+- **Full Tilt 1 parts**: Skulduggery's accelerators and ramp exits, Dragon's Keep's diverters now exist on the table
+- **Smooth Flippers**: in-between flipper positions at high frame rates (Options > Graphics)
+- **Side Score Panel** (Options > Graphics, Full Tilt 2 tables): Full Tilt 1-style column beside the table with the
+  table's art (preview.bmp), player, score, ball and messages
+- From v0.6.0: animations (Mad's bubbling), sharp scaling, backdrop, light fades, scanlines
 
 **Status**
 - Alien Daze, Captain Hero, Mad Scientist, Dragon's Keep, Skulduggery: playable with simple placeholder rules

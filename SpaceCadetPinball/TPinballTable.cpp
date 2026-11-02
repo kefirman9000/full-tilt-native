@@ -11,6 +11,7 @@
 #include "render.h"
 #include "TBall.h"
 #include "ft2_animation.h"
+#include "ft2_parts.h"
 #include "TBlocker.h"
 #include "TBumper.h"
 #include "TComponentGroup.h"
@@ -182,6 +183,18 @@ TPinballTable::TPinballTable(): TPinballComponent(nullptr, -1, false)
 				break;
 			case 1033:
 				new TTextBox(this, groupIndex);
+				break;
+			case 1035:
+				if (pb::FT2Table)
+					new TFT2RampExit(this, groupIndex);
+				break;
+			case 1036:
+				if (pb::FT2Table)
+					new TWall(this, groupIndex); // accelerator: a wall with a kick
+				break;
+			case 1043:
+				if (pb::FT2Table)
+					new TFT2Diverter(this, groupIndex);
 				break;
 			case 1044:
 				if (pb::FT2Table)

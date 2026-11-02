@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "ft2_control.h"
+#include "ft2_scores.h"
 
 #include "pb.h"
 #include "translations.h"
@@ -29,9 +30,24 @@ namespace
 		return pb::MainTable;
 	}
 
-	// Placeholder point values per component type
+	// Real value from the table's original rule table when known (Alien Daze), else a placeholder per component type
+	int recovered_points(TPinballComponent* caller)
+	{
+		if (!caller->GroupName)
+			return -1;
+		std::string table = pb::DatFileName;
+		std::transform(table.begin(), table.end(), table.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+		for (auto& entry : ft2_scores)
+			if (table == entry.Table && strcmp(caller->GroupName, entry.Component) == 0)
+				return entry.Scores.empty() ? -1 : entry.Scores[0];
+		return -1;
+	}
+
 	int points_for(TPinballComponent* caller)
 	{
+		auto recovered = recovered_points(caller);
+		if (recovered >= 0)
+			return recovered;
 		if (dynamic_cast<TBumper*>(caller)) return 1000;
 		if (dynamic_cast<TPopupTarget*>(caller)) return 2500;
 		if (dynamic_cast<TSoloTarget*>(caller)) return 2500;

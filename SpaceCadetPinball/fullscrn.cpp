@@ -113,6 +113,11 @@ void fullscrn::window_size_changed()
 	int menuHeight = options::Options.ShowMenu ? winmain::MainMenuHeight : 0;
 	height -= menuHeight;
 	auto res = &resolution_array[resolution];
+	// Full Tilt 1-style side panel for FT2 tables: keep a column on the right for score and art
+	auto fullWidth = width;
+	bool sidePanel = pb::FT2FullScreen && options::Options.SidePanel;
+	if (sidePanel)
+		width = static_cast<int>(width / (1.0f + render::SidePanelShare));
 	ScaleX = static_cast<float>(width) / res->TableWidth;
 	ScaleY = static_cast<float>(height) / res->TableHeight;
 	OffsetX = OffsetY = 0;
@@ -139,6 +144,17 @@ void fullscrn::window_size_changed()
 		OffsetX, OffsetY + menuHeight,
 		width - offset2X, height - offset2Y
 	};
+	render::SidePanelRect = SDL_Rect{0, 0, 0, 0};
+	if (sidePanel)
+	{
+		// Table and panel side by side, centred together in the window
+		auto panelW = static_cast<int>(render::DestinationRect.w * render::SidePanelShare);
+		auto total = render::DestinationRect.w + panelW;
+		render::DestinationRect.x = (fullWidth - total) / 2;
+		OffsetX = render::DestinationRect.x;
+		render::SidePanelRect = SDL_Rect{render::DestinationRect.x + render::DestinationRect.w, render::DestinationRect.y,
+		                                 panelW, render::DestinationRect.h};
+	}
 }
 
 SDL_Rect fullscrn::GetScreenRectFromPinballRect(SDL_Rect rect)

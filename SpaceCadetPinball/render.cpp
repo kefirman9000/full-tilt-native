@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "render.h"
+#include "TTextBox.h"
 
 #include "fullscrn.h"
 #include "GroupData.h"
@@ -18,6 +19,7 @@ rectangle_type render::vscreen_rect;
 gdrv_bitmap8 *render::vscreen, *render::background_bitmap, *render::ball_bitmap[64];
 zmap_header_type* render::zscreen;
 SDL_Rect render::DestinationRect{};
+SDL_Rect render::SidePanelRect{};
 
 render_sprite::render_sprite(VisualTypes visualType, gdrv_bitmap8* bmp, zmap_header_type* zMap,
 	int xPosition, int yPosition, rectangle_type* boundingRect)
@@ -81,7 +83,7 @@ void render_sprite::set(gdrv_bitmap8* bmp, zmap_header_type* zMap, int xPos, int
 	if (Bmp == bmp && ZMap == zMap && BmpRect.XPosition == xPos && BmpRect.YPosition == yPos)
 		return;
 
-	if (AllowFade && bmp != Bmp && options::Options.SmoothLights)
+	if (AllowFade && bmp != Bmp && (IsFlipper ? options::Options.SmoothFlippers : options::Options.SmoothLights))
 		FadePending = true;
 	Bmp = bmp;
 	ZMap = zMap;
@@ -144,8 +146,6 @@ void render::recreate_screen_texture()
 {
 	vscreen->CreateTexture(options::Options.LinearFiltering ? "linear" : "nearest", SDL_TEXTUREACCESS_STREAMING);
 }
-
-static constexpr uint32_t LightFadeMs = 70;
 
 void render::update()
 {
@@ -233,8 +233,8 @@ void render::update()
 	{
 		if (sprite->FadeFrom.empty())
 			continue;
-		auto t = static_cast<float>(now - sprite->FadeStart) / LightFadeMs;
-		if (t >= 1.0f || !options::Options.SmoothLights)
+		auto t = static_cast<float>(now - sprite->FadeStart) / sprite->FadeMs;
+		if (t >= 1.0f || !(sprite->IsFlipper ? options::Options.SmoothFlippers : options::Options.SmoothLights))
 		{
 			sprite->FadeFrom.clear();
 			sprite->DirtyFlag = true; // one last clean repaint at full brightness
@@ -521,6 +521,71 @@ static bool ArtTried = false;
 static SDL_Texture* SharpTexture = nullptr;
 static int SharpW = 0, SharpH = 0;
 
+static SDL_Texture* TableArt()
+{
+	if (!ArtTried)
+	{
+		ArtTried = true;
+		if (auto surface = SDL_LoadBMP("preview.bmp"))
+		{
+			ArtTexture = SDL_CreateTextureFromSurface(winmain::Renderer, surface);
+			SDL_FreeSurface(surface);
+			if (ArtTexture)
+				SDL_SetTextureScaleMode(ArtTexture, SDL_ScaleModeLinear);
+		}
+	}
+	return ArtTexture;
+}
+
+static void DrawSidePanel()
+{
+	auto& panel = render::SidePanelRect;
+	if (panel.w <= 0 || !pb::MainTable)
+		return;
+	SDL_SetRenderDrawBlendMode(winmain::Renderer, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawColor(winmain::Renderer, 8, 8, 14, 230);
+	SDL_RenderFillRect(winmain::Renderer, &panel);
+	// Art on top (the table's preview.bmp), keeping its shape
+	float y = static_cast<float>(panel.y) + panel.h * 0.03f;
+	if (auto art = TableArt())
+	{
+		int w, h;
+		SDL_QueryTexture(art, nullptr, nullptr, &w, &h);
+		float scale = std::min(panel.w * 0.92f / w, panel.h * 0.42f / h);
+		SDL_Rect dst{panel.x + static_cast<int>((panel.w - w * scale) / 2), static_cast<int>(y),
+		             static_cast<int>(w * scale), static_cast<int>(h * scale)};
+		SDL_SetTextureColorMod(art, 255, 255, 255);
+		SDL_RenderCopy(winmain::Renderer, art, nullptr, &dst);
+		y += dst.h + panel.h * 0.04f;
+	}
+	// Score, ball and player, Full Tilt 1 style
+	auto draw = ImGui::GetForegroundDrawList();
+	auto font = ImGui::GetFont();
+	float big = panel.h * 0.075f, small = panel.h * 0.04f;
+	auto line = [&](const std::string& text, float size, ImU32 color)
+	{
+		auto textSize = font->CalcTextSizeA(size, FLT_MAX, 0.0f, text.c_str());
+		draw->AddText(font, size, ImVec2(panel.x + (panel.w - textSize.x) / 2, y), color, text.c_str());
+		y += textSize.y * 1.15f;
+	};
+	auto table = pb::MainTable;
+	std::string score = std::to_string(table->CurScoreStruct ? table->CurScoreStruct->Score : 0);
+	for (int i = static_cast<int>(score.size()) - 3; i > 0; i -= 3)
+		score.insert(static_cast<size_t>(i), ",");
+	line("Player " + std::to_string(table->CurrentPlayer + 1), small, IM_COL32(200, 200, 200, 255));
+	line(score, big, IM_COL32(255, 210, 80, 255));
+	line("Ball " + std::to_string(std::max(1, table->MaxBallCount - table->BallCount + 1)), small, IM_COL32(200, 200, 200, 255));
+	y += small * 0.6f;
+	if (pb::InfoTextBox && pb::InfoTextBox->CurrentMessage)
+	{
+		auto wrapW = panel.w * 0.9f;
+		auto text = pb::InfoTextBox->CurrentMessage->Text;
+		auto textSize = font->CalcTextSizeA(small, FLT_MAX, wrapW, text);
+		draw->AddText(font, small, ImVec2(panel.x + (panel.w - std::min(wrapW, textSize.x)) / 2, y),
+		              IM_COL32(120, 220, 255, 255), text, nullptr, wrapW);
+	}
+}
+
 static void DrawBackdrop(SDL_Texture* table)
 {
 	int outW, outH;
@@ -531,17 +596,7 @@ static void DrawBackdrop(SDL_Texture* table)
 	auto style = options::Options.Backdrop.V;
 	if (style == 2)
 	{
-		if (!ArtTried)
-		{
-			ArtTried = true;
-			if (auto surface = SDL_LoadBMP("preview.bmp"))
-			{
-				ArtTexture = SDL_CreateTextureFromSurface(winmain::Renderer, surface);
-				SDL_FreeSurface(surface);
-				if (ArtTexture)
-					SDL_SetTextureScaleMode(ArtTexture, SDL_ScaleModeLinear);
-			}
-		}
+		TableArt();
 		if (ArtTexture)
 		{
 			int w, h;
@@ -695,6 +750,7 @@ void render::PresentVScreen()
 	}
 
 	DrawScanlines(vscreen->Height);
+	DrawSidePanel();
 
 	if (options::Options.DebugOverlay)
 	{

@@ -13,6 +13,14 @@
 
 TFlipper::TFlipper(TPinballTable* table, int groupIndex) : TCollisionComponent(table, groupIndex, false)
 {
+	if (RenderSprite)
+	{
+		// Options > Graphics > Smooth Flippers: a one-frame blend between the flipper's few animation frames
+		RenderSprite->AllowFade = true;
+		RenderSprite->IsFlipper = true;
+		RenderSprite->FadeMs = 12;
+	}
+
 	visualStruct visual{};
 
 	loader::query_visual(groupIndex, 0, &visual);

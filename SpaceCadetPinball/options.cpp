@@ -160,6 +160,8 @@ optionsStruct options::Options
 	{"Sharp Scaling", true},
 	{"Backdrop", 1},
 	{"Scanlines", false},
+	{"Smooth Flippers", true},
+	{"Side Score Panel", false},
 };
 
 void options::InitPrimary()

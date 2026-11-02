@@ -143,33 +143,47 @@ int loader::get_sound_id(int groupIndex)
 			if (value && *value == 202)
 			{
 				// File name is in lower case, while game data is usually in upper case.
-				std::string fileName = loader_table->field(soundGroupId, FieldTypes::String);
+				const std::string baseName = loader_table->field(soundGroupId, FieldTypes::String);
+				// FT sounds are in the SOUND subfolder. Full Tilt 2 keeps them one level deeper: Sound\high (full
+				// quality) with a lower-quality copy in Sound\lower, so those are searched first.
+				std::vector<std::string> folders;
 				if (pb::FullTiltMode)
 				{
-					// FT sounds are in SOUND subfolder
-					fileName.insert(0, 1, PathSeparator);
-					fileName.insert(0, "sound");
+					std::string sep(1, PathSeparator);
+					if (pb::FT2Table)
+					{
+						folders.push_back("sound" + sep + "high" + sep);
+						folders.push_back("sound" + sep + "lower" + sep);
+					}
+					folders.push_back("sound" + sep);
 				}
+				else
+					folders.push_back("");
 
 				std::string filePath;
 				float duration = -1;
-				for (int i = 0; i < 2; i++)
+				for (auto& folder : folders)
 				{
-					if (i == 1)
-						std::transform(fileName.begin(), fileName.end(), fileName.begin(),
-						               [](unsigned char c) { return std::toupper(c); });
-
-					filePath = pb::make_path_name(fileName);
-					auto file = fopenu(filePath.c_str(), "rb");
-					if (file)
+					std::string fileName = folder + baseName;
+					for (int i = 0; i < 2 && duration < 0; i++)
 					{
-						fread(&wavHeader, 1, sizeof wavHeader, file);
-						fclose(file);
-						auto sampleCount = wavHeader.data_size / (wavHeader.channels * (wavHeader.bits_per_sample /
-							8.0));
-						duration = static_cast<float>(sampleCount / wavHeader.sample_rate);
-						break;
+						if (i == 1)
+							std::transform(fileName.begin(), fileName.end(), fileName.begin(),
+							               [](unsigned char c) { return std::toupper(c); });
+
+						filePath = pb::make_path_name(fileName);
+						auto file = fopenu(filePath.c_str(), "rb");
+						if (file)
+						{
+							fread(&wavHeader, 1, sizeof wavHeader, file);
+							fclose(file);
+							auto sampleCount = wavHeader.data_size / (wavHeader.channels * (wavHeader.bits_per_sample /
+								8.0));
+							duration = static_cast<float>(sampleCount / wavHeader.sample_rate);
+						}
 					}
+					if (duration >= 0)
+						break;
 				}
 
 				sound_list[soundIndex].Duration = duration;

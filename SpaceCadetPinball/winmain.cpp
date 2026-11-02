@@ -709,8 +709,15 @@ void winmain::RenderUi()
 					Options.SharpScaling ^= true;
 				if (ImGui::MenuItem("Smooth Light Changes", nullptr, Options.SmoothLights))
 					Options.SmoothLights ^= true;
+				if (ImGui::MenuItem("Smooth Flippers", nullptr, Options.SmoothFlippers))
+					Options.SmoothFlippers ^= true;
 				if (ImGui::MenuItem("Scanlines (CRT look)", nullptr, Options.Scanlines))
 					Options.Scanlines ^= true;
+				if (ImGui::MenuItem("Side Score Panel (Full Tilt 1 style)", nullptr, Options.SidePanel, pb::FT2FullScreen))
+				{
+					Options.SidePanel ^= true;
+					fullscrn::window_size_changed();
+				}
 				if (ImGui::BeginMenu("Backdrop"))
 				{
 					if (ImGui::MenuItem("Black", nullptr, Options.Backdrop.V == 0))
