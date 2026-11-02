@@ -4,6 +4,7 @@
 #include "ft2_sounds.h"
 
 #include "pb.h"
+#include "loader.h"
 #include "options.h"
 #include "timer.h"
 #include "TLightGroup.h"
@@ -153,6 +154,10 @@ namespace
 		bool ExtraBallGiven[4]{};
 		int AttractTimer = 0;
 		int FlashTimer = 0;
+		// Pockets with a strong pull in the open playfield (Captain Hero's mid-table magnets): the original rules
+		// only switch them on during modes, so here they stay closed and open as a reward
+		std::vector<TKickout*> ModePockets;
+		int PocketTimer = 0;
 	} rs;
 
 	std::string set_key(TPinballComponent* part)
@@ -162,6 +167,35 @@ namespace
 			name.pop_back();
 		const char* kind = dynamic_cast<TPopupTarget*>(part) ? "drop" : dynamic_cast<TSoloTarget*>(part) ? "target" : "lane";
 		return name.empty() ? "" : std::string(kind) + ":" + name;
+	}
+
+
+	void set_pockets(bool open)
+	{
+		for (auto pocket : rs.ModePockets)
+		{
+			pocket->NotSomeFlag = open ? 0 : 1; // with the flag set a kickout stays off after it ejects
+			if (open)
+				pocket->ActiveFlag = 1;
+			else if (!pocket->BallCaputeredFlag)
+				pocket->ActiveFlag = 0;
+		}
+	}
+
+	void close_pockets(int, void*)
+	{
+		rs.PocketTimer = 0;
+		set_pockets(false);
+	}
+
+	void open_pockets(float seconds)
+	{
+		if (rs.ModePockets.empty())
+			return;
+		set_pockets(true);
+		if (rs.PocketTimer)
+			timer::kill(rs.PocketTimer);
+		rs.PocketTimer = timer::set(seconds, nullptr, close_pockets);
 	}
 
 	void build_sets()
@@ -183,6 +217,16 @@ namespace
 			if (!key.empty())
 				groups[key].push_back(part);
 		}
+		for (auto part : t->ComponentList)
+		{
+			auto pocket = dynamic_cast<TKickout*>(part);
+			if (!pocket || pocket->FieldMult < 300.0f)
+				continue;
+			auto reach = loader::query_float_attribute(pocket->GroupIndex, 0, 306);
+			if (reach && *reach >= 0.9f)
+				rs.ModePockets.push_back(pocket);
+		}
+		set_pockets(false);
 		for (auto& group : groups)
 		{
 			if (group.second.size() < 2 || group.second.size() > 10)
@@ -301,6 +345,11 @@ namespace
 		show((set.DropBank ? "TARGETS COMPLETE  " : "SET COMPLETE  ") + with_commas(award) +
 		     "   BONUS x" + std::to_string(rs.Multiplier), 2.5f);
 		light_show(1.5f);
+		if (!rs.ModePockets.empty())
+		{
+			open_pockets(20.0f);
+			show("POCKETS LIT FOR 20 SECONDS", 2.5f);
+		}
 		if (set.DropBank)
 			timer::set(1.2f, reinterpret_cast<void*>(static_cast<intptr_t>(index)), reset_bank);
 		else
@@ -422,6 +471,12 @@ void ft2_control::table_handler(MessageCode code)
 	{
 	case MessageCode::Reset: // new game
 		stop_attract();
+		if (rs.PocketTimer)
+		{
+			timer::kill(rs.PocketTimer);
+			rs.PocketTimer = 0;
+		}
+		set_pockets(false);
 		for (auto& set : rs.Sets)
 			set.Hit.clear();
 		for (auto& given : rs.ExtraBallGiven)

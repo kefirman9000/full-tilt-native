@@ -408,6 +408,7 @@ int loader::kicker(int groupIndex, visualKickerStruct* kicker)
 	if (floatArrLength <= 0)
 		return 0;
 
+	bool has404 = false;
 	for (auto index = 0; index < floatArrLength;)
 	{
 		int floorVal = static_cast<int>(floor(*floatArr++));
@@ -423,6 +424,7 @@ int loader::kicker(int groupIndex, visualKickerStruct* kicker)
 			kicker->ThrowBallMult = *floatArr;
 			break;
 		case 404:
+			has404 = true;
 			kicker->ThrowBallDirection = *reinterpret_cast<vector3*>(floatArr);
 			floatArr += 3;
 			index += 4;
@@ -434,8 +436,21 @@ int loader::kicker(int groupIndex, visualKickerStruct* kicker)
 			kicker->HardHitSoundId = get_sound_id(static_cast<int>(floor(*floatArr)));
 			break;
 		case 410:
-			// Not in the Cadet decomp. FT2 tables: 410 is followed by 8 floats, which look like
-			// two (x, y, radius, 0) groups. Meaning unknown, values skipped.
+			// Not in the Cadet decomp. FT2 tables: 410 is followed by 8 floats, two (x, y, z, ?) points: where the
+			// ball sits in the pocket and where it is shot to. Tables that have no 404 direction (Mad Scientist's
+			// pockets) only have this line, so it becomes the throw direction; without it the ball was thrown
+			// with no direction and never left properly.
+			if (!has404)
+			{
+				vector3 dir{floatArr[4] - floatArr[0], floatArr[5] - floatArr[1], 0.0f};
+				auto len = std::sqrt(dir.X * dir.X + dir.Y * dir.Y);
+				if (len > 0.0001f)
+				{
+					dir.X /= len;
+					dir.Y /= len;
+					kicker->ThrowBallDirection = dir;
+				}
+			}
 			floatArr += 8;
 			index += 9;
 			break;

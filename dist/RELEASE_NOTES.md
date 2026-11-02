@@ -6,6 +6,13 @@
 
 **Game data is not included.** Copy your original game folders into `Put game files here` and start `FullTiltPinball.exe`: tables are found and sorted automatically.
 
+**Fixes in 0.8.1**
+- **Pockets spit the ball out properly** (Mad Scientist, and pockets on every table that had the same problem): many
+  kickouts and sinks describe their eject as a line from the pocket to where the ball should go. That line was
+  ignored, so the ball was thrown with no direction. It is now the throw direction.
+- **Captain Hero's mid-table magnet pockets no longer grab the ball just from rolling over them.** The original rules
+  only switch them on during modes; they now stay closed and open for 20 seconds when you complete a set or bank.
+
 **New in this version**
 Every table that doesn't have its original rules yet (all but Space Cadet) gets real pinball goals, built from its
 own parts (Options > Table Rules > Enhanced Rules, on by default):
