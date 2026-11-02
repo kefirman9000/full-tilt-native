@@ -354,6 +354,50 @@ static bool GameJustClosed()
 	return false;
 }
 
+
+// "Report a problem": gathers the logs and settings into one zip next to the programs, so it can be attached to a
+// GitHub issue or sent along. Game data is never included.
+static std::string MakeProblemReport(const fs::path& basePath, const std::vector<Table>& tables)
+{
+	std::error_code ec;
+	auto folder = basePath / "Problem report";
+	fs::remove_all(folder, ec);
+	fs::create_directories(folder, ec);
+	for (auto& entry : fs::directory_iterator(basePath, ec))
+	{
+		auto ext = entry.path().extension().string();
+		std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+		if (entry.is_regular_file(ec) && (ext == ".log" || entry.path().filename() == "FullTiltWindow.txt"))
+			fs::copy_file(entry.path(), folder / entry.path().filename(), fs::copy_options::overwrite_existing, ec);
+	}
+	if (char* pref = SDL_GetPrefPath("", "SpaceCadetPinball"))
+	{
+		fs::copy_file(fs::path(pref) / "imgui_pb.ini", folder / "settings (imgui_pb.ini).txt", fs::copy_options::overwrite_existing, ec);
+		SDL_free(pref);
+	}
+	{
+		std::ofstream info(folder / "summary.txt");
+		info << "Full Tilt Native " << updater::CurrentVersion << "\n";
+		info << "Program folder: " << basePath.string() << "\n\nTables:\n";
+		for (auto& t : tables)
+			info << "  " << t.Name << " (" << t.Data << ") - " << (t.DataFound ? "data found" : "DATA MISSING") << " - " << t.Status << "\n";
+	}
+	auto zip = basePath / "FullTiltReport.zip";
+	fs::remove(zip, ec);
+#ifdef _WIN32
+	auto tar = std::string(getenv("SystemRoot") ? getenv("SystemRoot") : "C:\\Windows") + "\\System32\\tar.exe";
+	bool zipped = updater::RunHidden("\"" + tar + "\" -a -c -f \"" + zip.string() + "\" -C \"" + folder.string() + "\" *", basePath.string());
+	if (zipped)
+	{
+		fs::remove_all(folder, ec);
+		ShellExecuteA(nullptr, "open", "explorer.exe", ("/select,\"" + zip.string() + "\"").c_str(), nullptr, SW_SHOWNORMAL);
+		return "Saved FullTiltReport.zip (logs and settings only). Attach it to a GitHub issue or send it along.";
+	}
+#endif
+	OpenFolder(folder);
+	return "Saved the \"Problem report\" folder (logs and settings only).";
+}
+
 static std::string Launch(const fs::path& exe, const Table& t, const std::string& windowSpot)
 {
 	ftlog::Line("Launching " + t.Name + " in " + t.Folder.string() + ": " + exe.string() + " " + t.Args);
@@ -579,6 +623,9 @@ int main(int, char**)
 		ImGui::SameLine();
 		if (ImGui::Button("Scan for new game files"))
 			scan();
+		ImGui::SameLine();
+		if (ImGui::Button("Report a problem"))
+			importReport = MakeProblemReport(basePath, tables);
 		ImGui::SameLine();
 		ImGui::TextDisabled("Drop game folders in, they get sorted.");
 		if (!importReport.empty())

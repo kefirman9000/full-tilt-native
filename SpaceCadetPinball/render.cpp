@@ -676,18 +676,184 @@ static void DrawScanlines(int srcH)
 	SDL_RenderFillRects(winmain::Renderer, lines.data(), static_cast<int>(lines.size()));
 }
 
+
+// ---- Graphics effects (Options > Graphics). No shaders: only SDL blend modes and render targets, so they work
+// on every renderer SDL picks. ----
+static SDL_Texture* MakeTarget(SDL_Texture*& tex, int& curW, int& curH, int w, int h)
+{
+	w = std::max(1, w);
+	h = std::max(1, h);
+	if (tex && curW == w && curH == h)
+		return tex;
+	if (tex)
+		SDL_DestroyTexture(tex);
+	tex = SDL_CreateTexture(winmain::Renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET, w, h);
+	curW = w;
+	curH = h;
+	if (tex)
+		SDL_SetTextureScaleMode(tex, SDL_ScaleModeLinear);
+	return tex;
+}
+
+// Motion trails: each frame is blended over the last few, so moving things leave a short streak
+static SDL_Texture* TrailTexture = nullptr;
+static int TrailW = 0, TrailH = 0;
+static bool TrailFresh = true;
+
+static SDL_Texture* ApplyTrails(SDL_Texture* table, int w, int h)
+{
+	if (!options::Options.MotionTrails || !SDL_RenderTargetSupported(winmain::Renderer))
+	{
+		TrailFresh = true;
+		return table;
+	}
+	auto created = TrailW != w || TrailH != h || !TrailTexture;
+	if (!MakeTarget(TrailTexture, TrailW, TrailH, w, h))
+		return table;
+	SDL_SetTextureScaleMode(TrailTexture, SDL_ScaleModeNearest);
+	auto previous = SDL_GetRenderTarget(winmain::Renderer);
+	SDL_SetRenderTarget(winmain::Renderer, TrailTexture);
+	SDL_BlendMode oldMode;
+	SDL_GetTextureBlendMode(table, &oldMode);
+	Uint8 oldAlpha;
+	SDL_GetTextureAlphaMod(table, &oldAlpha);
+	if (created || TrailFresh)
+	{
+		SDL_SetTextureBlendMode(table, SDL_BLENDMODE_NONE);
+		SDL_RenderCopy(winmain::Renderer, table, nullptr, nullptr);
+		TrailFresh = false;
+	}
+	else
+	{
+		SDL_SetTextureBlendMode(table, SDL_BLENDMODE_BLEND);
+		SDL_SetTextureAlphaMod(table, 150);
+		SDL_RenderCopy(winmain::Renderer, table, nullptr, nullptr);
+	}
+	SDL_SetTextureAlphaMod(table, oldAlpha);
+	SDL_SetTextureBlendMode(table, oldMode);
+	SDL_SetRenderTarget(winmain::Renderer, previous);
+	return TrailTexture;
+}
+
+// Glow: a bright-pass (the picture multiplied by itself, so only bright parts stay bright), blurred by shrinking,
+// then added back on top
+static SDL_Texture *GlowSmall = nullptr, *GlowBright = nullptr, *GlowBlur = nullptr;
+static int GlowSmallW = 0, GlowSmallH = 0, GlowBrightW = 0, GlowBrightH = 0, GlowBlurW = 0, GlowBlurH = 0;
+
+static void DrawGlow(SDL_Texture* table, int w, int h, const SDL_Rect& dst)
+{
+	auto level = options::Options.Glow.V;
+	if (level <= 0 || !SDL_RenderTargetSupported(winmain::Renderer))
+		return;
+	if (!MakeTarget(GlowSmall, GlowSmallW, GlowSmallH, w / 4, h / 4) ||
+		!MakeTarget(GlowBright, GlowBrightW, GlowBrightH, w / 4, h / 4) ||
+		!MakeTarget(GlowBlur, GlowBlurW, GlowBlurH, w / 16, h / 16))
+		return;
+	auto r = winmain::Renderer;
+	auto previous = SDL_GetRenderTarget(r);
+	SDL_BlendMode oldMode;
+	SDL_GetTextureBlendMode(table, &oldMode);
+	SDL_ScaleMode oldScale;
+	SDL_GetTextureScaleMode(table, &oldScale);
+
+	SDL_SetRenderTarget(r, GlowSmall);
+	SDL_SetTextureBlendMode(table, SDL_BLENDMODE_NONE);
+	SDL_SetTextureScaleMode(table, SDL_ScaleModeLinear);
+	SDL_RenderCopy(r, table, nullptr, nullptr);
+
+	SDL_SetRenderTarget(r, GlowBright);
+	SDL_SetTextureBlendMode(GlowSmall, SDL_BLENDMODE_NONE);
+	SDL_RenderCopy(r, GlowSmall, nullptr, nullptr);
+	SDL_SetTextureBlendMode(GlowSmall, SDL_BLENDMODE_MOD);
+	SDL_RenderCopy(r, GlowSmall, nullptr, nullptr); // squared
+	SDL_RenderCopy(r, GlowSmall, nullptr, nullptr); // cubed: only real highlights are left
+
+	SDL_SetRenderTarget(r, GlowBlur);
+	SDL_SetTextureBlendMode(GlowBright, SDL_BLENDMODE_NONE);
+	SDL_RenderCopy(r, GlowBright, nullptr, nullptr);
+
+	SDL_SetRenderTarget(r, previous);
+	Uint8 wide = level == 1 ? 150 : 255, tight = level == 1 ? 70 : 130;
+	SDL_SetTextureBlendMode(GlowBlur, SDL_BLENDMODE_ADD);
+	SDL_SetTextureColorMod(GlowBlur, wide, wide, wide);
+	SDL_RenderCopy(r, GlowBlur, nullptr, &dst);
+	SDL_SetTextureBlendMode(GlowBright, SDL_BLENDMODE_ADD);
+	SDL_SetTextureColorMod(GlowBright, tight, tight, tight);
+	SDL_RenderCopy(r, GlowBright, nullptr, &dst);
+	SDL_SetTextureColorMod(GlowBright, 255, 255, 255);
+
+	SDL_SetTextureBlendMode(table, oldMode);
+	SDL_SetTextureScaleMode(table, oldScale);
+}
+
+// Brightness: the table added on top of itself at a fraction (a multiply that keeps blacks black)
+static void DrawBrightness(SDL_Texture* table, const SDL_Rect& dst)
+{
+	auto level = options::Options.Brightness.V;
+	if (level <= 0)
+		return;
+	SDL_BlendMode oldMode;
+	SDL_GetTextureBlendMode(table, &oldMode);
+	Uint8 amount = level == 1 ? 45 : 95;
+	SDL_SetTextureBlendMode(table, SDL_BLENDMODE_ADD);
+	SDL_SetTextureColorMod(table, amount, amount, amount);
+	SDL_RenderCopy(winmain::Renderer, table, nullptr, &dst);
+	SDL_SetTextureColorMod(table, 255, 255, 255);
+	SDL_SetTextureBlendMode(table, oldMode);
+}
+
+static SDL_Texture* MakeOverlay(Uint32 (*pixel)(float x, float y))
+{
+	const int size = 256;
+	auto surface = SDL_CreateRGBSurfaceWithFormat(0, size, size, 32, SDL_PIXELFORMAT_ARGB8888);
+	if (!surface)
+		return nullptr;
+	auto pixels = static_cast<Uint32*>(surface->pixels);
+	for (int y = 0; y < size; y++)
+		for (int x = 0; x < size; x++)
+			pixels[y * (surface->pitch / 4) + x] = pixel((x + 0.5f) / size, (y + 0.5f) / size);
+	auto tex = SDL_CreateTextureFromSurface(winmain::Renderer, surface);
+	SDL_FreeSurface(surface);
+	if (tex)
+	{
+		SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
+		SDL_SetTextureScaleMode(tex, SDL_ScaleModeLinear);
+	}
+	return tex;
+}
+
+static SDL_Texture* VignetteTexture = nullptr;
+
+static void DrawVignette(const SDL_Rect& dst)
+{
+	if (!options::Options.Vignette)
+		return;
+	if (!VignetteTexture)
+		VignetteTexture = MakeOverlay([](float x, float y) -> Uint32
+		{
+			auto dx = (x - 0.5f) * 2.0f, dy = (y - 0.5f) * 2.0f;
+			auto d = std::sqrt(dx * dx * 0.9f + dy * dy * 0.7f);
+			auto t = std::min(1.0f, std::max(0.0f, (d - 0.55f) / 0.75f));
+			auto a = static_cast<Uint32>(150.0f * t * t * (3 - 2 * t));
+			return a << 24;
+		});
+	if (VignetteTexture)
+		SDL_RenderCopy(winmain::Renderer, VignetteTexture, nullptr, &dst);
+}
+
 void render::PresentVScreen()
 {
 	vscreen->BlitToTexture();
-	DrawBackdrop(vscreen->Texture);
+	auto tableTexture = ApplyTrails(vscreen->Texture, vscreen->Width, vscreen->Height);
+	DrawBackdrop(tableTexture);
 
 	if (offset_x == 0 && offset_y == 0)
 	{
-		if (!DrawSharp(vscreen->Texture, vscreen->Width, vscreen->Height))
+		if (!DrawSharp(tableTexture, vscreen->Width, vscreen->Height))
 		{
-			SDL_SetTextureScaleMode(vscreen->Texture,
+			SDL_SetTextureScaleMode(tableTexture,
 			                        options::Options.LinearFiltering ? SDL_ScaleModeLinear : SDL_ScaleModeNearest);
-			SDL_RenderCopy(winmain::Renderer, vscreen->Texture, nullptr, &DestinationRect);
+			SDL_RenderCopy(winmain::Renderer, tableTexture, nullptr, &DestinationRect);
 		}
 	}
 	else
@@ -720,8 +886,8 @@ void render::PresentVScreen()
 			DestinationRect.w - dstSeparationX, static_cast<float>(DestinationRect.h)
 		};
 
-		SDL_RenderCopyF(winmain::Renderer, vscreen->Texture, &srcBoardRect, &dstBoardRect);
-		SDL_RenderCopyF(winmain::Renderer, vscreen->Texture, &srcSidebarRect, &dstSidebarRect);
+		SDL_RenderCopyF(winmain::Renderer, tableTexture, &srcBoardRect, &dstBoardRect);
+		SDL_RenderCopyF(winmain::Renderer, tableTexture, &srcSidebarRect, &dstSidebarRect);
 #else
 		// SDL_RenderCopy cannot express sub pixel offset.
 		// Vscreen shift is required for that.
@@ -744,11 +910,14 @@ void render::PresentVScreen()
 			DestinationRect.w - dstSeparationX, DestinationRect.h
 		};
 
-		SDL_RenderCopy(winmain::Renderer, vscreen->Texture, &srcBoardRect, &dstBoardRect);
-		SDL_RenderCopy(winmain::Renderer, vscreen->Texture, &srcSidebarRect, &dstSidebarRect);
+		SDL_RenderCopy(winmain::Renderer, tableTexture, &srcBoardRect, &dstBoardRect);
+		SDL_RenderCopy(winmain::Renderer, tableTexture, &srcSidebarRect, &dstSidebarRect);
 #endif
 	}
 
+	DrawBrightness(tableTexture, DestinationRect);
+	DrawGlow(tableTexture, vscreen->Width, vscreen->Height, DestinationRect);
+	DrawVignette(DestinationRect);
 	DrawScanlines(vscreen->Height);
 	DrawSidePanel();
 

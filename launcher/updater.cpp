@@ -188,6 +188,15 @@ namespace updater
 	}
 #endif
 
+	bool RunHidden(const std::string& commandLine, const std::string& workDir)
+	{
+#ifdef _WIN32
+		return RunAndWait(commandLine, workDir);
+#else
+		return std::system(("cd \"" + workDir + "\" && " + commandLine).c_str()) == 0;
+#endif
+	}
+
 	void CheckAsync()
 	{
 #ifndef _WIN32

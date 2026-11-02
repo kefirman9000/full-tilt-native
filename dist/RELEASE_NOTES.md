@@ -18,6 +18,17 @@ own parts (Options > Table Rules > Enhanced Rules, on by default):
 - **Light shows** on completions and extra balls, and an attract light show after the game ends.
 - Messages on the table for all of these.
 
+
+**Graphics** (Options > Graphics):
+- **Glow**: lit lights and bright parts bloom softly (Off / Soft / Strong; Soft is on by default).
+- **Brightness**: Normal / Bright / Brighter, for dark screens and dark tables.
+- **Vignette**: slightly darker edges that pull the eye to the playfield (on by default).
+- **Motion Trails**: the ball and flippers leave a short streak (off by default).
+
+**Launcher**:
+- **Report a problem** button: collects the logs and settings (never game files) into FullTiltReport.zip next to
+  the programs and shows it in Explorer, ready to attach to a GitHub issue.
+
 Also: Skulduggery's ball no longer falls out of the table, and the Full Tilt 2 tables play their sounds (0.7.1).
 
 **Status**

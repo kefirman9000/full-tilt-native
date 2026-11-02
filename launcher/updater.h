@@ -29,4 +29,6 @@ namespace updater
 	int CloseRunningPrograms(const std::filesystem::path& appDir, const std::string& except);
 	// Start a program from appDir with arguments; returns true if started
 	bool StartProgram(const std::filesystem::path& appDir, const std::string& exeName, const std::string& args);
+	// Run a command line without a window and wait for it (Windows); returns true on exit code 0
+	bool RunHidden(const std::string& commandLine, const std::string& workDir);
 }

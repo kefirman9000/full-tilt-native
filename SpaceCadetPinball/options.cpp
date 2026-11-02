@@ -164,6 +164,10 @@ optionsStruct options::Options
 	{"Side Score Panel", false},
 	{"Enhanced Rules", true},
 	{"Ball Save", 8},
+	{"Glow", 1},
+	{"Brightness", 0},
+	{"Vignette", true},
+	{"Motion Trails", false},
 };
 
 void options::InitPrimary()

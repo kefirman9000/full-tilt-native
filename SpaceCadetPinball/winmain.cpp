@@ -713,6 +713,26 @@ void winmain::RenderUi()
 					Options.SmoothFlippers ^= true;
 				if (ImGui::MenuItem("Scanlines (CRT look)", nullptr, Options.Scanlines))
 					Options.Scanlines ^= true;
+				if (ImGui::BeginMenu("Glow (lights bloom)"))
+				{
+					const char* names[] = {"Off", "Soft", "Strong"};
+					for (int i = 0; i < 3; i++)
+						if (ImGui::MenuItem(names[i], nullptr, Options.Glow.V == i))
+							Options.Glow.V = i;
+					ImGui::EndMenu();
+				}
+				if (ImGui::BeginMenu("Brightness"))
+				{
+					const char* names[] = {"Normal", "Bright", "Brighter"};
+					for (int i = 0; i < 3; i++)
+						if (ImGui::MenuItem(names[i], nullptr, Options.Brightness.V == i))
+							Options.Brightness.V = i;
+					ImGui::EndMenu();
+				}
+				if (ImGui::MenuItem("Vignette (darker edges)", nullptr, Options.Vignette))
+					Options.Vignette ^= true;
+				if (ImGui::MenuItem("Motion Trails", nullptr, Options.MotionTrails))
+					Options.MotionTrails ^= true;
 				if (ImGui::MenuItem("Side Score Panel (Full Tilt 1 style)", nullptr, Options.SidePanel, pb::FT2FullScreen))
 				{
 					Options.SidePanel ^= true;

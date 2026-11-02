@@ -302,4 +302,8 @@ struct optionsStruct
 	BoolOption SidePanel; // Full Tilt 1-style score panel beside FT2 tables
 	BoolOption EnhancedRules; // generic rules extras: target banks, lane sets, bonus, multiplier, extra ball
 	IntOption BallSave; // seconds after launch a drained ball is given back (0 = off)
+	IntOption Glow; // bloom around bright lights: 0 off, 1 soft, 2 strong
+	IntOption Brightness; // 0 normal, 1 bright, 2 brighter
+	BoolOption Vignette;
+	BoolOption MotionTrails;
 };
