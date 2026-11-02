@@ -7,15 +7,15 @@
 **Game data is not included.** Copy your original game folders into `Put game files here` and start `FullTiltPinball.exe`: tables are found and sorted automatically.
 
 **New in this version**
-- **Sound effects on the Full Tilt 2 tables**: they were silent. Their effects live in Sound\high (and Sound\lower),
-  which the engine never searched. Alien Daze, Captain Hero and Mad Scientist now have all their sounds.
-- **Alien Daze uses its real point values**, recovered from the original Alien.exe rule table (bumpers 1,500-7,500,
-  drop targets 5,000-50,000, ramps 25,000-500,000...). First step of rebuilding its original rules.
-- **Full Tilt 1 parts**: Skulduggery's accelerators and ramp exits, Dragon's Keep's diverters now exist on the table
-- **Smooth Flippers**: in-between flipper positions at high frame rates (Options > Graphics)
-- **Side Score Panel** (Options > Graphics, Full Tilt 2 tables): Full Tilt 1-style column beside the table with the
-  table's art (preview.bmp), player, score, ball and messages
-- From v0.6.0: animations (Mad's bubbling), sharp scaling, backdrop, light fades, scanlines
+- **Skulduggery: the ball no longer falls out of the table.** The ramp exit lines added in 0.7.0 were on every layer,
+  including the main playfield, so a ball rolling over one was moved onto a ramp layer with no floor under it.
+  They now only exist on the ramp they belong to.
+- **Full Tilt 2 tables play their sounds.** These tables have almost no sounds attached to parts: the original rules
+  play them. The sound each part's rule plays was recovered from Alien.exe, hero.exe and mad.exe (107 parts across
+  the three tables: bumpers, targets, kickouts, ramps, plunger...) and now plays on hits.
+- Sound files are found whatever their folder/file case (Sound\high, SOUND, tabe01.wav, TABE02.WAV), and any sound
+  that can't be found is written to FullTiltEngine.log.
+- If you still hear nothing: check Options > Sounds is ticked (F-key toggles can turn it off).
 
 **Status**
 - Alien Daze, Captain Hero, Mad Scientist, Dragon's Keep, Skulduggery: playable with simple placeholder rules

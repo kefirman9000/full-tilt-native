@@ -4,6 +4,7 @@
 #include "TPinballComponent.h"
 #include "pb.h"
 #include "Sound.h"
+#include "ft_log.h"
 #include "zdrv.h"
 
 
@@ -146,32 +147,33 @@ int loader::get_sound_id(int groupIndex)
 				const std::string baseName = loader_table->field(soundGroupId, FieldTypes::String);
 				// FT sounds are in the SOUND subfolder. Full Tilt 2 keeps them one level deeper: Sound\high (full
 				// quality) with a lower-quality copy in Sound\lower, so those are searched first.
+				// Case varies between installs (Sound\high, SOUND, tabe01.wav, TABE02.WAV), which matters off Windows.
 				std::vector<std::string> folders;
 				if (pb::FullTiltMode)
 				{
 					std::string sep(1, PathSeparator);
-					if (pb::FT2Table)
+					for (auto sound : {"Sound", "SOUND", "sound"})
 					{
-						folders.push_back("sound" + sep + "high" + sep);
-						folders.push_back("sound" + sep + "lower" + sep);
+						if (pb::FT2Table)
+							for (auto sub : {"high", "HIGH", "lower", "LOWER"})
+								folders.push_back(std::string(sound) + sep + sub + sep);
+						folders.push_back(std::string(sound) + sep);
 					}
-					folders.push_back("sound" + sep);
 				}
-				else
-					folders.push_back("");
+				folders.push_back("");
 
 				std::string filePath;
 				float duration = -1;
 				for (auto& folder : folders)
 				{
-					std::string fileName = folder + baseName;
-					for (int i = 0; i < 2 && duration < 0; i++)
+					for (int i = 0; i < 3 && duration < 0; i++)
 					{
-						if (i == 1)
-							std::transform(fileName.begin(), fileName.end(), fileName.begin(),
-							               [](unsigned char c) { return std::toupper(c); });
+						std::string name = baseName;
+						if (i > 0)
+							std::transform(name.begin(), name.end(), name.begin(),
+							               [i](unsigned char c) { return i == 1 ? std::toupper(c) : std::tolower(c); });
 
-						filePath = pb::make_path_name(fileName);
+						filePath = pb::make_path_name(folder + name);
 						auto file = fopenu(filePath.c_str(), "rb");
 						if (file)
 						{
@@ -188,6 +190,12 @@ int loader::get_sound_id(int groupIndex)
 
 				sound_list[soundIndex].Duration = duration;
 				sound_list[soundIndex].WavePtr = Sound::LoadWaveFile(filePath);
+				if (!sound_list[soundIndex].WavePtr)
+				{
+					static int missingLogged = 0;
+					if (missingLogged++ < 8)
+						ftlog::Line("Sound not loaded: " + baseName + " (looked for " + filePath + ")");
+				}
 			}
 		}
 	}

@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "ft2_control.h"
 #include "ft2_scores.h"
+#include "ft2_sounds.h"
 
 #include "pb.h"
 #include "translations.h"
@@ -20,6 +21,7 @@
 #include "TRollover.h"
 #include "TSink.h"
 #include "TSoloTarget.h"
+#include "TSound.h"
 #include "TTextBox.h"
 #include "TTripwire.h"
 
@@ -30,17 +32,59 @@ namespace
 		return pb::MainTable;
 	}
 
+	std::string table_key()
+	{
+		std::string key = pb::DatFileName;
+		auto slash = key.find_last_of("/\\");
+		if (slash != std::string::npos)
+			key = key.substr(slash + 1);
+		std::transform(key.begin(), key.end(), key.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+		return key;
+	}
+
 	// Real value from the table's original rule table when known (Alien Daze), else a placeholder per component type
 	int recovered_points(TPinballComponent* caller)
 	{
 		if (!caller->GroupName)
 			return -1;
-		std::string table = pb::DatFileName;
-		std::transform(table.begin(), table.end(), table.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+		auto table = table_key();
 		for (auto& entry : ft2_scores)
 			if (table == entry.Table && strcmp(caller->GroupName, entry.Component) == 0)
 				return entry.Scores.empty() ? -1 : entry.Scores[0];
 		return -1;
+	}
+
+	// The table's own sound for this component (its "waveNN" sound object), as the original rules play it
+	void play_component_sound(TPinballComponent* caller)
+	{
+		static std::map<const TPinballComponent*, TSound*> cache;
+		static TPinballTable* cacheTable = nullptr;
+		auto t = table();
+		if (cacheTable != t)
+		{
+			cache.clear();
+			cacheTable = t;
+		}
+		auto found = cache.find(caller);
+		if (found == cache.end())
+		{
+			TSound* sound = nullptr;
+			if (caller->GroupName)
+			{
+				auto key = table_key();
+				for (auto& entry : ft2_sounds)
+					if (key == entry.Table && strcmp(caller->GroupName, entry.Component) == 0)
+					{
+						for (auto component : t->ComponentList)
+							if (component->GroupName && strcmp(component->GroupName, entry.Wave) == 0)
+								sound = dynamic_cast<TSound*>(component);
+						break;
+					}
+			}
+			found = cache.emplace(caller, sound).first;
+		}
+		if (found->second)
+			found->second->Play(caller, caller->GroupName);
 	}
 
 	int points_for(TPinballComponent* caller)
@@ -112,11 +156,18 @@ void ft2_control::handler(MessageCode code, TPinballComponent* caller)
 		return;
 	}
 
+	if (code == MessageCode::PlungerInputReleased && dynamic_cast<TPlunger*>(caller))
+	{
+		play_component_sound(caller);
+		return;
+	}
+
 	if (code != MessageCode::ControlCollision)
 		return;
 
 	if (!t->TiltLockFlag)
 	{
+		play_component_sound(caller);
 		auto points = points_for(caller);
 		if (points)
 			t->AddScore(points);

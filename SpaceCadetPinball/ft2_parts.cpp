@@ -14,8 +14,13 @@ TFT2RampExit::TFT2RampExit(TPinballTable* table, int groupIndex) : TCollisionCom
 	TargetGroup = 1 << static_cast<int>(floor(arr[0]));
 	BallOffset = arr[7];
 	vector2 a{arr[3], arr[4]}, b{arr[5], arr[6]};
-	// The ball may arrive on any other layer and from either side: a line each way, on every layer but the target
-	auto layers = 0xFFFF & ~TargetGroup;
+	// 1301 = target layer, source layer, point count, two points, ball offset (as Space Cadet's ramp exits).
+	// The line only exists on the source layer, from either side. Putting it on every layer also caught balls
+	// rolling on the main playfield and moved them to a ramp layer with no floor, so they fell off the table.
+	auto source = static_cast<int>(floor(arr[1]));
+	int layers = 1 << source;
+	if (source == static_cast<int>(floor(arr[0])) || source < 0 || source > 15)
+		layers = 0xFFFE & ~TargetGroup;
 	for (auto pts : {std::make_pair(a, b), std::make_pair(b, a)})
 	{
 		auto line = new TLine(this, &ActiveFlag, layers, pts.first, pts.second);
