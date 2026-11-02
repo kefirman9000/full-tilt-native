@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <set>
 #include <string>
 #include <vector>
 #include <cctype>
@@ -194,12 +195,47 @@ static void ImportAddiction(const fs::path& installDir, const fs::path& tablesDi
 // Marble Drop (Maxis South, 1997) is built on the same engine: all its .DAT files (core art and 150 level files) are
 // PARTOUT files too, so without this check each level would become a table card. They are not tables. The install
 // is stored in tables\_MarbleDrop (no card); the engine reads its marbles from there as ball styles.
+// The install is recognised by its core art files (COREA.DAT / COREB.DAT, the files the engine reads the marbles
+// from), not by the header text alone: matching one exact AppName string missed real installs, and then every
+// level file became its own table card and the table library broke.
+static bool HasMarbleDropCore(const fs::path& dir)
+{
+	std::error_code ec;
+	if (dir.empty() || !fs::is_directory(dir, ec))
+		return false;
+	for (auto& entry : fs::directory_iterator(dir, fs::directory_options::skip_permission_denied, ec))
+	{
+		auto name = Upper(entry.path().filename().string());
+		if (name == "COREA.DAT" || name == "COREB.DAT")
+			return true;
+	}
+	return false;
+}
+
+// Folder that holds COREA/COREB for a Marble Drop file (its own folder or the one above, for level subfolders)
+static fs::path MarbleDropRoot(const fs::path& file)
+{
+	auto dir = file.parent_path();
+	if (HasMarbleDropCore(dir))
+		return dir;
+	if (HasMarbleDropCore(dir.parent_path()))
+		return dir.parent_path();
+	return {};
+}
+
 static bool IsMarbleDropData(const fs::path& file)
 {
+	// PARTOUT header: signature (21 bytes), AppName (50), Description (100)
 	std::ifstream in(file, std::ios::binary);
-	char header[21 + 50]{};
+	char header[21 + 50 + 100]{};
 	in.read(header, sizeof header);
-	return std::strncmp(header, "PARTOUT", 7) == 0 && std::strncmp(header + 21, "Marble Drop", 11) == 0;
+	if (std::strncmp(header, "PARTOUT", 7) != 0)
+		return false;
+	std::string text(header + 21, sizeof header - 21);
+	std::replace(text.begin(), text.end(), '\0', ' ');
+	if (Upper(text).find("MARBLE") != std::string::npos)
+		return true;
+	return !MarbleDropRoot(file).empty();
 }
 
 static void ImportMarbleDrop(const fs::path& installDir, const fs::path& tablesDir, std::string& report, int& imported)
@@ -234,7 +270,8 @@ static int ImportGameFiles(const fs::path& dropDir, const fs::path& tablesDir, s
 		auto datName = Upper(dat.filename().string());
 		if (IsMarbleDropData(dat))
 		{
-			ImportMarbleDrop(dat.parent_path(), tablesDir, report, imported);
+			auto root = MarbleDropRoot(dat);
+			ImportMarbleDrop(root.empty() ? dat.parent_path() : root, tablesDir, report, imported);
 			continue;
 		}
 		if (datName == "DEMO.DAT" || !IsTableData(dat))
@@ -508,10 +545,28 @@ int main(int, char**)
 				SDL_DestroyTexture(t.Texture);
 		tables.clear();
 		std::error_code ec;
+		// Marble Drop file names, to hide level "tables" an earlier version imported by mistake (they are only copies
+		// the importer made; nothing is deleted)
+		std::set<std::string> marbleFiles;
+		auto marbleStore = tablesDir / "_MarbleDrop";
+		if (fs::exists(marbleStore, ec))
+			for (auto it = fs::recursive_directory_iterator(marbleStore, fs::directory_options::skip_permission_denied, ec);
+			     it != fs::recursive_directory_iterator(); it.increment(ec))
+				if (!ec && it->is_regular_file(ec))
+					marbleFiles.insert(Upper(it->path().filename().string()));
 		if (fs::exists(tablesDir, ec))
 			for (auto& entry : fs::directory_iterator(tablesDir, ec))
 				if (entry.is_directory(ec) && entry.path().filename().string()[0] != '_')
-					tables.push_back(ReadTable(entry.path()));
+				{
+					auto t = ReadTable(entry.path());
+					bool knownTable = false;
+					for (auto& k : KnownTables)
+						knownTable |= Upper(t.Data) == k.Dat;
+					if (!knownTable && t.DataFound &&
+						(marbleFiles.count(Upper(t.Data)) || IsMarbleDropData(t.Folder / t.Data)))
+						continue;
+					tables.push_back(t);
+				}
 		for (auto& t : tables)
 			for (auto& k : KnownTables)
 				if (Upper(t.Data) == k.Dat)
@@ -654,8 +709,14 @@ int main(int, char**)
 		ImGui::SameLine();
 		if (ImGui::Button("Report a problem"))
 			importReport = MakeProblemReport(basePath, tables);
-		ImGui::SameLine();
-		ImGui::TextDisabled("Drop game folders in, they get sorted.");
+		{
+			// Keep the hint on the button row only when it fits; otherwise it ran off the window edge
+			const char* hint = "Drop game folders in, they get sorted.";
+			ImGui::SameLine();
+			if (ImGui::GetContentRegionAvail().x < ImGui::CalcTextSize(hint).x)
+				ImGui::NewLine();
+			ImGui::TextDisabled("%s", hint);
+		}
 		if (!importReport.empty())
 			ImGui::TextColored({0.55f, 0.85f, 0.55f, 1}, "%s", importReport.c_str());
 		if (!message.empty())
@@ -687,6 +748,8 @@ int main(int, char**)
 		}
 		imgH = std::max(imgH, 60.0f);
 		float cardW = imgH * 4 / 3;
+		// Cards live in their own scrolling area so a big library can never push the footer off the window
+		ImGui::BeginChild("cards", {0, std::max(availH, 80.0f)}, false);
 		for (size_t i = 0; i < tables.size(); i++)
 		{
 			auto& t = tables[i];
@@ -738,6 +801,7 @@ int main(int, char**)
 			ImGui::PopID();
 			ImGui::EndGroup();
 		}
+		ImGui::EndChild();
 
 		ImGui::Spacing();
 		ImGui::Separator();

@@ -7,6 +7,10 @@
 **Game data is not included.** Copy your original game folders into `Put game files here` and start `FullTiltPinball.exe`: tables are found and sorted automatically.
 
 **Fixes in 0.8.3**
+- **Table library no longer breaks after adding Marble Drop**: its level files could each become a table card,
+  shrinking the library to a column of tiny cards that ran off the window. Marble Drop is now recognised by its
+  install (COREA.DAT / COREB.DAT), level cards left by an earlier scan are hidden, and the cards scroll instead of
+  pushing the footer off screen.
 - **Glow only on lights**: Options > Graphics > Glow now blooms lit lights, lane lights and bumper caps only.
   Flippers and the ball (shiny chrome) no longer glow.
 - **No more stall when turning music on**: starting MIDI opens Windows' synth, which could freeze the game for up
