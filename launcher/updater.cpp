@@ -13,6 +13,7 @@
 #endif
 #include <windows.h>
 #include <winhttp.h>
+#include <tlhelp32.h>
 #endif
 
 #ifndef FTN_VERSION
@@ -337,6 +338,69 @@ namespace updater
 		return true;
 #else
 		(void)appDir;
+		return false;
+#endif
+	}
+
+	int CloseRunningPrograms(const fs::path& appDir, const std::string& except)
+	{
+		int closed = 0;
+#ifdef _WIN32
+		HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+		if (snapshot == INVALID_HANDLE_VALUE)
+			return 0;
+		PROCESSENTRY32W entry{};
+		entry.dwSize = sizeof entry;
+		std::error_code ec;
+		auto dir = fs::weakly_canonical(appDir, ec);
+		for (BOOL ok = Process32FirstW(snapshot, &entry); ok; ok = Process32NextW(snapshot, &entry))
+		{
+			std::wstring name = entry.szExeFile;
+			if (_wcsicmp(name.c_str(), L"FullTiltPinball.exe") != 0 && _wcsicmp(name.c_str(), L"FullTiltEngine.exe") != 0)
+				continue;
+			if (!except.empty() && _wcsicmp(name.c_str(), Wide(except).c_str()) == 0)
+				continue;
+			HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE | SYNCHRONIZE, FALSE,
+			                             entry.th32ProcessID);
+			if (!process)
+				continue;
+			wchar_t path[MAX_PATH * 2];
+			DWORD size = MAX_PATH * 2;
+			if (QueryFullProcessImageNameW(process, 0, path, &size) &&
+				fs::weakly_canonical(fs::path(path).parent_path(), ec) == dir)
+			{
+				ftlog::Line("Updater: closing " + fs::path(path).filename().string());
+				TerminateProcess(process, 0);
+				WaitForSingleObject(process, 5000);
+				closed++;
+			}
+			CloseHandle(process);
+		}
+		CloseHandle(snapshot);
+#else
+		(void)appDir;
+		(void)except;
+#endif
+		return closed;
+	}
+
+	bool StartProgram(const fs::path& appDir, const std::string& exeName, const std::string& args)
+	{
+#ifdef _WIN32
+		auto exe = (appDir / exeName).wstring();
+		std::wstring cmd = L"\"" + exe + L"\"" + (args.empty() ? L"" : L" " + Wide(args));
+		STARTUPINFOW si{};
+		si.cb = sizeof si;
+		PROCESS_INFORMATION pi{};
+		if (!CreateProcessW(nullptr, &cmd[0], nullptr, nullptr, FALSE, 0, nullptr, appDir.wstring().c_str(), &si, &pi))
+			return false;
+		CloseHandle(pi.hThread);
+		CloseHandle(pi.hProcess);
+		return true;
+#else
+		(void)appDir;
+		(void)exeName;
+		(void)args;
 		return false;
 #endif
 	}

@@ -7,16 +7,18 @@
 **Game data is not included.** Copy your original game folders into `Put game files here` and start `FullTiltPinball.exe`: tables are found and sorted automatically.
 
 **New in this version**
-- One window: picking a table swaps the library for the game in the same spot; **Game > Back to Table Library** (or F12) brings the library back where the game was
-- All flippers work on every table (Alien Daze's lower flippers, Captain Hero's extra left flippers...)
-- **Options > Flipper Keys**: Z and / (your key settings), Left/Right Shift, or both - every flipper follows it
-- **Options > Ball**: pick one of the table's own ball styles (Captain Hero and Mad Scientist: quake, scientist, myst, slime, elastic, evil twin)
-- Alien Daze: the ray-gun shooter now always fires the ball up the shooter lane onto the playfield (a quick tap used to roll back or drain)
-- From v0.3.0: per-table high scores on the cards, table MIDI music and `Music` folders for CD audio
+- All six Full Tilt tables play: Captain Hero's shot now makes it up the downtown ramp, Skulduggery's cannon fires
+  (and no longer crashes on start), Dragon's Keep launches
+- Stronger flippers on Full Tilt 2 tables (they were about a third of Space Cadet's power balance) + **Options > Flipper Power**
+- Alien Daze: full launches can reach the top-left spiral (the hidden Bigfoot targets no longer block the lane)
+- Resting ball at the plunger no longer jitters; Full Tilt 1 tables use the real ball (smiley face is now a Ball option)
+- Smoother graphics: frame interpolation, up to 480 FPS (Options > Graphics)
+- **FullTiltUpdate.exe** in the folder: closes the game, updates, reopens the launcher (Update now uses it too)
+- Launcher fits on one screen, any number of tables
+- Addiction Pinball (Worms, World Rally Fever) is recognised in "Put game files here" and listed (not playable yet)
 
 **Status**
-- Alien Daze, Mad Scientist: playable with simple placeholder rules (points, 3 balls, game over)
+- Alien Daze, Captain Hero, Mad Scientist, Dragon's Keep, Skulduggery: playable with simple placeholder rules
 - Space Cadet: full original rules
-- Captain Hero, Dragon's Keep, Skulduggery: work in progress
 
 If you enjoy this project, you can support it through [GitHub Sponsors](https://github.com/sponsors/kefirman9000).

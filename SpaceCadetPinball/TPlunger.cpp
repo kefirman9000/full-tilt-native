@@ -29,18 +29,18 @@ TPlunger::TPlunger(TPinballTable* table, int groupIndex) : TCollisionComponent(t
     {
         MaxPullback = 50;
         // FT2 tables give the plunger strength in attribute 402 (500..1000; their world is ~10x Cadet's)
-        if (pb::FT2FullScreen)
+        if (pb::FT2Table)
         {
             auto strength = loader::query_float_attribute(groupIndex, 0, 402);
             if (strength)
                 MaxPullback = strength[0];
         }
-        PullbackIncrement = MaxPullback / (ListBitmap->size() * 8.0f);
+        PullbackIncrement = MaxPullback / ((ListBitmap ? ListBitmap->size() : 8) * 8.0f);
     }
     else
     {
         MaxPullback = 100;
-        PullbackIncrement = std::floor(MaxPullback / (ListBitmap->size() * 8.0f));
+        PullbackIncrement = std::floor(MaxPullback / ((ListBitmap ? ListBitmap->size() : 8) * 8.0f));
     }
 
 	Elasticity = 0.5f;
@@ -50,7 +50,7 @@ TPlunger::TPlunger(TPinballTable* table, int groupIndex) : TCollisionComponent(t
 	float* floatArr = loader::query_float_attribute(groupIndex, 0, 601);
 	table->PlungerPosition = {floatArr[0], floatArr[1]};
 
-	if (pb::FT2FullScreen)
+	if (DirectLaunch())
 	{
 		// Plunger shape (attribute 600: count, then x/y pairs): center and size, used by FT2Launch
 		auto wall = loader::query_float_attribute(groupIndex, 0, 600);
@@ -70,6 +70,12 @@ TPlunger::TPlunger(TPinballTable* table, int groupIndex) : TCollisionComponent(t
 			FT2Reach = std::max(maxX - minX, maxY - minY);
 		}
 	}
+}
+
+// FT2 tables and picture-less launchers (Skulduggery's cannon) push the ball directly on release, see FT2Launch
+bool TPlunger::DirectLaunch() const
+{
+	return pb::FT2FullScreen || (pb::FT2Table && !ListBitmap);
 }
 
 void TPlunger::FT2Launch()
@@ -130,11 +136,22 @@ void TPlunger::Collision(TBall* ball, vector2* nextPosition, vector2* direction,
 	{
 		auto boost = RandFloat() * Boost * 0.1f + Boost;
 		maths::basic_collision(ball, nextPosition, direction, Elasticity, Smoothness, Threshold, boost);
+		// FT2 tables (10x Space Cadet's scale): a ball resting on the plunger bounced a little every frame, which showed
+		// as jitter. While it is just resting, stop it dead.
+		if (DirectLaunch() && Threshold >= 1e9f && ball->Speed < ball->Radius * 2.0f)
+		{
+			ball->Speed = 0.0f;
+			ball->Direction.X = ball->Direction.Y = 0.0f;
+		}
 	}
 }
 
 int TPlunger::Message(MessageCode code, float value)
 {
+	if (pb::FT2Table && getenv("FT2_DEBUG") &&
+		code != MessageCode::PlungerFeedBall)
+		fprintf(stderr, "FT2DBG plunger msg %d boost %.1f started %d counter %d balls %d\n", static_cast<int>(code), Boost,
+		        PullbackStartedFlag, SomeCounter, PinballTable->MultiballCount);
 	switch (code)
 	{
 	case MessageCode::PlungerInputPressed:
@@ -204,7 +221,7 @@ int TPlunger::Message(MessageCode code, float value)
 				timer::kill(PullbackTimer_);
 			PullbackTimer_ = 0;
 			loader::play_sound(SoundIndexP2, this, "TPlunger3");
-			if (pb::FT2FullScreen)
+			if (DirectLaunch())
 				FT2Launch();
 			SpriteSet(0);
 			timer::set(PullbackDelay, this, ReleasedTimer);
@@ -259,6 +276,8 @@ void TPlunger::PullbackTimer(int timerId, void* caller)
 		plunger->Boost = plunger->MaxPullback;
 	}
 
+	if (!plunger->ListBitmap) // launchers without a plunger picture (Skulduggery's cannon)
+		return;
 	int index = static_cast<int>(floor(
 		static_cast<float>(plunger->ListBitmap->size() - 1) *
 		(plunger->Boost / plunger->MaxPullback)));

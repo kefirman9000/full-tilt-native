@@ -241,11 +241,29 @@ add_executable(FullTiltLauncher
 set_target_properties(FullTiltLauncher PROPERTIES CXX_STANDARD 17 OUTPUT_NAME FullTiltPinball)
 target_include_directories(FullTiltLauncher PRIVATE SpaceCadetPinball)
 target_link_libraries(FullTiltLauncher ${SDL2_LIBRARY})
+# Stand-alone updater (FullTiltUpdate.exe) that sits in the game folder
+add_executable(FullTiltUpdate
+        launcher/update_tool.cpp
+        launcher/updater.cpp
+        SpaceCadetPinball/ft_log.cpp
+        SpaceCadetPinball/imgui.cpp
+        SpaceCadetPinball/imgui_draw.cpp
+        SpaceCadetPinball/imgui_tables.cpp
+        SpaceCadetPinball/imgui_widgets.cpp
+        SpaceCadetPinball/imgui_impl_sdl.cpp
+        SpaceCadetPinball/imgui_impl_sdlrenderer.cpp)
+set_target_properties(FullTiltUpdate PROPERTIES CXX_STANDARD 17)
+target_include_directories(FullTiltUpdate PRIVATE SpaceCadetPinball)
+target_link_libraries(FullTiltUpdate ${SDL2_LIBRARY})
+
 set(FTN_VERSION "dev" CACHE STRING "Full Tilt Native version shown in the launcher and used by the updater")
 target_compile_definitions(FullTiltLauncher PRIVATE FTN_VERSION="${FTN_VERSION}")
+target_compile_definitions(FullTiltUpdate PRIVATE FTN_VERSION="${FTN_VERSION}")
 if(WIN32)
     set_target_properties(FullTiltLauncher PROPERTIES WIN32_EXECUTABLE TRUE)
     target_link_libraries(FullTiltLauncher winhttp)
+    set_target_properties(FullTiltUpdate PROPERTIES WIN32_EXECUTABLE TRUE)
+    target_link_libraries(FullTiltUpdate winhttp)
 endif()
 
 # On Windows, copy DLL to output

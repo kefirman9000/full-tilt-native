@@ -37,7 +37,7 @@ static pid_t RunningGame = 0;
 
 struct Table
 {
-	std::string Name, Game, Data, Args, Preview, Status;
+	std::string Name, Game, Data, Args, Preview, Status, Engine;
 	int Order = 100;
 	fs::path Folder;
 	SDL_Texture* Texture = nullptr;
@@ -73,6 +73,7 @@ static Table ReadTable(const fs::path& folder)
 		else if (key == "Preview") t.Preview = value;
 		else if (key == "Status") t.Status = value;
 		else if (key == "Order") t.Order = std::atoi(value.c_str());
+		else if (key == "Engine") t.Engine = value;
 	}
 	if (t.Data.empty())
 		for (auto& entry : fs::directory_iterator(folder))
@@ -106,11 +107,11 @@ struct KnownTable
 static const KnownTable KnownTables[] =
 {
 	{"ALIEN.DAT", "Alien", "Alien Daze", "Full Tilt! 2", "Playable - simple rules", true, 10},
-	{"HERO.DAT", "Hero", "Captain Hero", "Full Tilt! 2", "Work in progress - launch rolls back", true, 20},
+	{"HERO.DAT", "Hero", "Captain Hero", "Full Tilt! 2", "Playable - simple rules", true, 20},
 	{"MAD.DAT", "Mad", "Mad Scientist", "Full Tilt! 2", "Playable - simple rules", true, 30},
 	{"CADET.DAT", "SpaceCadet", "Space Cadet", "Full Tilt! Pinball", "Playable - full original rules", false, 40},
-	{"DRAGON.DAT", "DragonsKeep", "Dragon's Keep", "Full Tilt! Pinball", "Work in progress - ball won't launch", true, 50},
-	{"PIRATES.DAT", "Skulduggery", "Skulduggery", "Full Tilt! Pinball", "Work in progress - may freeze on load", true, 60},
+	{"DRAGON.DAT", "DragonsKeep", "Dragon's Keep", "Full Tilt! Pinball", "Playable - simple rules", true, 50},
+	{"PIRATES.DAT", "Skulduggery", "Skulduggery", "Full Tilt! Pinball", "Playable - simple rules", true, 60},
 	{"PINBALL.DAT", "SpaceCadetWindows", "3D Pinball Space Cadet", "Windows XP Pinball", "Playable - full original rules", false, 45},
 };
 
@@ -149,6 +150,47 @@ static void CopyIcon(const fs::path& from, const fs::path& to)
 	out.write(data.data(), static_cast<std::streamsize>(data.size()));
 }
 
+
+// Addiction Pinball (Team17, 1998): its own engine and table format (LZPK-packed "table.dat" in Worms\ and Rally\).
+// It can't run on the Full Tilt engine yet; the install is stored in tables\_AddictionPinball and each table gets a card
+// (and a Music folder for its CD tracks) so it's ready when its engine is added.
+static bool IsAddictionTable(const fs::path& file)
+{
+	std::ifstream in(file, std::ios::binary);
+	char header[5]{};
+	in.read(header, 4);
+	return std::strncmp(header, "LZPK", 4) == 0;
+}
+
+static void ImportAddiction(const fs::path& installDir, const fs::path& tablesDir, std::string& report, int& imported)
+{
+	std::error_code ec;
+	auto store = tablesDir / "_AddictionPinball";
+	if (!fs::exists(store / "Pinball.exe", ec))
+	{
+		fs::copy(installDir, store, fs::copy_options::recursive | fs::copy_options::skip_existing, ec);
+		report += (report.empty() ? "" : ", ") + std::string("Addiction Pinball");
+		imported++;
+	}
+	struct { const char* folder; const char* sub; const char* name; int order; } addictionTables[] =
+	{
+		{"AddictionWorms", "Worms", "Worms Pinball", 200},
+		{"AddictionRally", "Rally", "World Rally Fever", 210},
+	};
+	for (auto& a : addictionTables)
+	{
+		if (!fs::exists(store / a.sub / "table.dat", ec))
+			continue;
+		auto folder = tablesDir / a.folder;
+		if (fs::exists(folder / "table.ini", ec))
+			continue;
+		fs::create_directories(folder, ec);
+		std::ofstream ini(folder / "table.ini");
+		ini << "[Table]\nName=" << a.name << "\nGame=Addiction Pinball\nData=../_AddictionPinball/" << a.sub
+			<< "/table.dat\nEngine=addiction\nStatus=Not playable yet - needs its own engine\nOrder=" << a.order << "\n";
+	}
+}
+
 static int ImportGameFiles(const fs::path& dropDir, const fs::path& tablesDir, std::string& report)
 {
 	std::error_code ec;
@@ -161,6 +203,11 @@ static int ImportGameFiles(const fs::path& dropDir, const fs::path& tablesDir, s
 		if (ec || !it->is_regular_file(ec) || Upper(it->path().extension().string()) != ".DAT")
 			continue;
 		auto dat = it->path();
+		if (Upper(dat.filename().string()) == "TABLE.DAT" && IsAddictionTable(dat))
+		{
+			ImportAddiction(dat.parent_path().parent_path(), tablesDir, report, imported);
+			continue;
+		}
 		auto datName = Upper(dat.filename().string());
 		if (datName == "DEMO.DAT" || !IsTableData(dat))
 			continue;
@@ -310,6 +357,8 @@ static bool GameJustClosed()
 static std::string Launch(const fs::path& exe, const Table& t, const std::string& windowSpot)
 {
 	ftlog::Line("Launching " + t.Name + " in " + t.Folder.string() + ": " + exe.string() + " " + t.Args);
+	if (t.Engine == "addiction")
+		return t.Name + " can't be played yet: Addiction Pinball needs its own engine (planned). Its files are stored and ready.";
 	if (!fs::exists(exe))
 		return "Game program not found: " + exe.string();
 	if (!t.DataFound)
@@ -389,8 +438,12 @@ int main(int, char**)
 		std::error_code ec;
 		if (fs::exists(tablesDir, ec))
 			for (auto& entry : fs::directory_iterator(tablesDir, ec))
-				if (entry.is_directory(ec))
+				if (entry.is_directory(ec) && entry.path().filename().string()[0] != '_')
 					tables.push_back(ReadTable(entry.path()));
+		for (auto& t : tables)
+			for (auto& k : KnownTables)
+				if (Upper(t.Data) == k.Dat)
+					t.Status = k.Status; // status follows the program version, not the table.ini written at import
 		std::sort(tables.begin(), tables.end(), [](const Table& a, const Table& b)
 		{
 			return a.Order != b.Order ? a.Order < b.Order : a.Name < b.Name;
@@ -480,7 +533,7 @@ int main(int, char**)
 		ImGui::SetNextWindowPos({0, 0});
 		ImGui::SetNextWindowSize({static_cast<float>(w), static_cast<float>(h)});
 		ImGui::Begin("library", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
-		             ImGuiWindowFlags_NoBringToFrontOnFocus);
+		             ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
 		ImGui::SetWindowFontScale(1.6f);
 		ImGui::TextColored({1.0f, 0.82f, 0.3f, 1}, "FULL TILT! PINBALL");
@@ -498,7 +551,13 @@ int main(int, char**)
 				                   updater::CurrentVersion);
 				ImGui::SameLine();
 				if (ImGui::Button("Update now"))
-					updater::InstallAsync(basePath);
+				{
+					// The stand-alone updater closes us and the game so every file can be replaced, then reopens us
+					if (updater::StartProgram(basePath, "FullTiltUpdate.exe", "--now"))
+						running = false;
+					else
+						updater::InstallAsync(basePath);
+				}
 				ImGui::SameLine();
 				if (ImGui::Button("Later"))
 					dismissed = true;
@@ -532,13 +591,26 @@ int main(int, char**)
 		ImGui::Separator();
 		ImGui::Spacing();
 
-		// Size the cards so every table fits on screen without scrolling
-		int columns = 3;
-		int rows = std::max(1, static_cast<int>((tables.size() + columns - 1) / columns));
-		float textH = ImGui::GetTextLineHeightWithSpacing() * 3 + 16;
-		float availH = h - ImGui::GetCursorPosY() - ImGui::GetTextLineHeightWithSpacing() * 2 - 20;
-		float imgH = std::min((availH / rows) - textH, (w - 48 - 24 * (columns - 1)) / static_cast<float>(columns) * 0.75f - 8);
-		imgH = std::max(imgH, 90.0f);
+		// Size the cards so every table fits on screen without scrolling: try 1-5 columns, keep the biggest cards
+		float textH = ImGui::GetTextLineHeightWithSpacing() * 3 + 20;
+		float footerH = ImGui::GetTextLineHeightWithSpacing() * 2 + 24;
+		float availH = h - ImGui::GetCursorPosY() - footerH;
+		float availW = w - 48.0f;
+		int columns = 1;
+		float imgH = 0;
+		for (int c = 1; c <= 5; c++)
+		{
+			int r = std::max(1, static_cast<int>((tables.size() + c - 1) / c));
+			float byHeight = availH / r - textH;
+			float byWidth = (availW - 24.0f * (c - 1)) / c * 0.75f - 8;
+			float candidate = std::min(byHeight, byWidth);
+			if (candidate > imgH)
+			{
+				imgH = candidate;
+				columns = c;
+			}
+		}
+		imgH = std::max(imgH, 60.0f);
 		float cardW = imgH * 4 / 3;
 		for (size_t i = 0; i < tables.size(); i++)
 		{
@@ -594,7 +666,7 @@ int main(int, char**)
 
 		ImGui::Spacing();
 		ImGui::Separator();
-		ImGui::TextDisabled("In a table: F2 new game, Space plunger, Z / slash or Left/Right Shift flippers, X . Up nudge, F3 pause, F4 fullscreen.");
+		ImGui::TextDisabled("F2 new game  Space plunger  Z / or Shift flippers  F3 pause  F4 fullscreen  F12 back here");
 		{
 			auto update = updater::Get();
 			ImGui::TextDisabled("Version %s", updater::CurrentVersion);
@@ -611,7 +683,7 @@ int main(int, char**)
 					ImGui::TextDisabled("%s", update.message.c_str());
 			}
 			ImGui::SameLine();
-			ImGui::TextDisabled("| Problems? Send FullTiltPinball.log / FullTiltEngine.log from this folder.");
+			ImGui::TextDisabled("| Problems? Send the .log files");
 		}
 		ImGui::End();
 

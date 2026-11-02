@@ -45,7 +45,7 @@ jobs:
           $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } elseif ("${{ inputs.version }}") { "${{ inputs.version }}" } else { "dev-$($env:GITHUB_SHA.Substring(0,7))" }
           $out = "FullTiltNative"
           New-Item -ItemType Directory -Force -Path $out | Out-Null
-          Copy-Item bin/Release/FullTiltPinball.exe, bin/Release/FullTiltEngine.exe, bin/Release/SDL2.dll, bin/Release/SDL2_mixer.dll $out
+          Copy-Item bin/Release/FullTiltPinball.exe, bin/Release/FullTiltEngine.exe, bin/Release/FullTiltUpdate.exe, bin/Release/SDL2.dll, bin/Release/SDL2_mixer.dll $out
           Copy-Item dist/README.txt $out
           New-Item -ItemType Directory -Force -Path "$out/Put game files here", "$out/tables" | Out-Null
           Copy-Item dist/DROP_README.txt "$out/Put game files here/README.txt"

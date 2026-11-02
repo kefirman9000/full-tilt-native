@@ -1,4 +1,5 @@
 #include "pch.h"
+#include "pb.h"
 #include "TPopupTarget.h"
 
 
@@ -12,6 +13,13 @@ TPopupTarget::TPopupTarget(TPinballTable* table, int groupIndex) : TCollisionCom
 {
 	Timer = 0;
 	TimerTime = *loader::query_float_attribute(groupIndex, 0, 407);
+	if (pb::FT2Table)
+	{
+		auto mode = loader::query_float_attribute(groupIndex, 0, 1800);
+		HiddenUntilMode = mode && mode[0] > 0.0f;
+		if (HiddenUntilMode)
+			Message(MessageCode::TPopupTargetDisable, 0.0f);
+	}
 }
 
 int TPopupTarget::Message(MessageCode code, float value)
@@ -43,6 +51,8 @@ int TPopupTarget::Message(MessageCode code, float value)
 			if (Timer)
 				timer::kill(Timer);
 			TimerExpired(0, this);
+			if (HiddenUntilMode)
+				Message(MessageCode::TPopupTargetDisable, 0.0f); // stays down until the table's rules raise it
 			break;
 		}
 	default:

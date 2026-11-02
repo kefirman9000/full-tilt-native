@@ -1129,6 +1129,8 @@ void control::UnstuckBall(TBall& ball, int dt)
 		                                 static_cast<TCollisionComponent*>(TableG->Plunger)})
 			if (cmp && CheckBallInControlBounds(ball, *cmp))
 				return;
+		if (getenv("FT2_DEBUG"))
+			fprintf(stderr, "FT2DBG unstuck ball at %.2f %.2f counter %d\n", ball.Position.X, ball.Position.Y, ball.StuckCounter);
 		if (ball.StuckCounter <= 20 || !TableG->Plunger)
 		{
 			// "Up the table" is -Y in Space Cadet-style tables and +Y in FT2 full-screen tables
@@ -1163,7 +1165,9 @@ void control::UnstuckBall(TBall& ball, int dt)
 
 bool control::CheckBallInControlBounds(const TBall& ball, const TCollisionComponent& cmp)
 {
-	auto offset = TableG->CollisionCompOffset / 2.0f;
+	// Other tables: a ball resting on a thin launcher (Skulduggery's cannon is just a line) sits a full radius away
+	// from it, so allow a wider margin or the resting ball counts as stuck and gets re-served.
+	auto offset = TableG->CollisionCompOffset * (pb::FT2Table ? 2.5f : 0.5f);
 	return ball.ActiveFlag &&
 		ball.Position.X >= cmp.AABB.XMin - offset &&
 		ball.Position.X <= cmp.AABB.XMax + offset &&

@@ -1,4 +1,5 @@
 #include "pch.h"
+#include "pb.h"
 #include "TGate.h"
 
 
@@ -15,6 +16,7 @@ TGate::TGate(TPinballTable* table, int groupIndex) : TCollisionComponent(table, 
 	SoundIndex3 = visual.SoundIndex3;
 	ActiveFlag = 1;
 	SpriteSet(0);
+	Message(MessageCode::Reset, 0.0f);
 	control::handler(MessageCode::Reset, this);
 }
 
@@ -28,6 +30,17 @@ int TGate::Message(MessageCode code, float value)
 		loader::play_sound(SoundIndex3, this, "TGate1");
 		break;
 	case MessageCode::Reset:
+		// FT2 sandbox: diverter pairs ("..._launch" / "..._return", Captain Hero's shooter ramp) are switched by the table
+		// rules; with both up the shot can't pass. Until the rules exist the "return" side starts down.
+		if (pb::FT2Table && GroupName && strstr(GroupName, "_return"))
+		{
+			ActiveFlag = 0;
+			SpriteSet(-1);
+			break;
+		}
+		ActiveFlag = 1;
+		SpriteSet(0);
+		break;
 	case MessageCode::TGateEnable:
 		ActiveFlag = 1;
 		SpriteSet(0);

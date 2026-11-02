@@ -1,4 +1,5 @@
 #include "pch.h"
+#include "options.h"
 #include "TFlipperEdge.h"
 
 
@@ -118,6 +119,14 @@ float TFlipperEdge::FindCollisionDistance(const ray_type& ray)
 	return distance;
 }
 
+// Flipper kick scale. Space Cadet's formula ignores the table's size, so on FT2 tables (10x the scale) flippers kicked at
+// about a third of Space Cadet's flipper-to-plunger balance; 3x restores it. Options > Flipper Power adjusts on top.
+float TFlipperEdge::PowerScale()
+{
+	float scale = pb::FT2FullScreen ? 3.0f : 1.0f;
+	return scale * static_cast<float>(options::Options.FlipperPower.V) / 100.0f;
+}
+
 void TFlipperEdge::EdgeCollision(TBall* ball, float distance)
 {
 	if (FlipperFlag == MessageCode::TFlipperNull)
@@ -169,7 +178,7 @@ void TFlipperEdge::EdgeCollision(TBall* ball, float distance)
 			auto v21 = std::fabs(MoveSpeed) * std::sqrt(distanceSq / DistanceDivSq);
 			auto dot1 = maths::DotProduct(CollisionLinePerp, CollisionDirection);
 			if (dot1 >= 0)
-				boost = CollisionMult * dot1 * v21;
+				boost = CollisionMult * dot1 * v21 * PowerScale();
 		}
 
 		auto threshold = boost <= 0.0f ? 1e9f : -1.0f;

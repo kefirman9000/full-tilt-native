@@ -27,6 +27,7 @@ public:
 
 	// FT2 tables: launch the ball directly on release (see TPlunger.cpp)
 	void FT2Launch();
+	bool DirectLaunch() const;
 	vector2 FT2Center{};
 	float FT2Reach{};
 	std::vector<vector2> FT2Shape;

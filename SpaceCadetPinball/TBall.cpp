@@ -45,11 +45,13 @@ TBall::TBall(TPinballTable* table, int groupIndex) : TCollisionComponent(table, 
 		Position = {floatArr[0], floatArr[1], floatArr[3]};
 	}
 
-	/*Full tilt: ball is ballN, where N[0,2] resolution*/
+	/*Full tilt: ball is ballN, where N[0,2] resolution. Some Full Tilt 1 tables also have a plain "ball" group, a
+	  smiley face; the real ball (ballN) comes first, the smiley is a ball style.*/
+	ballGroupName[4] = '0' + fullscrn::GetResolution();
 	groupIndex = loader::query_handle(ballGroupName);
 	if (groupIndex < 0)
 	{
-		ballGroupName[4] = '0' + fullscrn::GetResolution();
+		ballGroupName[4] = 0;
 		groupIndex = loader::query_handle(ballGroupName);
 	}
 
@@ -63,10 +65,17 @@ TBall::TBall(TPinballTable* table, int groupIndex) : TCollisionComponent(table, 
 
 static int BallGroup(const std::string& style)
 {
+	// "smiley" = the plain "ball" group some Full Tilt 1 tables have next to the real ballN
+	if (style == "smiley")
+	{
+		auto plain = loader::query_handle("ball");
+		auto real = loader::query_handle(("ball" + std::to_string(fullscrn::GetResolution())).c_str());
+		return plain >= 0 && real >= 0 ? plain : -1;
+	}
 	std::string name = (style.empty() ? "" : style + "_") + "ball";
-	auto group = loader::query_handle(name.c_str());
+	auto group = loader::query_handle((name + std::to_string(fullscrn::GetResolution())).c_str());
 	if (group < 0)
-		group = loader::query_handle((name + std::to_string(fullscrn::GetResolution())).c_str());
+		group = loader::query_handle(name.c_str());
 	return group;
 }
 
@@ -103,6 +112,8 @@ std::vector<std::string> TBall::AvailableStyles()
 		if (name.size() > suffix.size() && name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0)
 			styles.push_back(name.substr(0, name.size() - suffix.size()));
 	}
+	if (BallGroup("smiley") >= 0)
+		styles.push_back("smiley");
 	return styles;
 }
 

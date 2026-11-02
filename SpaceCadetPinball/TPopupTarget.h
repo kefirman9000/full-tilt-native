@@ -15,4 +15,6 @@ public:
 	int Timer;
 	float TimerTime;
 	int PlayerMessagefieldBackup[4]{};
+	// FT2: targets flagged with attribute 1800 (Alien's Bigfoot creatures) only appear during a mode; they start hidden
+	bool HiddenUntilMode = false;
 };

@@ -792,6 +792,16 @@ void winmain::RenderUi()
 						ImGui::TextDisabled("This table has no other balls");
 					ImGui::EndMenu();
 				}
+				if (ImGui::BeginMenu("Flipper Power"))
+				{
+					for (int power : {75, 100, 125, 150})
+					{
+						auto label = std::to_string(power) + "%" + (power == 100 ? " (normal)" : "");
+						if (ImGui::MenuItem(label.c_str(), nullptr, Options.FlipperPower.V == power))
+							Options.FlipperPower.V = power;
+					}
+					ImGui::EndMenu();
+				}
 				if (ImGui::BeginMenu("Flipper Keys"))
 				{
 					if (ImGui::MenuItem("Both (Z and / plus Left/Right Shift)", nullptr, Options.FlipperKeys.V == 0))

@@ -155,6 +155,7 @@ optionsStruct options::Options
 	{"Hide Cursor", false},
 	{"Flipper Keys", 0},
 	{"Ball Style", ""},
+	{"Flipper Power", 100},
 };
 
 void options::InitPrimary()
@@ -521,6 +522,7 @@ void options::PostProcessOptions()
 	if (!Options.FrameInterpolation)
 		Options.FramesPerSecond = std::min(Options.FramesPerSecond.V, Options.UpdatesPerSecond.V);
 	Options.SoundChannels = Clamp(Options.SoundChannels.V, MinSoundChannels, MaxSoundChannels);
+	Options.FlipperPower = Clamp(Options.FlipperPower.V, 50, 200);
 	Options.SoundVolume = Clamp(Options.SoundVolume.V, MinVolume, MaxVolume);
 	Options.MusicVolume = Clamp(Options.MusicVolume.V, MinVolume, MaxVolume);
 	translations::SetCurrentLanguage(Options.Language.V.c_str());

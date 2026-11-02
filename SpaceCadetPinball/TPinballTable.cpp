@@ -182,6 +182,11 @@ TPinballTable::TPinballTable(): TPinballComponent(nullptr, -1, false)
 			case 1033:
 				new TTextBox(this, groupIndex);
 				break;
+			case 1034:
+				// Full Tilt launcher without a plunger picture (Skulduggery's cannon, s_launcher1): works as the plunger
+				if (pb::FT2Table && !Plunger)
+					Plunger = new TPlunger(this, groupIndex);
+				break;
 			default:
 				continue;
 			}

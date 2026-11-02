@@ -44,10 +44,10 @@ public:
 	static void replay_timer_callback(int timerId, void* caller);
 	static void tilt_timeout(int timerId, void* caller);
 
-	TFlipper* FlipperL;
+	TFlipper* FlipperL{};
 	// Every flipper per side (FT2 tables have more than one; Alien Daze has two on each side)
 	std::vector<TFlipper*> FlippersL, FlippersR;
-	TFlipper* FlipperR;
+	TFlipper* FlipperR{};
 	scoreStruct* CurScoreStruct;
 	scoreStruct* ScoreBallcount;
 	scoreStruct* ScorePlayerNumber1;
@@ -64,8 +64,8 @@ public:
 	score_struct_super PlayerScores[4]{};
 	int PlayerCount;
 	int CurrentPlayer;
-	TPlunger* Plunger;
-	TDrain* Drain;
+	TPlunger* Plunger{};
+	TDrain* Drain{};
 	TDemo* Demo{};
 	int XOffset{};
 	int YOffset{};

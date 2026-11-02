@@ -25,4 +25,8 @@ namespace updater
 	void InstallAsync(const std::filesystem::path& appDir); // download + replace files (background)
 	void CleanupOldFiles(const std::filesystem::path& appDir); // remove *.old left by a previous update
 	bool Restart(const std::filesystem::path& appDir);   // start the new launcher
+	// Close Full Tilt programs (launcher, engine) running from appDir so their files can be replaced; returns how many
+	int CloseRunningPrograms(const std::filesystem::path& appDir, const std::string& except);
+	// Start a program from appDir with arguments; returns true if started
+	bool StartProgram(const std::filesystem::path& appDir, const std::string& exeName, const std::string& args);
 }

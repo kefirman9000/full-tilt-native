@@ -293,4 +293,5 @@ struct optionsStruct
 	BoolOption HideCursor;
 	IntOption FlipperKeys; // 0 = both, 1 = the configured keys only (Z and / by default), 2 = Left/Right Shift only
 	StringOption BallStyle; // "" = standard ball, else a ball set from the table data, e.g. "slime"
+	IntOption FlipperPower; // percent, applied on top of the table's own flipper strength
 };

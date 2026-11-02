@@ -114,6 +114,10 @@ int pb::init()
 	high_score::read();
 	auto ball = MainTable->BallList.at(0);
 	BallMaxSpeed = ball->Radius * 200.0f;
+	// FT2 plungers fire at up to 1000 (Captain Hero) while radius*200 caps the ball at 660, which cut the shot short
+	// and left it rolling back down the ramp. FT2 tables get room for their full plunger strength.
+	if (FT2FullScreen)
+		BallMaxSpeed = ball->Radius * 350.0f;
 	BallHalfRadius = ball->Radius * 0.5f;
 	BallToBallCollisionDistance = (ball->Radius + BallHalfRadius) * 2.0f;
 
