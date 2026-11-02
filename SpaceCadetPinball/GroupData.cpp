@@ -94,6 +94,11 @@ gdrv_bitmap8* GroupData::GetBitmap(int resolution) const
 	return Bitmaps[resolution];
 }
 
+gdrv_bitmap8* GroupData::GetAltBitmap(int resolution) const
+{
+	return resolution >= 0 && resolution < 3 ? AltBitmaps[resolution] : nullptr;
+}
+
 zmap_header_type* GroupData::GetZMap(int resolution) const
 {
 	return ZMaps[resolution];
@@ -158,7 +163,14 @@ void GroupData::SplitSplicedBitmap(const gdrv_bitmap8& srcBmp, gdrv_bitmap8& bmp
 
 void GroupData::SetBitmap(gdrv_bitmap8* bmp)
 {
-	assertm(Bitmaps[bmp->Resolution] == nullptr, "GroupData: bitmap override");
+	if (Bitmaps[bmp->Resolution] != nullptr && AltBitmaps[bmp->Resolution] == nullptr)
+	{
+		// Some Full Tilt 1 groups hold two pictures per resolution: Dragon's Keep and Skulduggery store a smiley face
+		// after each real ball frame (an easter egg). The first one is the real picture; keep the second as an
+		// alternate (Options > Ball > Smiley) instead of letting it replace the first.
+		AltBitmaps[bmp->Resolution] = bmp;
+		return;
+	}
 	Bitmaps[bmp->Resolution] = bmp;
 
 	auto zMap = ZMaps[bmp->Resolution];
@@ -288,6 +300,12 @@ gdrv_bitmap8* DatFile::GetBitmap(int groupIndex)
 {
 	auto group = Groups[groupIndex];
 	return group->GetBitmap(fullscrn::GetResolution());
+}
+
+gdrv_bitmap8* DatFile::GetAltBitmap(int groupIndex)
+{
+	auto group = Groups[groupIndex];
+	return group ? group->GetAltBitmap(fullscrn::GetResolution()) : nullptr;
 }
 
 zmap_header_type* DatFile::GetZMap(int groupIndex)

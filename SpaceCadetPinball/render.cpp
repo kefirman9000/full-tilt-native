@@ -761,6 +761,49 @@ static void DrawGlow(SDL_Texture* table, int w, int h, const SDL_Rect& dst)
 	SDL_SetTextureScaleMode(table, SDL_ScaleModeLinear);
 	SDL_RenderCopy(r, table, nullptr, nullptr);
 
+	// Only lights glow. Mask the bright-pass source to the boxes of lit lights, bumpers and lane lights, then black
+	// out flippers and balls on top: they are bright chrome and would otherwise bloom like lamps.
+	{
+		auto sx = static_cast<float>(GlowSmallW) / w, sy = static_cast<float>(GlowSmallH) / h;
+		auto toSmall = [&](const rectangle_type& rc)
+		{
+			auto x0 = static_cast<int>(std::floor(rc.XPosition * sx)), y0 = static_cast<int>(std::floor(rc.YPosition * sy));
+			auto x1 = static_cast<int>(std::ceil((rc.XPosition + rc.Width) * sx));
+			auto y1 = static_cast<int>(std::ceil((rc.YPosition + rc.Height) * sy));
+			return SDL_Rect{x0, y0, x1 - x0, y1 - y0};
+		};
+		std::vector<SDL_Rect> keep, cut;
+		for (auto sprite : render::Sprites())
+		{
+			if (!sprite || sprite->DeleteFlag || !sprite->Bmp || sprite->BmpRect.Width <= 0)
+				continue;
+			if (sprite->GlowSource && sprite->VisualType == VisualTypes::Sprite)
+				keep.push_back(toSmall(sprite->BmpRect));
+			else if (sprite->IsFlipper || sprite->VisualType == VisualTypes::Ball)
+				cut.push_back(toSmall(sprite->BmpRect));
+		}
+		// Mask texture: white where lights are, black elsewhere (and over flippers/balls); multiplied onto the source
+		static SDL_Texture* mask = nullptr;
+		static int maskW = 0, maskH = 0;
+		if (MakeTarget(mask, maskW, maskH, GlowSmallW, GlowSmallH))
+		{
+			SDL_SetRenderTarget(r, mask);
+			SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
+			SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
+			SDL_RenderClear(r);
+			SDL_SetRenderDrawColor(r, 255, 255, 255, 255);
+			if (!keep.empty())
+				SDL_RenderFillRects(r, keep.data(), static_cast<int>(keep.size()));
+			SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
+			if (!cut.empty())
+				SDL_RenderFillRects(r, cut.data(), static_cast<int>(cut.size()));
+			SDL_SetRenderTarget(r, GlowSmall);
+			SDL_SetTextureBlendMode(mask, SDL_BLENDMODE_MOD);
+			SDL_RenderCopy(r, mask, nullptr, nullptr);
+		}
+		SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
+	}
+
 	SDL_SetRenderTarget(r, GlowBright);
 	SDL_SetTextureBlendMode(GlowSmall, SDL_BLENDMODE_NONE);
 	SDL_RenderCopy(r, GlowSmall, nullptr, nullptr);

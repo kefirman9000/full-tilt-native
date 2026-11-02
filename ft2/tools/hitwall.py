@@ -1,7 +1,7 @@
 # hitwall.py DAT x y0 y1 : list wall segments (attr 600 / ramp 1300 etc) crossing vertical segment x, y0..y1
 import struct, importlib.util, sys
 f, X, Y0, Y1 = sys.argv[1], float(sys.argv[2]), float(sys.argv[3]), float(sys.argv[4])
-spec = importlib.util.spec_from_file_location('datx', '/home/claude/tools/datx.py')
+spec = importlib.util.spec_from_file_location('datx', __import__('os').path.join(__import__('os').path.dirname(__import__('os').path.abspath(__file__)), 'datx.py'))
 sys.argv=['x',f,'0','0']; m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); G=m.groups
 def name(g):
     for t,d in G[g]:

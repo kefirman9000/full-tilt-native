@@ -78,3 +78,18 @@ Dragon's Keep draws with its side panel, ball not launching. Skulduggery hangs o
 - ft2_decomp_experiment.patch - all decomp changes
 - dat_dump.py - lists named groups and bitmap kinds in a .DAT
 - alien_groups.txt / hero_groups.txt / mad_groups.txt - output of dat_dump.py
+
+
+## 2026-11-02: Full Tilt 1 rule tables
+Full Tilt 1 (1995) shipped 16-bit Windows 3.1 exes (NE format). Each table exe has a rule table in its data segment:
+14-byte entries {far ptr to tag (-> far ptr to component name), far ptr to rule function, int16 score count, far ptr
+to int32 scores}. Far pointers are filled by NE relocation chains, so the raw file holds no pointer values;
+tools/ne.py resolves them. tools/ft1rules.py dumps the table.
+Check: CADET.EXE gives 88 entries, the same as control.cpp's score_components[88], first entry a_bump1 {500,1000,1500,2000}.
+So DRAGON.EXE (75) and PIRATES.EXE (74) are read the same way. All rule functions sit in code segment 23.
+
+Also learned:
+- Marble Drop (1997) uses the same PARTOUT(4.0) container and engine (Maxis South = Cinematronics).
+- Some FT1 groups hold two bitmaps per resolution (Dragon/Pirates balls: real ball + smiley). Keep the first.
+- Headless testing: under Xvfb the engine starts a game by itself; pressing F2 restarts it and the ball is served after
+  the table's start sound (Skulduggery 1.67 s + 0.96 s feed). Wait ~3 s before pressing launch in scripts.

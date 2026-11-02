@@ -10,6 +10,8 @@
 
 TBumper::TBumper(TPinballTable* table, int groupIndex) : TCollisionComponent(table, groupIndex, true)
 {
+	if (RenderSprite)
+		RenderSprite->GlowSource = true; // bumper caps light up when hit
 	visualStruct visual{};
 
 	BmpIndex = 0;

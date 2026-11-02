@@ -94,6 +94,7 @@ enum class MidiTracks
 class midi
 {
 public:
+	static bool Paused; // music stopped by the player or a game pause; the stream is paused, not closed
 	static int music_init(bool mixOpen, int volume);
 	static void music_shutdown();
 	static void music_play();

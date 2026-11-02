@@ -38,3 +38,14 @@
       real point values in use (SpaceCadetPinball/ft2_scores.h). Next: port rule functions one by one
       (decompiled C via Ghidra; source path in exe: alien_src\control.cpp). Hero/Mad keep scores inside rule functions.
 - [ ] Magnets (1042) and light sweeps (1038) need rules; Addiction Pinball needs its own engine
+
+## Status 2026-11-02 (v0.8.3)
+- [x] Full Tilt 1 rule tables recovered from the 16-bit NE exes (ft2/tools/ft1rules.py): CADET.EXE 88 entries (matches
+      control.cpp exactly), DRAGON.EXE 75, PIRATES.EXE 74 (ft2/*_rules.txt). Real scores in use for both tables.
+- [x] Dragon's Keep / Skulduggery: real ball instead of the hidden smiley (second bitmap per resolution kept as alternate)
+- [x] Glow limited to lights; music on its own thread (no stall on toggle); upstream timer::kill(callback) bug fixed
+- [x] Marble Drop marbles as ball styles (tables/_MarbleDrop, imported by the launcher)
+- [ ] Port FT1 rule functions: all of Dragon's and Pirates' rules are in code segment 23 of their exes (function
+      offsets in the dumps). Next: disassemble seg 23 (16-bit x86), starting with the launcher (s_launcher1 23:4152,
+      lights v_lite569) and drain, then lights per target so tables light up during play.
+- [ ] Skulduggery's cannon (a_cannon, 4-frame blocker) and launcher have no rules yet; launcher has no art in the data.

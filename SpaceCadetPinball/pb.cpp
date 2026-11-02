@@ -106,7 +106,9 @@ int pb::init()
 	mode_change(GameModes::InGame);
 
 	time_ticks = 0;
-	timer::init(150);
+	// Space Cadet used 150. Skulduggery alone has 149 lights, and light shows flash them all at once: a full pool made
+	// timer::set fail silently, so the ball was never served to the launcher and lights stopped changing.
+	timer::init(1024);
 	score::init();
 
 	MainTable = new TPinballTable();

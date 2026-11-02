@@ -63,37 +63,46 @@ int timer::kill(int timerId)
 
 int timer::kill(void(* callback)(int, void*))
 {
+	// Removes every active timer with this callback. The old loop read current->NextTimer after moving current to the
+	// free list, so it went on walking the free list and could unlink live timers. With many timers running (Skulduggery's
+	// lights) that dropped the plunger's ball-feed timer at game start: no ball was served until a key was pressed.
 	auto count = 0;
 	timer_struct* current = ActiveList, * prev = nullptr;
-	for (auto index = 0; index < Count; index++)
+	while (current)
 	{
+		auto next = current->NextTimer;
 		if (current->Callback == callback)
 		{
-			count++;
 			if (prev)
-				prev->NextTimer = current->NextTimer;
+				prev->NextTimer = next;
 			else
-				ActiveList = current->NextTimer;
+				ActiveList = next;
 			current->NextTimer = FreeList;
 			FreeList = current;
-			if (--Count == index)
-				break;
-			current = current->NextTimer;
+			--Count;
+			count++;
 		}
 		else
 		{
 			prev = current;
-			current = current->NextTimer;
 		}
+		current = next;
 	}
-
 	return count;
 }
 
 int timer::set(float time, void* caller, void (* callback)(int, void*))
 {
 	if (Count >= MaxCount)
+	{
+		static bool logged = false;
+		if (!logged)
+		{
+			printf("Timers: all %d in use, a timer was dropped\n", MaxCount);
+			logged = true;
+		}
 		return 0;
+	}
 
 	auto timer = FreeList;
 	FreeList = timer->NextTimer;

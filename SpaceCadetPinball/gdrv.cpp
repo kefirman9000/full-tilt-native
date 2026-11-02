@@ -200,6 +200,8 @@ int gdrv::display_palette(ColorRgba* plt)
 			{
 				ApplyPalette(*bmp);
 			}
+			if (auto alt = group->GetAltBitmap(i))
+				ApplyPalette(*alt);
 		}
 	}
 

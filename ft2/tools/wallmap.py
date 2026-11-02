@@ -2,7 +2,7 @@
 import struct, importlib.util, sys
 f, out = sys.argv[1], sys.argv[2]
 box = list(map(float, sys.argv[3:7])) if len(sys.argv) > 6 else [-120, 120, -120, 130]
-spec = importlib.util.spec_from_file_location('datx', '/home/claude/tools/datx.py')
+spec = importlib.util.spec_from_file_location('datx', __import__('os').path.join(__import__('os').path.dirname(__import__('os').path.abspath(__file__)), 'datx.py'))
 sys.argv=['x',f,'0','0']; m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); G=m.groups
 def name(g):
     for t,d in G[g]:

@@ -1,5 +1,5 @@
 import struct, sys, importlib.util
-spec = importlib.util.spec_from_file_location('datx', '/home/claude/tools/datx.py')
+spec = importlib.util.spec_from_file_location('datx', __import__('os').path.join(__import__('os').path.dirname(__import__('os').path.abspath(__file__)), 'datx.py'))
 f = sys.argv[1]; pts = [tuple(map(int, p.split(','))) for p in sys.argv[2:]]
 sys.argv = [sys.argv[0], f, '0', '0']
 m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); G = m.groups

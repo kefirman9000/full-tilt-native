@@ -29,6 +29,8 @@ struct render_sprite
 	bool AllowFade{};
 	uint32_t FadeMs = 70; // lights 70 ms; flippers about one frame (in-between positions at high frame rates)
 	bool IsFlipper{};
+	// Glow (Options > Graphics > Glow) blooms only these: lit lights and lamps. Flippers, ball and table art never glow.
+	bool GlowSource{};
 	bool FadePending{};
 	uint32_t FadeStart{};
 	rectangle_type FadeRect{};
@@ -64,6 +66,7 @@ public:
 	static void build_occlude_list();
 	static void SpriteViewer(bool* show);
 	static void PresentVScreen();
+	static const std::vector<render_sprite*>& Sprites() { return sprite_list; }
 private:
 	static std::vector<render_sprite*> sprite_list, ball_list;
 	static int offset_x, offset_y;

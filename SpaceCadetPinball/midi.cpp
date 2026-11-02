@@ -5,6 +5,10 @@
 #include "pb.h"
 #include "ft_music.h"
 
+#include <condition_variable>
+#include <deque>
+#include <mutex>
+
 
 std::vector<Mix_Music*> midi::LoadedTracks{};
 Mix_Music* midi::track1, * midi::track2, * midi::track3;
@@ -32,12 +36,140 @@ int ToVariableLen(uint32_t value, uint32_t& dst)
 	return count;
 }
 
+// ---- Music thread ----
+// Starting MIDI on Windows opens the system synth (Microsoft GS Wavetable) inside Mix_PlayMusic, which can block for
+// up to a second; closing it in Mix_HaltMusic can block too. Doing that on the game thread froze the game whenever
+// music was switched on or the game was paused/resumed. Now every SDL_mixer music call runs on one worker thread,
+// in order; the game thread only queues commands. Turning music off or pausing the game pauses the stream (the synth
+// stays open) instead of halting it, so turning it back on just resumes.
+namespace
+{
+	enum class MusicCmdKind { Play, Halt, Pause, Resume, Volume, Quit };
+
+	struct MusicCmd
+	{
+		MusicCmdKind Kind;
+		Mix_Music* Music;
+		int Volume;
+	};
+
+	std::mutex MusicMutex;
+	std::condition_variable MusicCv;
+	std::deque<MusicCmd> MusicQueue;
+	std::thread MusicThread;
+	bool MusicThreadRunning = false;
+
+	void ExecuteMusicCmd(const MusicCmd& cmd)
+	{
+		switch (cmd.Kind)
+		{
+		case MusicCmdKind::Play:
+			Mix_HaltMusic();
+			if (Mix_PlayMusic(cmd.Music, -1) == 0)
+				Mix_VolumeMusic(cmd.Volume); // on Windows MIDI volume only sticks during playback
+			else
+				printf("Music: could not play track (%s)\n", Mix_GetError());
+			break;
+		case MusicCmdKind::Halt:
+			Mix_HaltMusic();
+			break;
+		case MusicCmdKind::Pause:
+			Mix_PauseMusic();
+			break;
+		case MusicCmdKind::Resume:
+			Mix_ResumeMusic();
+			Mix_VolumeMusic(cmd.Volume);
+			break;
+		case MusicCmdKind::Volume:
+			Mix_VolumeMusic(cmd.Volume);
+			break;
+		case MusicCmdKind::Quit:
+			break;
+		}
+	}
+
+	void MusicThreadMain()
+	{
+		for (;;)
+		{
+			MusicCmd cmd{};
+			{
+				std::unique_lock<std::mutex> lock(MusicMutex);
+				MusicCv.wait(lock, [] { return !MusicQueue.empty(); });
+				cmd = MusicQueue.front();
+				MusicQueue.pop_front();
+			}
+			if (cmd.Kind == MusicCmdKind::Quit)
+				return;
+			ExecuteMusicCmd(cmd);
+		}
+	}
+
+	void PostMusicCmd(MusicCmd cmd)
+	{
+		if (!MusicThreadRunning)
+		{
+			ExecuteMusicCmd(cmd);
+			return;
+		}
+		{
+			std::lock_guard<std::mutex> lock(MusicMutex);
+			if (cmd.Kind == MusicCmdKind::Volume)
+			{
+				// Only the latest volume matters (the slider sends many)
+				for (auto it = MusicQueue.begin(); it != MusicQueue.end();)
+					it = it->Kind == MusicCmdKind::Volume ? MusicQueue.erase(it) : it + 1;
+			}
+			else if (cmd.Kind != MusicCmdKind::Quit)
+			{
+				// Rapid toggling: play/halt/pause/resume still waiting are replaced by the newest state change
+				for (auto it = MusicQueue.begin(); it != MusicQueue.end();)
+					it = it->Kind != MusicCmdKind::Volume && it->Kind != MusicCmdKind::Quit ? MusicQueue.erase(it) : it + 1;
+			}
+			MusicQueue.push_back(cmd);
+		}
+		MusicCv.notify_one();
+	}
+
+	void StartMusicThread()
+	{
+		if (MusicThreadRunning)
+			return;
+		MusicQueue.clear();
+		MusicThread = std::thread(MusicThreadMain);
+		MusicThreadRunning = true;
+	}
+
+	void StopMusicThread()
+	{
+		if (!MusicThreadRunning)
+			return;
+		{
+			std::lock_guard<std::mutex> lock(MusicMutex);
+			MusicQueue.push_back({MusicCmdKind::Quit, nullptr, 0});
+		}
+		MusicCv.notify_one();
+		MusicThread.join();
+		MusicThreadRunning = false;
+	}
+}
+
+bool midi::Paused = false;
+
 void midi::music_play()
 {
 	if (!IsPlaying)
 	{
 		IsPlaying = true;
-		play_track(NextTrack, true);
+		if (Paused && active_track != MidiTracks::None && (NextTrack == active_track || NextTrack == MidiTracks::None))
+		{
+			// Same track as before: resume it where it stopped, the synth is still open
+			Paused = false;
+			if (MixOpen)
+				PostMusicCmd({MusicCmdKind::Resume, nullptr, Volume});
+		}
+		else
+			play_track(NextTrack, true);
 		NextTrack = MidiTracks::None;
 	}
 }
@@ -48,16 +180,22 @@ void midi::music_stop()
 	{
 		IsPlaying = false;
 		NextTrack = active_track;
-		StopPlayback();
+		if (active_track != MidiTracks::None)
+		{
+			Paused = true;
+			if (MixOpen)
+				PostMusicCmd({MusicCmdKind::Pause, nullptr, Volume});
+		}
 	}
 }
 
 void midi::StopPlayback()
 {
+	Paused = false;
 	if (active_track != MidiTracks::None)
 	{
 		if (MixOpen)
-			Mix_HaltMusic();
+			PostMusicCmd({MusicCmdKind::Halt, nullptr, Volume});
 		active_track = MidiTracks::None;
 	}
 }
@@ -69,6 +207,7 @@ int midi::music_init(bool mixOpen, int volume)
 	active_track = MidiTracks::None;
 	NextTrack = MidiTracks::None;
 	IsPlaying = false;
+	Paused = false;
 	track1 = track2 = track3 = nullptr;
 
 	if (pb::FT2Table)
@@ -117,12 +256,18 @@ int midi::music_init(bool mixOpen, int volume)
 		track1 = load_track("PINBALL");
 	}
 
+	if (MixOpen && track1)
+		StartMusicThread();
 	return track1 != nullptr;
 }
 
 void midi::music_shutdown()
 {
 	music_stop();
+	StopPlayback();
+	StopMusicThread(); // finishes queued commands, so nothing is playing when the tracks are freed
+	if (MixOpen)
+		Mix_HaltMusic();
 
 	for (auto midi : LoadedTracks)
 	{
@@ -136,7 +281,7 @@ void midi::SetVolume(int volume)
 {
 	Volume = volume;
 	if (MixOpen)
-		Mix_VolumeMusic(volume);
+		PostMusicCmd({MusicCmdKind::Volume, nullptr, volume});
 }
 
 Mix_Music* midi::load_track(std::string fileName)
@@ -221,15 +366,9 @@ bool midi::play_track(MidiTracks track, bool replay)
 		return false;
 	}
 
-	if (MixOpen && Mix_PlayMusic(midi, -1))
-	{
-		active_track = MidiTracks::None;
-		return false;
-	}
-
-	// On Windows, MIDI volume can only be set during playback.
-	// And it changes application master volume for some reason.
-	SetVolume(Volume);
+	// Started on the music thread (opening the system MIDI synth can take a moment); volume is set there after it starts
+	if (MixOpen)
+		PostMusicCmd({MusicCmdKind::Play, midi, Volume});
 	active_track = track;
 	return true;
 }

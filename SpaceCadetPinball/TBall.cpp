@@ -6,6 +6,7 @@
 
 #include "fullscrn.h"
 #include "loader.h"
+#include "marble_balls.h"
 #include "maths.h"
 #include "pb.h"
 #include "proj.h"
@@ -63,6 +64,23 @@ TBall::TBall(TPinballTable* table, int groupIndex) : TCollisionComponent(table, 
 	Position.Z = Radius;
 }
 
+static int BallGroup(const std::string& style);
+
+static bool SmileyAltAvailable()
+{
+	auto group = BallGroup("");
+	if (group < 0)
+		return false;
+	auto count = loader::query_visual_states(group);
+	for (int index = 0; index < count && index < 50; index++)
+	{
+		auto stateId = loader::state_id(group, index);
+		if (stateId < 0 || !loader::loader_table->GetAltBitmap(stateId))
+			return false;
+	}
+	return count > 0;
+}
+
 static int BallGroup(const std::string& style)
 {
 	// "smiley" = the plain "ball" group some Full Tilt 1 tables have next to the real ballN
@@ -72,6 +90,9 @@ static int BallGroup(const std::string& style)
 		auto real = loader::query_handle(("ball" + std::to_string(fullscrn::GetResolution())).c_str());
 		return plain >= 0 && real >= 0 ? plain : -1;
 	}
+	// "smiley_alt" (shown as Smiley): Dragon's Keep and Skulduggery keep the smiley as a second picture in each ball frame
+	if (style == "smiley_alt")
+		return SmileyAltAvailable() ? BallGroup("") : -1;
 	std::string name = (style.empty() ? "" : style + "_") + "ball";
 	auto group = loader::query_handle((name + std::to_string(fullscrn::GetResolution())).c_str());
 	if (group < 0)
@@ -82,17 +103,52 @@ static int BallGroup(const std::string& style)
 void TBall::SetStyle(const std::string& style)
 {
 	// Picture only: the ball's size and physics stay those of the standard ball
-	auto groupIndex = BallGroup(style);
+	if (marbles::IsMarbleStyle(style))
+	{
+		// A Marble Drop marble scaled to each of the standard ball's depth frames (sizes and depths stay the table's)
+		auto standard = BallGroup("");
+		if (standard >= 0)
+		{
+			visualStruct visual{};
+			std::vector<gdrv_bitmap8*> frames, marble;
+			std::vector<float> depths;
+			std::vector<zmap_header_type*> zmaps;
+			auto visualCount = loader::query_visual_states(standard);
+			for (auto index = 0; index < visualCount && index < 50; ++index)
+			{
+				loader::query_visual(standard, index, &visual);
+				frames.push_back(visual.Bitmap.Bmp);
+				zmaps.push_back(visual.Bitmap.ZMap);
+				auto visVec = reinterpret_cast<vector3*>(loader::query_float_attribute(standard, index, 501));
+				depths.push_back(visVec ? proj::z_distance(*visVec) : 0.0f);
+			}
+			if (marbles::Build(style, frames, marble))
+			{
+				ListBitmap->clear();
+				for (size_t index = 0; index < marble.size(); ++index)
+				{
+					ListBitmap->push_back(SpriteData{marble[index], zmaps[index]});
+					VisualZArray[index] = depths[index];
+				}
+				return;
+			}
+		}
+		// No Marble Drop data (or it could not be read): fall back to the standard ball
+	}
+	auto groupIndex = BallGroup(marbles::IsMarbleStyle(style) ? "" : style);
 	if (groupIndex < 0)
 		groupIndex = BallGroup("");
 	if (groupIndex < 0)
 		return;
 	visualStruct visual{};
 	ListBitmap->clear();
+	auto alt = style == "smiley_alt" && SmileyAltAvailable();
 	auto visualCount = loader::query_visual_states(groupIndex);
 	for (auto index = 0; index < visualCount && index < 50; ++index)
 	{
 		loader::query_visual(groupIndex, index, &visual);
+		if (alt)
+			visual.Bitmap.Bmp = loader::loader_table->GetAltBitmap(loader::state_id(groupIndex, index));
 		ListBitmap->push_back(visual.Bitmap);
 		auto visVec = reinterpret_cast<vector3*>(loader::query_float_attribute(groupIndex, index, 501));
 		VisualZArray[index] = visVec ? proj::z_distance(*visVec) : 0.0f;
@@ -114,6 +170,11 @@ std::vector<std::string> TBall::AvailableStyles()
 	}
 	if (BallGroup("smiley") >= 0)
 		styles.push_back("smiley");
+	else if (SmileyAltAvailable())
+		styles.push_back("smiley_alt");
+	// Marble Drop's marbles, when its files are in tables/_MarbleDrop (see marble_balls.h)
+	for (auto& marble : marbles::Styles())
+		styles.push_back(marble);
 	return styles;
 }
 

@@ -6,6 +6,23 @@
 
 **Game data is not included.** Copy your original game folders into `Put game files here` and start `FullTiltPinball.exe`: tables are found and sorted automatically.
 
+**Fixes in 0.8.3**
+- **Glow only on lights**: Options > Graphics > Glow now blooms lit lights, lane lights and bumper caps only.
+  Flippers and the ball (shiny chrome) no longer glow.
+- **No more stall when turning music on**: starting MIDI opens Windows' synth, which could freeze the game for up
+  to a second. Music now starts on its own thread, and turning it off (or pausing) pauses it instead of closing the
+  synth, so turning it back on is instant.
+- **Dragon's Keep and Skulduggery show the real ball**: their ball pictures hide a smiley face behind each frame
+  (an easter egg), which was replacing the ball. The smiley is now an option: Options > Ball > Smiley.
+- **Real point values on Dragon's Keep and Skulduggery**, read from the original 16-bit table programs.
+- A timer bug from the original decompilation (cancelling timers by callback could drop other running timers) is fixed.
+
+**New in 0.8.3: Marble Drop marbles as balls**
+Marble Drop (Maxis, 1997) was made by the same team on the same engine. Copy your Marble Drop folder into
+`Put game files here` and its ten marbles (red, yellow, blue, orange, green, magenta, black, steel, glass, fire)
+appear under Options > Ball on every table, scaled to that table's ball. Its level files are stored, not turned
+into table cards.
+
 **Fixes in 0.8.1 / 0.8.2**
 - **Mad Scientist's plunger tube only bubbles while you pull the plunger back**, not all the time.
 - **Pockets spit the ball out properly** (Mad Scientist, and pockets on every table that had the same problem): many

@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "winmain.h"
+#include "marble_balls.h"
 #include "TBall.h"
 #include "TPinballTable.h"
 #include "ft_log.h"
@@ -824,17 +825,37 @@ void winmain::RenderUi()
 					if (ImGui::MenuItem("Standard", nullptr, Options.BallStyle.V.empty() ||
 						std::find(styles.begin(), styles.end(), Options.BallStyle.V) == styles.end()))
 						pick("");
+					bool tableBalls = false, marbleSeparator = false;
 					for (auto& style : styles)
 					{
-						auto label = style;
-						std::replace(label.begin(), label.end(), '_', ' ');
-						if (!label.empty())
-							label[0] = static_cast<char>(toupper(static_cast<unsigned char>(label[0])));
+						std::string label;
+						if (marbles::IsMarbleStyle(style))
+						{
+							if (!marbleSeparator)
+							{
+								ImGui::Separator();
+								marbleSeparator = true;
+							}
+							label = marbles::Label(style);
+						}
+						else
+						{
+							tableBalls = true;
+							label = style == "smiley_alt" ? "smiley" : style;
+							std::replace(label.begin(), label.end(), '_', ' ');
+							if (!label.empty())
+								label[0] = static_cast<char>(toupper(static_cast<unsigned char>(label[0])));
+						}
 						if (ImGui::MenuItem(label.c_str(), nullptr, Options.BallStyle.V == style))
 							pick(style);
 					}
-					if (styles.empty())
+					if (!tableBalls)
 						ImGui::TextDisabled("This table has no other balls");
+					if (!marbleSeparator)
+					{
+						ImGui::Separator();
+						ImGui::TextDisabled("Marble Drop marbles: put Marble Drop in \"Put game files here\"");
+					}
 					ImGui::EndMenu();
 				}
 				if (ImGui::BeginMenu("Flipper Power"))

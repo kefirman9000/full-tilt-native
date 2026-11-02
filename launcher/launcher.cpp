@@ -191,6 +191,29 @@ static void ImportAddiction(const fs::path& installDir, const fs::path& tablesDi
 	}
 }
 
+// Marble Drop (Maxis South, 1997) is built on the same engine: all its .DAT files (core art and 150 level files) are
+// PARTOUT files too, so without this check each level would become a table card. They are not tables. The install
+// is stored in tables\_MarbleDrop (no card); the engine reads its marbles from there as ball styles.
+static bool IsMarbleDropData(const fs::path& file)
+{
+	std::ifstream in(file, std::ios::binary);
+	char header[21 + 50]{};
+	in.read(header, sizeof header);
+	return std::strncmp(header, "PARTOUT", 7) == 0 && std::strncmp(header + 21, "Marble Drop", 11) == 0;
+}
+
+static void ImportMarbleDrop(const fs::path& installDir, const fs::path& tablesDir, std::string& report, int& imported)
+{
+	std::error_code ec;
+	auto store = tablesDir / "_MarbleDrop";
+	if (fs::exists(store / "COREA.DAT", ec) || fs::exists(store / "corea.dat", ec))
+		return;
+	fs::create_directories(store, ec);
+	fs::copy(installDir, store, fs::copy_options::recursive | fs::copy_options::skip_existing, ec);
+	report += (report.empty() ? "" : ", ") + std::string("Marble Drop marbles (Options > Ball)");
+	imported++;
+}
+
 static int ImportGameFiles(const fs::path& dropDir, const fs::path& tablesDir, std::string& report)
 {
 	std::error_code ec;
@@ -209,6 +232,11 @@ static int ImportGameFiles(const fs::path& dropDir, const fs::path& tablesDir, s
 			continue;
 		}
 		auto datName = Upper(dat.filename().string());
+		if (IsMarbleDropData(dat))
+		{
+			ImportMarbleDrop(dat.parent_path(), tablesDir, report, imported);
+			continue;
+		}
 		if (datName == "DEMO.DAT" || !IsTableData(dat))
 			continue;
 

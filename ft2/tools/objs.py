@@ -1,7 +1,7 @@
 import struct, sys
-sys.path.insert(0, '/home/claude/tools')
+sys.path.insert(0, __import__('os').path.dirname(__import__('os').path.abspath(__file__)))
 import importlib.util
-spec = importlib.util.spec_from_file_location('datx', '/home/claude/tools/datx.py')
+spec = importlib.util.spec_from_file_location('datx', __import__('os').path.join(__import__('os').path.dirname(__import__('os').path.abspath(__file__)), 'datx.py'))
 sys.argv = [sys.argv[0], sys.argv[1], '0', '0']; 
 m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
 G = m.groups
