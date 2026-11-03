@@ -382,6 +382,13 @@ static int ImportGameFiles(const fs::path& dropDir, const fs::path& tablesDir, s
 		auto stem = dat.stem().string();
 		auto target = tablesDir / (known ? known->Folder : stem);
 		auto targetDat = target / dat.filename();
+		{
+			// The table's own program (DRAGON.EXE next to DRAGON.DAT ...): the engine reads the table's texts and,
+			// for recovered rules, its rule data from it. Also added to tables imported before this was copied.
+			auto exe = FindFileCI(dat.parent_path(), stem + ".EXE");
+			if (!exe.empty() && fs::exists(target, ec) && FindFileCI(target, stem + ".EXE").empty())
+				fs::copy_file(exe, target / exe.filename(), fs::copy_options::skip_existing, ec);
+		}
 		if (fs::exists(targetDat, ec) && fs::file_size(targetDat, ec) == fs::file_size(dat, ec))
 			continue; // already imported
 
@@ -395,6 +402,8 @@ static int ImportGameFiles(const fs::path& dropDir, const fs::path& tablesDir, s
 				         fs::copy_options::recursive | fs::copy_options::skip_existing, ec);
 			else if (sibling.is_regular_file(ec) && name == Upper(stem) + ".BMP")
 				CopyIcon(sibling.path(), target / "icon.bmp");
+			else if (sibling.is_regular_file(ec) && name == Upper(stem) + ".EXE")
+				fs::copy_file(sibling.path(), target / sibling.path().filename(), fs::copy_options::skip_existing, ec);
 		}
 		if (!fs::exists(target / "table.ini", ec))
 		{
