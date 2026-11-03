@@ -922,7 +922,7 @@ static void Scale2x(const ColorRgba* src, int w, int h, ColorRgba* dst)
 }
 
 // The texture to draw the table from: the plain vscreen texture, or its Scale2x upscale. factor = size multiplier.
-static SDL_Texture* UpscaleArt(gdrv_bitmap8* screen, int& factor)
+static SDL_Texture* UpscaleArt(gdrv_bitmap8* screen, const ColorRgba* frame, int& factor)
 {
 	factor = 1;
 	int passes = std::min(static_cast<int>(options::Options.UpscaleArt), 2);
@@ -940,7 +940,7 @@ static SDL_Texture* UpscaleArt(gdrv_bitmap8* screen, int& factor)
 			return screen->Texture;
 		SDL_SetTextureBlendMode(UpscaleTexture, SDL_BLENDMODE_NONE);
 	}
-	const ColorRgba* src = screen->BmpBufPtr1;
+	const ColorRgba* src = frame;
 	int cw = screen->Width, ch = screen->Height;
 	for (int p = 0; p < passes; p++)
 	{
@@ -957,11 +957,12 @@ static SDL_Texture* UpscaleArt(gdrv_bitmap8* screen, int& factor)
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Ball shadow and reflection. Both textures span two ball diameters around the ball centre (texture coordinates
-// 0..1, ball radius 0.25 of the texture) and leave the ball itself clear, so drawing them over the finished picture
-// never darkens or tints the ball. Light comes from the upper left, as in the table art.
+// Ball shadow and gloss reflection. They are painted into a copy of the table picture, pixel by pixel, with the same
+// depth test the ball itself gets (zdrv::paint_flat: a ball pixel shows where the depth buffer is farther away than
+// the ball). So wherever a ramp, wire rail or plastic would hide the ball, it hides the shadow too. The ball's own
+// pixels are never touched. Light comes from the upper left, as in the table art.
 // ---------------------------------------------------------------------------------------------------------------
-static SDL_Texture *BallShadowTexture = nullptr, *BallGlossTexture = nullptr;
+static std::vector<ColorRgba> ShadowFrame;
 
 static float SmoothStep(float a, float b, float x)
 {
@@ -969,47 +970,60 @@ static float SmoothStep(float a, float b, float x)
 	return t * t * (3 - 2 * t);
 }
 
-// 0 inside the ball, 1 outside it (soft edge), in units of ball diameters
+// 0 inside the ball, 1 outside it (soft edge); coordinates in ball diameters from the ball centre
 static float OutsideBall(float px, float py)
 {
 	return SmoothStep(0.46f, 0.52f, std::sqrt(px * px + py * py));
 }
 
-static void DrawBallShadows(const SDL_Rect& dst)
+// Returns the picture to show: the table picture itself, or a copy with ball shadows when there is a ball to shade
+static const ColorRgba* ApplyBallShadows(gdrv_bitmap8* screen)
 {
-	if (!options::Options.BallShadow || render::vscreen->Width <= 0)
-		return;
-	if (!BallShadowTexture)
-		BallShadowTexture = MakeOverlay([](float x, float y) -> Uint32
-		{
-			float px = (x - 0.5f) * 2, py = (y - 0.5f) * 2; // ball diameters from the ball centre
-			float sx = px - 0.34f, sy = py - 0.44f;
-			float a = 0.62f * (1 - SmoothStep(0.22f, 0.66f, std::sqrt(sx * sx + sy * sy))) * OutsideBall(px, py);
-			return static_cast<Uint32>(a * 255) << 24;
-		});
-	if (!BallGlossTexture)
-		BallGlossTexture = MakeOverlay([](float x, float y) -> Uint32
-		{
-			float px = (x - 0.5f) * 2, py = (y - 0.5f) * 2;
-			float qx = px / 0.32f, qy = (py - 0.70f) / 0.14f;
-			float q = qx * qx + qy * qy;
-			float a = q < 1 ? 0.32f * (1 - q) * OutsideBall(px, py) : 0.0f;
-			return static_cast<Uint32>(a * 255) << 24 | 0xFFFFFFu;
-		});
-	if (!BallShadowTexture || !BallGlossTexture)
-		return;
-	float sx = static_cast<float>(dst.w) / render::vscreen->Width, sy = static_cast<float>(dst.h) / render::vscreen->Height;
+	auto z = render::ZScreen();
+	if (!options::Options.BallShadow || !z || z->Width != screen->Width || z->Height != screen->Height)
+		return screen->BmpBufPtr1;
+	bool anyBall = false;
+	for (auto ball : render::Balls())
+		anyBall |= ball && !ball->DeleteFlag && ball->Bmp && ball->BmpRect.Width > 0;
+	if (!anyBall)
+		return screen->BmpBufPtr1;
+
+	ShadowFrame.assign(screen->BmpBufPtr1, screen->BmpBufPtr1 + static_cast<size_t>(screen->Stride) * screen->Height);
 	for (auto ball : render::Balls())
 	{
 		if (!ball || ball->DeleteFlag || !ball->Bmp || ball->BmpRect.Width <= 0)
 			continue;
 		auto& r = ball->BmpRect;
-		float cx = dst.x + (r.XPosition + r.Width * 0.5f) * sx, cy = dst.y + (r.YPosition + r.Height * 0.5f) * sy;
-		float dw = r.Width * sx, dh = r.Height * sy;
-		SDL_Rect area{static_cast<int>(cx - dw), static_cast<int>(cy - dh), static_cast<int>(dw * 2), static_cast<int>(dh * 2)};
-		SDL_RenderCopy(winmain::Renderer, BallShadowTexture, nullptr, &area);
-		SDL_RenderCopy(winmain::Renderer, BallGlossTexture, nullptr, &area);
+		float d = static_cast<float>(std::max(r.Width, r.Height));
+		float cx = r.XPosition + r.Width * 0.5f, cy = r.YPosition + r.Height * 0.5f;
+		int x0 = std::max(0, static_cast<int>(cx - d)), x1 = std::min(screen->Width, static_cast<int>(cx + d) + 1);
+		int y0 = std::max(0, static_cast<int>(cy - d)), y1 = std::min(screen->Height, static_cast<int>(cy + d) + 1);
+		for (int y = y0; y < y1; y++)
+			for (int x = x0; x < x1; x++)
+			{
+				float px = (x + 0.5f - cx) / d, py = (y + 0.5f - cy) / d;
+				float outside = OutsideBall(px, py);
+				if (outside <= 0)
+					continue; // the ball itself
+				if (z->ZPtr1[static_cast<size_t>(y) * z->Stride + x] <= ball->Depth)
+					continue; // something nearer covers this spot: the ball would be hidden here, so is its shadow
+				float sx = px - 0.34f, sy = py - 0.44f;
+				float shade = 0.62f * (1 - SmoothStep(0.22f, 0.66f, std::sqrt(sx * sx + sy * sy))) * outside;
+				float qx = px / 0.32f, qy = (py - 0.70f) / 0.14f, q = qx * qx + qy * qy;
+				float gloss = q < 1 ? 0.32f * (1 - q) * outside : 0.0f;
+				if (shade < 0.004f && gloss < 0.004f)
+					continue;
+				auto& c = ShadowFrame[static_cast<size_t>(y) * screen->Stride + x];
+				float red = c.GetRed() * (1 - shade), green = c.GetGreen() * (1 - shade), blue = c.GetBlue() * (1 - shade);
+				red += (255 - red) * gloss;
+				green += (255 - green) * gloss;
+				blue += (255 - blue) * gloss;
+				c.SetRed(static_cast<uint8_t>(red));
+				c.SetGreen(static_cast<uint8_t>(green));
+				c.SetBlue(static_cast<uint8_t>(blue));
+			}
 	}
+	return ShadowFrame.data();
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -1074,9 +1088,13 @@ static void DrawLightPools(const SDL_Rect& dst)
 
 void render::PresentVScreen()
 {
-	vscreen->BlitToTexture();
+	auto frame = ApplyBallShadows(vscreen);
+	if (frame == vscreen->BmpBufPtr1)
+		vscreen->BlitToTexture();
+	else
+		SDL_UpdateTexture(vscreen->Texture, nullptr, frame, vscreen->Width * static_cast<int>(sizeof(ColorRgba)));
 	int artScale = 1;
-	auto artTexture = UpscaleArt(vscreen, artScale);
+	auto artTexture = UpscaleArt(vscreen, frame, artScale);
 	auto tableTexture = ApplyTrails(artTexture, vscreen->Width * artScale, vscreen->Height * artScale);
 	DrawBackdrop(tableTexture);
 
@@ -1148,7 +1166,6 @@ void render::PresentVScreen()
 #endif
 	}
 
-	DrawBallShadows(DestinationRect);
 	DrawBrightness(tableTexture, DestinationRect);
 	DrawGlow(tableTexture, vscreen->Width, vscreen->Height, DestinationRect);
 	DrawLightPools(DestinationRect);

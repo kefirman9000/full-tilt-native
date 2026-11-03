@@ -13,6 +13,11 @@ programs are recompiled to C on your computer from your own copy, then all 13 ta
 The whole table fits on screen with no scrolling; **F11** switches to the original scrolling view. No DOS setup
 screens. Sound is not in yet. The game's code is never included in this download (see `epic/README.md`).
 
+**Fix in 0.8.7: ball shadow and reflection hide where the ball hides**
+The shadow and gloss were drawn on top of the finished picture, so they showed over ramps, wire rails and plastics
+even when the ball went underneath. They are now part of the table picture and use the ball's own depth test:
+wherever something covers the ball, it covers its shadow too.
+
 **New in 0.8.6: graphics enhancements for the Full Tilt tables** (Options > Graphics)
 - **Ball Shadow & Reflection** (on by default): a soft shadow under the ball and a faint gloss on the playfield.
 - **Light Pools** (Off / Soft / Strong, default Soft): lit lamps cast light of their own colour onto the artwork
