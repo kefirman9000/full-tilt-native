@@ -13,7 +13,7 @@ programs are recompiled to C on your computer from your own copy, then all 13 ta
 The whole table fits on screen with no scrolling; **F11** switches to the original scrolling view. No DOS setup
 screens. Sound is not in yet. The game's code is never included in this download (see `epic/README.md`).
 
-**New: graphics enhancements for the Full Tilt tables** (Options > Graphics)
+**New in 0.8.6: graphics enhancements for the Full Tilt tables** (Options > Graphics)
 - **Ball Shadow & Reflection** (on by default): a soft shadow under the ball and a faint gloss on the playfield.
 - **Light Pools** (Off / Soft / Strong, default Soft): lit lamps cast light of their own colour onto the artwork
   around them, on top of the existing Glow.
