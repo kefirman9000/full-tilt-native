@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "control.h"
+#include "ft1_control.h"
 #include "ft2_control.h"
 
 #include "midi.h"
@@ -847,9 +848,13 @@ std::reference_wrapper<TLight*> control::WormholeLightArray2[3] =
 void control::make_links(TPinballTable* table)
 {
 	TableG = table;
-	// FT2 sandbox: Space Cadet's rules are hard-coded to Cadet's components, so link nothing
+	// Full Tilt tables other than Space Cadet: Cadet's rules are hard-coded to Cadet's components, so link only the
+	// rules recovered for this table (ft1_control); everything else uses the generic rules (ft2_control)
 	if (pb::FT2Table)
+	{
+		ft1_control::Link(table);
 		return;
+	}
 
 	for (auto& score_component : score_components)
 	{
@@ -866,6 +871,7 @@ void control::make_links(TPinballTable* table)
 
 void control::ClearLinks()
 {
+	ft1_control::Clear();
 	TableG = nullptr;
 	for (auto& component : score_components)
 		component.Tag.SetComponent(nullptr);
@@ -897,7 +903,8 @@ void control::handler(MessageCode code, TPinballComponent* cmp)
 {
 	if (pb::FT2Table)
 	{
-		ft2_control::handler(code, cmp);
+		if (!ft1_control::Handle(code, cmp))
+			ft2_control::handler(code, cmp);
 		return;
 	}
 	component_control* control = cmp->Control;
