@@ -690,7 +690,7 @@ int TPinballTable::Message(MessageCode code, float value)
 
 TBall* TPinballTable::AddBall(vector2 position)
 {
-	if (pb::FT2Table && getenv("FT2_DEBUG"))
+	if (pb::FT2Table && pb::DevDebug)
 		fprintf(stderr, "FT2DBG AddBall %.2f %.2f\n", position.X, position.Y);
 	TBall* ball = nullptr;
 

@@ -117,7 +117,7 @@ void TPlunger::FT2Launch()
 		ball->Direction.X = bestNormal.X;
 		ball->Direction.Y = bestNormal.Y;
 		ball->Speed = speed;
-		if (getenv("FT2_DEBUG"))
+		if (pb::DevDebug)
 			fprintf(stderr, "FT2DBG plunger launch speed %.1f dir %.2f %.2f gap %.2f\n", speed, bestNormal.X, bestNormal.Y, bestDist);
 	}
 }
@@ -148,7 +148,7 @@ void TPlunger::Collision(TBall* ball, vector2* nextPosition, vector2* direction,
 
 int TPlunger::Message(MessageCode code, float value)
 {
-	if (pb::FT2Table && getenv("FT2_DEBUG") &&
+	if (pb::FT2Table && pb::DevDebug &&
 		code != MessageCode::PlungerFeedBall)
 		fprintf(stderr, "FT2DBG plunger msg %d boost %.1f started %d counter %d balls %d\n", static_cast<int>(code), Boost,
 		        PullbackStartedFlag, SomeCounter, PinballTable->MultiballCount);

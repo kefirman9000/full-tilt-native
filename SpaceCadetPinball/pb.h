@@ -51,6 +51,9 @@ public:
 	static DatFile* record_table;
 	static TPinballTable* MainTable;
 	static bool FullTiltMode, FullTiltDemoMode;
+	// Developer options, read once at start-up (never set for players): FT2_DEBUG=1 logs ball, plunger and table
+	// diagnostics for Full Tilt tables; FT2_NOZ=1 draws every sprite at depth 0 (sprite-order debugging)
+	static bool DevDebug, DevNoZ;
 	// Full Tilt! 2 table (ALIEN/HERO/MAD.DAT) loaded on the Full Tilt engine
 	static bool FT2Table;
 	// FT2 table drawn full screen (ALIEN/HERO/MAD); FT1 extra tables (PIRATES/DRAGON) use the Space Cadet layout

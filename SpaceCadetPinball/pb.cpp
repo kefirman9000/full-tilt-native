@@ -40,6 +40,7 @@ float pb::LastUpdateSec = 0;
 bool pb::FT2Table = false;
 bool pb::FT2FullScreen = false;
 std::string pb::TableFile;
+bool pb::DevDebug = getenv("FT2_DEBUG") != nullptr, pb::DevNoZ = getenv("FT2_NOZ") != nullptr;
 bool pb::FullTiltMode = false, pb::FullTiltDemoMode = false, pb::cheat_mode = false, pb::demo_mode = false, pb::CreditsActive = false;
 std::string pb::DatFileName, pb::BasePath;
 ImU32 pb::TextBoxColor;
@@ -423,7 +424,7 @@ void pb::render_frame(float alpha)
 
 void pb::timed_frame(float timeDelta)
 {
-	if (FT2Table && getenv("FT2_DEBUG"))
+	if (FT2Table && DevDebug)
 	{
 		static int dbgCount;
 		if (++dbgCount % (getenv("FT2_TRACE") ? 1 : 30) == 0)
@@ -553,7 +554,7 @@ void pb::timed_frame(float timeDelta)
 						break;
 					}
 
-					if (FT2Table && getenv("FT2_DEBUG") && ball->Speed > 40.0f)
+					if (FT2Table && DevDebug && ball->Speed > 40.0f)
 					{
 						auto comp = edge->CollisionComponent;
 						fprintf(stderr, "FT2DBG hit at %.1f %.1f speed %.0f comp group %d %s\n", ball->Position.X, ball->Position.Y,

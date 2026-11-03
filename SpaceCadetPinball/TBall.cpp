@@ -197,7 +197,7 @@ void TBall::Repaint()
 		if (VisualZArray[index] <= zDepth) break;
 	}
 
-	if (pb::FT2Table && getenv("FT2_DEBUG"))
+	if (pb::FT2Table && pb::DevDebug)
 	{
 		static int n;
 		if (++n % 60 == 0)

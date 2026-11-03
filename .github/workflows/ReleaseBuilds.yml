@@ -7,7 +7,7 @@ jobs:
     runs-on: macos-12
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: master
 
@@ -17,7 +17,7 @@ jobs:
 
       - run: bash build-mac-app.sh
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: mac-build
           path: SpaceCadetPinball-*-mac.dmg

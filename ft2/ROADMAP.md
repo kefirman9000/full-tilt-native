@@ -16,7 +16,7 @@
       Panel art: the FT2 title screens the user supplied (Alien Daze, Mad Scientist, Captain Hero), with the stray
       hourglass cursor painted out; table icons (Alien.bmp / Hero.bmp / Mad.bmp) as fallback. Art is NOT committed
       (copyrighted game art); it ships with the user's local package.
-- [ ] Remove debug hooks (FT2_DEBUG, FT2_NOZ) or keep behind a developer option
+- [x] Debug hooks kept as developer options, read once at start-up (pb::DevDebug = FT2_DEBUG, pb::DevNoZ = FT2_NOZ)
 
 ## Later: real rules, table by table
 - [ ] Ghidra on Alien.exe (smallest). Use Full Tilt 1 CADET.EXE as a reference: its code is what the decomp was

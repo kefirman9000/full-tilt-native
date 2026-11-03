@@ -1129,7 +1129,7 @@ void control::UnstuckBall(TBall& ball, int dt)
 		                                 static_cast<TCollisionComponent*>(TableG->Plunger)})
 			if (cmp && CheckBallInControlBounds(ball, *cmp))
 				return;
-		if (getenv("FT2_DEBUG"))
+		if (pb::DevDebug)
 			fprintf(stderr, "FT2DBG unstuck ball at %.2f %.2f counter %d\n", ball.Position.X, ball.Position.Y, ball.StuckCounter);
 		if (ball.StuckCounter <= 20 || !TableG->Plunger)
 		{

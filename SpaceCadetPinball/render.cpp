@@ -101,7 +101,7 @@ void render_sprite::ball_set(gdrv_bitmap8* bmp, float depth, int xPos, int yPos)
 {
 	set(bmp, ZMap,xPos, yPos);
 	Depth = proj::NormalizeDepth(depth);
-	if (getenv("FT2_NOZ")) Depth = 0;
+	if (pb::DevNoZ) Depth = 0;
 }
 
 void render::init(gdrv_bitmap8* bmp, int width, int height)
