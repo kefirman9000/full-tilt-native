@@ -13,6 +13,13 @@ programs are recompiled to C on your computer from your own copy, then all 13 ta
 The whole table fits on screen with no scrolling; **F11** switches to the original scrolling view. No DOS setup
 screens. Sound is not in yet. The game's code is never included in this download (see `epic/README.md`).
 
+**New: graphics enhancements for the Full Tilt tables** (Options > Graphics)
+- **Ball Shadow & Reflection** (on by default): a soft shadow under the ball and a faint gloss on the playfield.
+- **Light Pools** (Off / Soft / Strong, default Soft): lit lamps cast light of their own colour onto the artwork
+  around them, on top of the existing Glow.
+- **Upscale Table Art** (Off / 2x / 4x): Scale2x pixel-art upscaling rounds off jagged edges and diagonals without
+  blurring, for sharper tables on big screens.
+
 **New in 0.8.5: launcher**
 - **Install build tools** button: installs Python 3, the GCC compiler and capstone for your user (winget), so
   compiling Epic Pinball needs no manual setup.

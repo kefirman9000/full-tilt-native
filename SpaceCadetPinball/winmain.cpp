@@ -734,6 +734,24 @@ void winmain::RenderUi()
 					Options.Vignette ^= true;
 				if (ImGui::MenuItem("Motion Trails", nullptr, Options.MotionTrails))
 					Options.MotionTrails ^= true;
+				if (ImGui::MenuItem("Ball Shadow & Reflection", nullptr, Options.BallShadow))
+					Options.BallShadow ^= true;
+				if (ImGui::BeginMenu("Light Pools (lamps light the art)"))
+				{
+					const char* names[] = {"Off", "Soft", "Strong"};
+					for (int i = 0; i < 3; i++)
+						if (ImGui::MenuItem(names[i], nullptr, Options.LightPools.V == i))
+							Options.LightPools.V = i;
+					ImGui::EndMenu();
+				}
+				if (ImGui::BeginMenu("Upscale Table Art"))
+				{
+					const char* names[] = {"Off", "2x (Scale2x)", "4x (Scale2x twice)"};
+					for (int i = 0; i < 3; i++)
+						if (ImGui::MenuItem(names[i], nullptr, Options.UpscaleArt.V == i))
+							Options.UpscaleArt.V = i;
+					ImGui::EndMenu();
+				}
 				if (ImGui::MenuItem("Side Score Panel (Full Tilt 1 style)", nullptr, Options.SidePanel, pb::FT2FullScreen))
 				{
 					Options.SidePanel ^= true;

@@ -168,6 +168,9 @@ optionsStruct options::Options
 	{"Brightness", 0},
 	{"Vignette", true},
 	{"Motion Trails", false},
+	{"Ball Shadow", true},
+	{"Light Pools", 1},
+	{"Upscale Art", 0},
 };
 
 void options::InitPrimary()

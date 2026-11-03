@@ -67,6 +67,7 @@ public:
 	static void SpriteViewer(bool* show);
 	static void PresentVScreen();
 	static const std::vector<render_sprite*>& Sprites() { return sprite_list; }
+	static const std::vector<render_sprite*>& Balls() { return ball_list; }
 private:
 	static std::vector<render_sprite*> sprite_list, ball_list;
 	static int offset_x, offset_y;

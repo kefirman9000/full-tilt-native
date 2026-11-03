@@ -306,4 +306,7 @@ struct optionsStruct
 	IntOption Brightness; // 0 normal, 1 bright, 2 brighter
 	BoolOption Vignette;
 	BoolOption MotionTrails;
+	BoolOption BallShadow; // soft shadow under the ball and a faint gloss reflection on the playfield
+	IntOption LightPools; // lit lamps cast coloured light onto the artwork around them: 0 off, 1 soft, 2 strong
+	IntOption UpscaleArt; // pixel-art upscaling of the table picture (Scale2x): 0 off, 1 = 2x, 2 = 4x
 };

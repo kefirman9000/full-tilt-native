@@ -884,15 +884,205 @@ static void DrawVignette(const SDL_Rect& dst)
 		SDL_RenderCopy(winmain::Renderer, VignetteTexture, nullptr, &dst);
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// Upscaled table art: Scale2x (also known as EPX), a pixel-art upscaler that rounds off staircase edges and diagonals
+// without blurring. It runs on the finished table picture each frame (cheap integer compares); 4x is two passes.
+// ---------------------------------------------------------------------------------------------------------------
+static std::vector<ColorRgba> UpscaleBuf[2];
+static SDL_Texture* UpscaleTexture = nullptr;
+static int UpscaleW = 0, UpscaleH = 0;
+
+static void Scale2x(const ColorRgba* src, int w, int h, ColorRgba* dst)
+{
+	for (int y = 0; y < h; y++)
+	{
+		const ColorRgba* row = src + static_cast<size_t>(y) * w;
+		const ColorRgba* up = y > 0 ? row - w : row;
+		const ColorRgba* down = y < h - 1 ? row + w : row;
+		ColorRgba* d0 = dst + static_cast<size_t>(2 * y) * (2 * w);
+		ColorRgba* d1 = d0 + 2 * w;
+		for (int x = 0; x < w; x++)
+		{
+			uint32_t e = row[x].Color, b = up[x].Color, hh = down[x].Color;
+			uint32_t d = row[x > 0 ? x - 1 : x].Color, f = row[x < w - 1 ? x + 1 : x].Color;
+			uint32_t e0 = e, e1 = e, e2 = e, e3 = e;
+			if (b != hh && d != f)
+			{
+				if (d == b) e0 = d;
+				if (b == f) e1 = f;
+				if (d == hh) e2 = d;
+				if (hh == f) e3 = f;
+			}
+			d0[2 * x].Color = e0;
+			d0[2 * x + 1].Color = e1;
+			d1[2 * x].Color = e2;
+			d1[2 * x + 1].Color = e3;
+		}
+	}
+}
+
+// The texture to draw the table from: the plain vscreen texture, or its Scale2x upscale. factor = size multiplier.
+static SDL_Texture* UpscaleArt(gdrv_bitmap8* screen, int& factor)
+{
+	factor = 1;
+	int passes = std::min(static_cast<int>(options::Options.UpscaleArt), 2);
+	if (passes <= 0)
+		return screen->Texture;
+	int tw = screen->Width << passes, th = screen->Height << passes;
+	if (!UpscaleTexture || UpscaleW != tw || UpscaleH != th)
+	{
+		if (UpscaleTexture)
+			SDL_DestroyTexture(UpscaleTexture);
+		UpscaleTexture = SDL_CreateTexture(winmain::Renderer, SDL_PIXELFORMAT_BGRA32, SDL_TEXTUREACCESS_STREAMING, tw, th);
+		UpscaleW = tw;
+		UpscaleH = th;
+		if (!UpscaleTexture)
+			return screen->Texture;
+		SDL_SetTextureBlendMode(UpscaleTexture, SDL_BLENDMODE_NONE);
+	}
+	const ColorRgba* src = screen->BmpBufPtr1;
+	int cw = screen->Width, ch = screen->Height;
+	for (int p = 0; p < passes; p++)
+	{
+		auto& out = UpscaleBuf[p];
+		out.resize(static_cast<size_t>(cw) * ch * 4);
+		Scale2x(src, cw, ch, out.data());
+		src = out.data();
+		cw *= 2;
+		ch *= 2;
+	}
+	SDL_UpdateTexture(UpscaleTexture, nullptr, src, cw * static_cast<int>(sizeof(ColorRgba)));
+	factor = 1 << passes;
+	return UpscaleTexture;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Ball shadow and reflection. Both textures span two ball diameters around the ball centre (texture coordinates
+// 0..1, ball radius 0.25 of the texture) and leave the ball itself clear, so drawing them over the finished picture
+// never darkens or tints the ball. Light comes from the upper left, as in the table art.
+// ---------------------------------------------------------------------------------------------------------------
+static SDL_Texture *BallShadowTexture = nullptr, *BallGlossTexture = nullptr;
+
+static float SmoothStep(float a, float b, float x)
+{
+	float t = std::min(1.0f, std::max(0.0f, (x - a) / (b - a)));
+	return t * t * (3 - 2 * t);
+}
+
+// 0 inside the ball, 1 outside it (soft edge), in units of ball diameters
+static float OutsideBall(float px, float py)
+{
+	return SmoothStep(0.46f, 0.52f, std::sqrt(px * px + py * py));
+}
+
+static void DrawBallShadows(const SDL_Rect& dst)
+{
+	if (!options::Options.BallShadow || render::vscreen->Width <= 0)
+		return;
+	if (!BallShadowTexture)
+		BallShadowTexture = MakeOverlay([](float x, float y) -> Uint32
+		{
+			float px = (x - 0.5f) * 2, py = (y - 0.5f) * 2; // ball diameters from the ball centre
+			float sx = px - 0.34f, sy = py - 0.44f;
+			float a = 0.62f * (1 - SmoothStep(0.22f, 0.66f, std::sqrt(sx * sx + sy * sy))) * OutsideBall(px, py);
+			return static_cast<Uint32>(a * 255) << 24;
+		});
+	if (!BallGlossTexture)
+		BallGlossTexture = MakeOverlay([](float x, float y) -> Uint32
+		{
+			float px = (x - 0.5f) * 2, py = (y - 0.5f) * 2;
+			float qx = px / 0.32f, qy = (py - 0.70f) / 0.14f;
+			float q = qx * qx + qy * qy;
+			float a = q < 1 ? 0.32f * (1 - q) * OutsideBall(px, py) : 0.0f;
+			return static_cast<Uint32>(a * 255) << 24 | 0xFFFFFFu;
+		});
+	if (!BallShadowTexture || !BallGlossTexture)
+		return;
+	float sx = static_cast<float>(dst.w) / render::vscreen->Width, sy = static_cast<float>(dst.h) / render::vscreen->Height;
+	for (auto ball : render::Balls())
+	{
+		if (!ball || ball->DeleteFlag || !ball->Bmp || ball->BmpRect.Width <= 0)
+			continue;
+		auto& r = ball->BmpRect;
+		float cx = dst.x + (r.XPosition + r.Width * 0.5f) * sx, cy = dst.y + (r.YPosition + r.Height * 0.5f) * sy;
+		float dw = r.Width * sx, dh = r.Height * sy;
+		SDL_Rect area{static_cast<int>(cx - dw), static_cast<int>(cy - dh), static_cast<int>(dw * 2), static_cast<int>(dh * 2)};
+		SDL_RenderCopy(winmain::Renderer, BallShadowTexture, nullptr, &area);
+		SDL_RenderCopy(winmain::Renderer, BallGlossTexture, nullptr, &area);
+	}
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Light pools: every lit lamp (the same lights the Glow option uses) casts a large, soft pool of its own colour onto
+// the artwork around it. The colour is the average of the lamp's bright pixels in the current picture.
+// ---------------------------------------------------------------------------------------------------------------
+static SDL_Texture* LightPoolTexture = nullptr;
+
+static void DrawLightPools(const SDL_Rect& dst)
+{
+	int level = options::Options.LightPools;
+	auto screen = render::vscreen;
+	if (level <= 0 || screen->Width <= 0)
+		return;
+	if (!LightPoolTexture)
+	{
+		LightPoolTexture = MakeOverlay([](float x, float y) -> Uint32
+		{
+			float dx = (x - 0.5f) * 2, dy = (y - 0.5f) * 2;
+			float d = std::min(1.0f, std::sqrt(dx * dx + dy * dy));
+			float a = (1 - d) * (1 - d);
+			return static_cast<Uint32>(a * 255) << 24 | 0xFFFFFFu;
+		});
+		if (!LightPoolTexture)
+			return;
+		SDL_SetTextureBlendMode(LightPoolTexture, SDL_BLENDMODE_ADD);
+	}
+	float sx = static_cast<float>(dst.w) / screen->Width, sy = static_cast<float>(dst.h) / screen->Height;
+	const ColorRgba* pixels = screen->BmpBufPtr1;
+	for (auto sprite : render::Sprites())
+	{
+		if (!sprite || sprite->DeleteFlag || !sprite->Bmp || sprite->BmpRect.Width <= 0 || !sprite->GlowSource ||
+			sprite->VisualType != VisualTypes::Sprite)
+			continue;
+		auto& r = sprite->BmpRect;
+		long red = 0, green = 0, blue = 0, count = 0;
+		for (int y = std::max(0, r.YPosition); y < std::min(screen->Height, r.YPosition + r.Height); y += 2)
+			for (int x = std::max(0, r.XPosition); x < std::min(screen->Width, r.XPosition + r.Width); x += 2)
+			{
+				auto c = pixels[static_cast<size_t>(y) * screen->Width + x];
+				if (c.GetRed() + c.GetGreen() + c.GetBlue() > 300)
+				{
+					red += c.GetRed();
+					green += c.GetGreen();
+					blue += c.GetBlue();
+					count++;
+				}
+			}
+		if (!count)
+			continue; // lamp not lit right now (only dark pixels)
+		// big sprites (bumper caps) would flood the table: cap the lamp size the pool is based on
+		float size = std::min(std::max(r.Width, r.Height), 22) * (level == 1 ? 2.6f : 3.3f);
+		float cx = dst.x + (r.XPosition + r.Width * 0.5f) * sx, cy = dst.y + (r.YPosition + r.Height * 0.5f) * sy;
+		SDL_Rect area{static_cast<int>(cx - size * sx / 2), static_cast<int>(cy - size * sy / 2),
+		              static_cast<int>(size * sx), static_cast<int>(size * sy)};
+		SDL_SetTextureColorMod(LightPoolTexture, static_cast<Uint8>(red / count), static_cast<Uint8>(green / count),
+		                       static_cast<Uint8>(blue / count));
+		SDL_SetTextureAlphaMod(LightPoolTexture, level == 1 ? 50 : 85);
+		SDL_RenderCopy(winmain::Renderer, LightPoolTexture, nullptr, &area);
+	}
+}
+
 void render::PresentVScreen()
 {
 	vscreen->BlitToTexture();
-	auto tableTexture = ApplyTrails(vscreen->Texture, vscreen->Width, vscreen->Height);
+	int artScale = 1;
+	auto artTexture = UpscaleArt(vscreen, artScale);
+	auto tableTexture = ApplyTrails(artTexture, vscreen->Width * artScale, vscreen->Height * artScale);
 	DrawBackdrop(tableTexture);
 
 	if (offset_x == 0 && offset_y == 0)
 	{
-		if (!DrawSharp(tableTexture, vscreen->Width, vscreen->Height))
+		if (!DrawSharp(tableTexture, vscreen->Width * artScale, vscreen->Height * artScale))
 		{
 			SDL_SetTextureScaleMode(tableTexture,
 			                        options::Options.LinearFiltering ? SDL_ScaleModeLinear : SDL_ScaleModeNearest);
@@ -906,12 +1096,12 @@ void render::PresentVScreen()
 		auto srcBoardRect = SDL_Rect
 		{
 			0, 0,
-			srcSeparationX, vscreen->Height
+			srcSeparationX * artScale, vscreen->Height * artScale
 		};
 		auto srcSidebarRect = SDL_Rect
 		{
-			srcSeparationX, 0,
-			vscreen->Width - srcSeparationX, vscreen->Height
+			srcSeparationX * artScale, 0,
+			(vscreen->Width - srcSeparationX) * artScale, vscreen->Height * artScale
 		};
 
 #if SDL_VERSION_ATLEAST(2, 0, 10)
@@ -958,8 +1148,10 @@ void render::PresentVScreen()
 #endif
 	}
 
+	DrawBallShadows(DestinationRect);
 	DrawBrightness(tableTexture, DestinationRect);
 	DrawGlow(tableTexture, vscreen->Width, vscreen->Height, DestinationRect);
+	DrawLightPools(DestinationRect);
 	DrawVignette(DestinationRect);
 	DrawScanlines(vscreen->Height);
 	DrawSidePanel();
