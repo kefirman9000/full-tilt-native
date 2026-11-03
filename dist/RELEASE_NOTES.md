@@ -13,7 +13,7 @@ programs are recompiled to C on your computer from your own copy, then all 13 ta
 The whole table fits on screen with no scrolling; **F11** switches to the original scrolling view. No DOS setup
 screens. Sound is not in yet. The game's code is never included in this download (see `epic/README.md`).
 
-**Launcher (next)**
+**New in 0.8.5: launcher**
 - **Install build tools** button: installs Python 3, the GCC compiler and capstone for your user (winget), so
   compiling Epic Pinball needs no manual setup.
 - Compiling Epic Pinball shows a **progress bar**.
