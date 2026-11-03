@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "TCollisionComponent.h"
+#include "pb.h"
 #include "loader.h"
 #include "maths.h"
 #include "TEdgeSegment.h"
@@ -40,6 +41,10 @@ TCollisionComponent::TCollisionComponent(TPinballTable* table, int groupIndex, b
 	HardHitSoundId = visual.Kicker.HardHitSoundId;
 	SoftHitSoundId = visual.SoftHitSoundId;
 	GroupIndex = groupIndex;
+	if (pb::DevDebug)
+		printf("FT2DBG collision %s elasticity %.3f smoothness %.3f threshold %.1f boost %.1f throwmult %.2f throwangle %.3f\n",
+		       GroupName ? GroupName : "?", Elasticity, Smoothness, Threshold, Boost, visual.Kicker.ThrowBallMult,
+		       visual.Kicker.ThrowBallAngleMult);
 }
 
 TCollisionComponent::~TCollisionComponent()

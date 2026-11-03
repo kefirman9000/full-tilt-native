@@ -36,6 +36,8 @@ TPlunger::TPlunger(TPinballTable* table, int groupIndex) : TCollisionComponent(t
                 MaxPullback = strength[0];
         }
         PullbackIncrement = MaxPullback / ((ListBitmap ? ListBitmap->size() : 8) * 8.0f);
+        if (pb::DevDebug)
+            printf("FT2DBG plunger max pullback %.1f\n", MaxPullback);
     }
     else
     {

@@ -51,6 +51,11 @@ TKickout::TKickout(TPinballTable* table, int groupIndex, bool someFlag): TCollis
 	BallThrowDirection = visual.Kicker.ThrowBallDirection;
 	ThrowAngleMult = visual.Kicker.ThrowBallAngleMult;
 	ThrowSpeedMult1 = visual.Kicker.Boost;
+	if (pb::DevDebug)
+		printf("FT2DBG kickout %s throw dir %.3f %.3f %.3f length %.3f speed %.1f\n", GroupName ? GroupName : "?",
+		       BallThrowDirection.X, BallThrowDirection.Y, BallThrowDirection.Z,
+		       std::sqrt(BallThrowDirection.X * BallThrowDirection.X + BallThrowDirection.Y * BallThrowDirection.Y +
+		                 BallThrowDirection.Z * BallThrowDirection.Z), ThrowSpeedMult1);
 
 	circle.RadiusSq = Circle.RadiusSq;
 	circle.Center.X = Circle.Center.X;

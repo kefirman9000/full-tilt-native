@@ -13,6 +13,15 @@ programs are recompiled to C on your computer from your own copy, then all 13 ta
 The whole table fits on screen with no scrolling; **F11** switches to the original scrolling view. No DOS setup
 screens. Sound is not in yet. The game's code is never included in this download (see `epic/README.md`).
 
+**Fixes in 0.8.8: Full Tilt 2 table physics** (Captain Hero, Alien Daze, Mad Scientist)
+- **Pockets eject the ball at their real strength.** Many Full Tilt 2 pockets give their eject direction as a long
+  line rather than a unit direction, and the engine multiplied the throw speed by that length: Captain Hero's
+  pockets fired the ball at the engine's top speed, straight past the flippers. The direction is now normalised.
+- **Rolling friction from the table itself.** Full Tilt 2 tables store their own drag setting, which was ignored
+  (all of them used Space Cadet's). The ball now slows down the way the table was tuned, so it no longer rattles
+  around the playfield at full speed.
+- A damaged or incomplete table `.dat` file now shows the "game data missing" message instead of crashing.
+
 **Fix in 0.8.7: ball shadow and reflection hide where the ball hides**
 The shadow and gloss were drawn on top of the finished picture, so they showed over ramps, wire rails and plastics
 even when the ball went underneath. They are now part of the table picture and use the ball's own depth test:

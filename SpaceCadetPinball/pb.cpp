@@ -40,7 +40,8 @@ float pb::LastUpdateSec = 0;
 bool pb::FT2Table = false;
 bool pb::FT2FullScreen = false;
 std::string pb::TableFile;
-bool pb::DevDebug = getenv("FT2_DEBUG") != nullptr, pb::DevNoZ = getenv("FT2_NOZ") != nullptr;
+bool pb::DevDebug = getenv("FT2_DEBUG") != nullptr, pb::DevNoZ = getenv("FT2_NOZ") != nullptr,
+     pb::DevFT2Drag02 = getenv("FT2_DRAG02") != nullptr;
 bool pb::FullTiltMode = false, pb::FullTiltDemoMode = false, pb::cheat_mode = false, pb::demo_mode = false, pb::CreditsActive = false;
 std::string pb::DatFileName, pb::BasePath;
 ImU32 pb::TextBoxColor;
@@ -64,6 +65,14 @@ int pb::init()
 
 	if (!record_table)
 		return 1;
+
+	// A damaged or incomplete .dat (no background group) used to crash here; report it as missing data instead
+	if (record_table->record_labeled("background") < 0)
+	{
+		delete record_table;
+		record_table = nullptr;
+		return 1;
+	}
 
 	auto plt = (ColorRgba*)record_table->field_labeled("background", FieldTypes::Palette);
 	gdrv::display_palette(plt);

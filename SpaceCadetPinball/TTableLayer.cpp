@@ -72,6 +72,25 @@ TTableLayer::TTableLayer(TPinballTable* table): TCollisionComponent(table, -1, f
 	}
 	else
 		GraityMult = 0.2f;
+	// Full Tilt 2 tables: GraityMult is the ball's drag (field force = gravity - velocity * GraityMult), so the ball's
+	// top speed on the playfield is |gravity| / GraityMult. Forcing Space Cadet's 0.2 onto FT2's ~14x stronger
+	// gravity gave a top speed of ~840: the ball gained speed in open flight (a kickout throwing at 300 arrived at a
+	// bumper at ~1140) and circled Captain Hero's downtown ramp. Each table gives its drag in attribute 701 on the
+	// scale where Space Cadet's 228 is the verified 0.2; FT2's 400 gives 0.351 (top speed ~480, in line with their
+	// ~8-10x larger world). Full Tilt 1 tables keep the verified 0.2.
+	if (pb::FT2FullScreen && !pb::DevFT2Drag02)
+	{
+		auto dragArr = loader::query_float_attribute(groupIndex, 0, 701);
+		if (dragArr && *dragArr > 0)
+			GraityMult = *dragArr * (0.2f / 228.0f);
+	}
+	if (pb::DevDebug)
+	{
+		auto mult701 = loader::query_float_attribute(groupIndex, 0, 701);
+		printf("FT2DBG gravity mult %.3f angleX %.3f angleY %.3f -> dir %.3f %.3f, GraityMult %.3f (attr 701 %s %.3f)\n",
+		       PinballTable->GravityDirVectMult, PinballTable->GravityAngleX, PinballTable->GravityAnglY, GraityDirX,
+		       GraityDirY, GraityMult, mult701 ? "present" : "absent", mult701 ? *mult701 : 0.0f);
+	}
 
 	table->XOffset = bmp->XPosition;
 	table->YOffset = bmp->YPosition;

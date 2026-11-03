@@ -426,6 +426,21 @@ int loader::kicker(int groupIndex, visualKickerStruct* kicker)
 		case 404:
 			has404 = true;
 			kicker->ThrowBallDirection = *reinterpret_cast<vector3*>(floatArr);
+			// Full Tilt 2 tables often give the eject direction as an offset (Captain Hero's pockets: (76, 60),
+			// (-67, -127)...) instead of a unit vector. The throw speed is applied along this vector, so those
+			// pockets fired the ball at the engine's speed cap (~1150, instead of their 300). Normalise it, as the
+			// 410 line below already is. Full Tilt 1 / Space Cadet keep the original behaviour (verified by the
+			// decomp, including their 1.414-long diagonals).
+			if (pb::FT2FullScreen)
+			{
+				auto& dir = kicker->ThrowBallDirection;
+				auto len = std::sqrt(dir.X * dir.X + dir.Y * dir.Y);
+				if (len > 0.0001f)
+				{
+					dir.X /= len;
+					dir.Y /= len;
+				}
+			}
 			floatArr += 3;
 			index += 4;
 			break;
