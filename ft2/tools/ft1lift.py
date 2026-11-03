@@ -9,7 +9,7 @@ and the Windows floating point emulator calls (INT 34h-3Dh) turned back into x87
 
 usage: python ft1lift.py GAME.EXE SEG:OFF   (dump one function)
 """
-import os, struct, sys
+import os, re, struct, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ne import NE
 from capstone import Cs, CS_ARCH_X86, CS_MODE_16
@@ -151,3 +151,66 @@ if __name__ == '__main__':
         if i.address in cases:
             print('      case %s:' % ', '.join(str(v) for v in cases[i.address]))
         print(describe(exe, int(s), i))
+
+def trace_messages(exe, seg, start, comp_name, max_steps=400):
+    """Follow one execution path from `start` (unconditional jumps taken, conditional jumps noted, both sides of a
+    conditional explored up to a small budget) and return the virtual Message calls made on it:
+    [(component_or_operand, code, value_operand)]. Handles the compiler's shared call tails."""
+    from capstone import Cs, CS_ARCH_X86, CS_MODE_16
+    md = Cs(CS_ARCH_X86, CS_MODE_16)
+    md.detail = True
+    code = exe.code[seg]
+    out = []
+    paths = [(start, [])]
+    visited = set()
+    steps = 0
+    while paths and steps < max_steps:
+        pc, stack = paths.pop()
+        while 0 <= pc < len(code) and steps < max_steps:
+            steps += 1
+            if (pc, len(stack)) in visited:
+                break
+            visited.add((pc, len(stack)))
+            i = next(md.disasm(code[pc:pc + 16], pc), None)
+            if i is None:
+                break
+            mn, op = i.mnemonic, i.op_str
+            if mn == 'push':
+                stack.append(op)
+            elif mn == 'add' and op.startswith('sp, '):
+                stack = []
+            elif mn == 'lcall' and op == '[bx + 4]' and len(stack) >= 3:
+                this, c, v = stack[-1], stack[-2], stack[-3]
+                m = re.search(r'\[(0x[0-9a-f]+)\]', this)
+                who = comp_name(int(m.group(1), 16)) if m and '[bp' not in this else ('caller' if '[bp + 0xa]' in this else this)
+                try:
+                    out.append((who, int(c, 0), v))
+                except ValueError:
+                    out.append((who, c, v))
+                stack = stack[:-3]
+            elif mn in ('ret', 'retf'):
+                break
+            elif mn == 'jmp' and i.operands and i.operands[0].type == 2:
+                pc = i.operands[0].imm & 0xffff
+                continue
+            elif mn == 'jmp':
+                break
+            elif (mn.startswith('j') or mn.startswith('loop')) and i.operands and i.operands[0].type == 2:
+                paths.append((i.operands[0].imm & 0xffff, list(stack)))
+            pc += i.size
+    return out
+
+def component_vars(path):
+    """{data-segment address of a component pointer: component tag name}. Each component tag in the data segment is
+    a far pointer to its name followed by the component pointer that the table fills in when it links components."""
+    from ne import far_ptrs, cstr
+    n = NE(path)
+    D = n.autodata
+    out = {}
+    for L, t in far_ptrs(n, D).items():
+        if t[0] != D:
+            continue
+        name = cstr(n, D, t[1])
+        if name and re.match(r'^[a-z][a-z0-9_]{1,38}$', name):
+            out[L + 4] = name
+    return out

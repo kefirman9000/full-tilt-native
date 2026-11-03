@@ -1,11 +1,31 @@
 # Full Tilt 1 message code -> decomp MessageCode (learned from CADET.EXE + control.cpp)
-code 0 TLightGroupNull  # votes 3 of 3
+code 0 TLightGroupNull  # votes 3 of 6
 code 1 TLightTurnOn  # votes 6 of 6
-code 19 TLightResetAndTurnOn  # votes 1 of 1
-code 45 TLightGroupResetAndTurnOn  # votes 3 of 3
+code 4 TLightFlasherStart  # votes 6 of 7
+code 7 TLightFlasherStartTimed  # votes 5 of 7
+code 9 TLightTurnOnTimed  # votes 3 of 5
+code 12 TBumperIncBmpIndex  # votes 6 of 6
+code 13 TComponentGroupResetNotifyTimer  # votes 2 of 2
+code 15 TLightFlasherStartTimedThenStayOn  # votes 3 of 3
+code 16 TLightFlasherStartTimedThenStayOff  # votes 12 of 12
+code 19 TLightResetAndTurnOn  # votes 17 of 17
+code 20 TLightResetAndTurnOff  # votes 51 of 52
+code 28 TLightGroupStepBackward  # votes 2 of 4
+code 30 TLightGroupAnimationBackward  # votes 1 of 1
+code 36 TLightGroupOffsetAnimationForward  # votes 1 of 1
+code 37 TLightTurnOff  # votes 3 of 3
+code 38 TLightGroupReset  # votes 1 of 1
+code 41 TLightGroupGetOnCount  # votes 27 of 30
+code 45 TLightGroupResetAndTurnOn  # votes 3 of 6
+code 47 TLightGroupRestartNotifyTimer  # votes 5 of 8
+code 48 TLightGroupFlashWhenOn  # votes 1 of 1
+code 49 TLightGroupToggleSplitIndex  # votes 11 of 11
+code 52 TComponentGroupResetNotifyTimer  # votes 6 of 6
 code 56 TBlockerEnable  # votes 1 of 1
-code 62 TGateDisable  # votes 2 of 2
-code 63 TGateEnable  # votes 2 of 2
+code 62 TGateDisable  # votes 10 of 10
+code 63 TGateEnable  # votes 4 of 4
+code 64 TKickoutRestartTimer  # votes 2 of 2
+code 65 TSinkResetTimer  # votes 2 of 2
 code 68 ControlBallReleased  # votes 3 of 3
 code 70 ControlTimerExpired  # votes 18 of 18
 code 71 ControlNotifyTimerExpired  # votes 9 of 9
@@ -15,12 +35,12 @@ code 75 ControlEnableMultiplier  # votes 2 of 2
 code 76 ControlDisableMultiplier  # votes 1 of 1
 code 1016 PlungerFeedBall  # votes 1 of 1
 code 1017 PlungerStartFeedTimer  # votes 1 of 1
-code 1026 Reset  # votes 1 of 1
+code 1026 Reset  # votes 2 of 2
 # engine call target -> decomp name (co-occurrence over the 88 CADET/control.cpp pairs)
 virtual vslot+0x18 ->Play  # match 1.00, seen 29
 virtual vslot+0x1c ->light_on  # match 0.04, seen 1
 virtual vslot+0xc ->get_scoring  # match 0.98, seen 59
 virtual vslot+4 ->Message  # match 1.00, seen 74
 call 15:b8db ->AddScore  # 46 of 46 aligned functions agree
-call 18:1270 pb::get_rc_string  # 17 of 20 aligned functions agree
-call 8:16c0 ->Display  # 17 of 29 aligned functions agree
+call 18:1270 ->Display  # 20 of 20 aligned functions agree
+call 8:16c0 pb::get_rc_string  # 29 of 29 aligned functions agree

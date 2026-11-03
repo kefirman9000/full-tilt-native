@@ -12,7 +12,7 @@ usage: python ft1rosetta.py CADET.EXE ../../SpaceCadetPinball/control.cpp
 """
 import collections, os, re, subprocess, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ft1lift import Exe, disasm_function
+from ft1lift import Exe, disasm_function, trace_messages, component_vars
 
 def rule_table(exe_path):
     out = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ft1rules.py'), exe_path],
@@ -120,20 +120,59 @@ def main():
             t = exe.target_at(seg, i)
             if i.mnemonic == 'lcall' and t and t[0] == 'seg' and t[1] != seg:
                 exe_seq.append('%d:%04x' % (t[1], t[2]))
-        cpp_seq = []
-        for m in re.finditer(r'(\b\w+::\w+|->\s*\w+)\s*\(', bodies[func]):
+        # calls in the order they run: an inner call (an argument) finishes before the call that uses it, so sort
+        # by the position of each call's closing parenthesis
+        body = bodies[func]
+        found = []
+        for m in re.finditer(r'(\b\w+::\w+|->\s*\w+)\s*\(', body):
             n = m.group(1).replace(' ', '')
-            if n.startswith('->') and n in virtual:
+            if (n.startswith('->') and n in virtual) or n.startswith('MessageCode') or n.startswith('static_cast'):
                 continue
-            if n.startswith('MessageCode') or n.startswith('static_cast'):
-                continue
-            cpp_seq.append(n)
+            depth, k = 0, m.end() - 1
+            while k < len(body):
+                depth += {'(': 1, ')': -1}.get(body[k], 0)
+                if depth == 0:
+                    break
+                k += 1
+            found.append((k, n))
+        cpp_seq = [n for k, n in sorted(found)]
         if exe_seq and len(exe_seq) == len(cpp_seq):
             for t, n in zip(exe_seq, cpp_seq):
                 seqvotes[t][n] += 1
     for t in sorted(seqvotes):
         n, v = seqvotes[t].most_common(1)[0]
         calls.append('call %s %s  # %d of %d aligned functions agree' % (t, n, v, sum(seqvotes[t].values())))
+    # ---- codes the rules SEND: align traced Message calls with the C++ Message calls on the same component ----
+    src = open(cpp_path, encoding='latin1').read()
+    tagvar_name = dict(re.findall(r'component_tag<\w+>\s+(\w+)\s*=\s*\{"([^"]+)"\}', src))
+    var_tag = {v: tagvar_name[t] for v, t in re.findall(r'\*&\s*(\w+)\s*=\s*(\w+)\.Component', src) if t in tagvar_name}
+    cvars = component_vars(exe_path)
+    sent = collections.defaultdict(collections.Counter)
+    for name, (seg, off) in sorted(rules.items()):
+        func = comp.get(name)
+        if not func or func not in bodies:
+            continue
+        cases = {}
+        disasm_function(exe, seg, off, cases=cases)
+        exe_calls = []
+        for tgt in sorted(cases):
+            exe_calls += trace_messages(exe, seg, tgt, lambda a: cvars.get(a, 'g_%04x' % a))
+        cpp_calls = [(var_tag.get(v, v), n) for v, n in re.findall(r'(\w+)->Message\(MessageCode::(\w+)', bodies[func])]
+        # greedy in-order match on the component name
+        j = 0
+        for who, c, v in exe_calls:
+            if not isinstance(c, int):
+                continue
+            for k in range(j, len(cpp_calls)):
+                if cpp_calls[k][0] == who:
+                    sent[c][cpp_calls[k][1]] += 1
+                    j = k + 1
+                    break
+    for c in sorted(sent):
+        if c not in votes:
+            votes[c] = sent[c]
+        else:
+            votes[c].update(sent[c])
     print('pairs aligned: %d of %d' % (pairs, len(rules)))
     lines = ['# Full Tilt 1 message code -> decomp MessageCode (learned from CADET.EXE + control.cpp)']
     for v in sorted(votes):
