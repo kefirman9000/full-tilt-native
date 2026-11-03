@@ -13,9 +13,11 @@ C on your own computer from your own copy of the game**, and run on a small nati
 
 1. Copy your Epic Pinball folder (with `PINBALL.EXE`, `EP1.EXE` ... `EP13.EXE`, the `.DAT` files) into
    `Put game files here`, then click **Scan for new game files**. An *Epic Pinball* card appears.
-2. Click **Compile Epic Pinball tables** at the bottom of the launcher (once). It takes a few minutes and needs:
-   - Python 3 (python.org; the `capstone` module is installed automatically), and
-   - a C compiler: *Build Tools for Visual Studio* with the C++ workload, or MinGW-w64.
+2. Click **Compile Epic Pinball tables** at the bottom of the launcher (once; a progress bar shows how far it is).
+   It takes a few minutes and needs Python 3, the `capstone` module and a C compiler. If you don't have them, click
+   **Install build tools** first: on Windows it installs Python 3, the GCC compiler (WinLibs MinGW-w64) and capstone
+   for your user only, using winget (no administrator rights, no Visual Studio). *Build Tools for Visual Studio*
+   with the C++ workload also works if you already have it.
 3. Click the *Epic Pinball* card. Pick a table in the game's own menu.
 
 Keys: the game's own (Z and / or the Shift keys flip, Space launches; see each table's rules), **F11** whole table /

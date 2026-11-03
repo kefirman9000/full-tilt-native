@@ -30,6 +30,11 @@ def fail(msg):
     say('ERROR: ' + msg)
     sys.exit(1)
 
+# Progress for the launcher's progress bar: "PROGRESS <0..1> <what is happening>".
+# Recompiling the 21 programs is the first 40%, compiling the C files the next 58%, linking the rest.
+def progress(fraction, text):
+    say('PROGRESS %.3f %s' % (max(0.0, min(1.0, fraction)), text))
+
 def find_file(folder, name):
     for f in os.listdir(folder):
         if f.upper() == name.upper():
@@ -61,6 +66,7 @@ def generate(game, gen):
         if not src:
             fail('%s is missing from %s' % (fname, game))
         say('[%d/%d] recompiling %s' % (k + 1, len(progs), fname))
+        progress(0.40 * k / len(progs), 'Recompiling %s (%d of %d)' % (fname, k + 1, len(progs)))
         seeds = os.path.join(HERE, 'seeds', os.path.splitext(fname)[0].upper() + '.txt')
         cmd = [sys.executable, os.path.join(HERE, 'eprecomp.py'), src, prefix, os.path.join(gen, prefix + '.c')]
         if os.path.exists(seeds):
@@ -96,15 +102,36 @@ def vs_env():
             env[k] = v
     return env
 
+def compile_all(srcs, make_cmd, env=None):
+    """Compile every source in parallel, reporting progress as each file finishes."""
+    jobs = max(1, os.cpu_count() or 2)
+    pending = list(srcs)
+    running = []
+    done = 0
+    total = len(srcs)
+    progress(0.40, 'Compiling C files (0 of %d)' % total)
+    while pending or running:
+        while pending and len(running) < jobs:
+            src = pending.pop(0)
+            running.append((src, subprocess.Popen(make_cmd(src), env=env)))
+        src, proc = running.pop(0)
+        if proc.wait() != 0:
+            for _, p in running:
+                p.kill()
+            fail('compiling %s failed' % os.path.basename(src))
+        done += 1
+        say('compiled %s' % os.path.basename(src))
+        progress(0.40 + 0.58 * done / total, 'Compiling C files (%d of %d)' % (done, total))
+
 def build_msvc(env, gen, out_exe):
     obj = os.path.join(gen, 'obj')
     os.makedirs(obj, exist_ok=True)
     inc = ['/I' + RUNTIME, '/I' + os.path.join(SDK, 'include')]
     srcs = sources(gen)
     say('Compiling %d files with MSVC (this takes a few minutes)...' % len(srcs))
-    r = subprocess.run(['cl', '/nologo', '/O2', '/MP', '/W1', '/c'] + inc + ['/Fo' + obj + '\\'] + srcs, env=env)
-    if r.returncode != 0:
-        fail('the C compiler reported errors')
+    compile_all(srcs, lambda src: ['cl', '/nologo', '/O2', '/W1', '/c'] + inc +
+                ['/Fo' + os.path.join(obj, os.path.splitext(os.path.basename(src))[0] + '.obj'), src], env)
+    progress(0.99, 'Linking EpicPinball')
     objs = glob.glob(os.path.join(obj, '*.obj'))
     lib = os.path.join(SDK, 'lib', 'x64', 'SDL2.lib')
     r = subprocess.run(['link', '/nologo', '/SUBSYSTEM:WINDOWS', '/OUT:' + out_exe] + objs + [lib, 'user32.lib', 'shell32.lib'],
@@ -128,22 +155,35 @@ def build_gcc(cc, gen, out_exe):
     obj = os.path.join(gen, 'obj')
     os.makedirs(obj, exist_ok=True)
     say('Compiling %d files with %s (this takes a few minutes)...' % (len(srcs), cc))
-    objs = []
-    procs = []
-    for s in srcs:
-        o = os.path.join(obj, os.path.splitext(os.path.basename(s))[0] + '.o')
-        objs.append(o)
-        procs.append((s, subprocess.Popen([cc] + flags + ['-c', s, '-o', o])))
-        if len(procs) >= (os.cpu_count() or 2):
-            s0, p0 = procs.pop(0)
-            if p0.wait() != 0:
-                fail('compiling %s failed' % s0)
-    for s0, p0 in procs:
-        if p0.wait() != 0:
-            fail('compiling %s failed' % s0)
+    objpath = lambda src: os.path.join(obj, os.path.splitext(os.path.basename(src))[0] + '.o')
+    compile_all(srcs, lambda src: [cc] + flags + ['-c', src, '-o', objpath(src)])
+    progress(0.99, 'Linking EpicPinball')
+    objs = [objpath(src) for src in srcs]
     r = subprocess.run([cc] + objs + ['-o', out_exe] + libs + (['-mwindows'] if os.name == 'nt' else []))
     if r.returncode != 0:
         fail('linking failed')
+
+def refresh_windows_path():
+    """Tools installed after the launcher started ("Install build tools") are not on its PATH yet."""
+    if os.name != 'nt':
+        return
+    extra = []
+    try:
+        import winreg
+        for root, key in ((winreg.HKEY_CURRENT_USER, 'Environment'),
+                          (winreg.HKEY_LOCAL_MACHINE, r'SYSTEM\CurrentControlSet\Control\Session Manager\Environment')):
+            try:
+                with winreg.OpenKey(root, key) as k:
+                    extra += os.path.expandvars(winreg.QueryValueEx(k, 'Path')[0]).split(';')
+            except OSError:
+                pass
+    except ImportError:
+        pass
+    local = os.environ.get('LOCALAPPDATA', '')
+    extra.append(os.path.join(local, 'Microsoft', 'WinGet', 'Links'))
+    # WinLibs installed by winget lives in the WinGet packages folder
+    extra += glob.glob(os.path.join(local, 'Microsoft', 'WinGet', 'Packages', 'BrechtSanders.WinLibs*', 'mingw64', 'bin'))
+    os.environ['PATH'] = os.pathsep.join([p for p in extra if p] + [os.environ.get('PATH', '')])
 
 def main():
     ap = argparse.ArgumentParser()
@@ -152,6 +192,8 @@ def main():
     a = ap.parse_args()
     if not os.path.isdir(a.game) or not find_file(a.game, 'PINBALL.EXE'):
         fail('no Epic Pinball install found in %s' % a.game)
+    progress(0.0, 'Getting ready')
+    refresh_windows_path()
     ensure_capstone()
     sys.path.insert(0, HERE)
     gen = os.path.join(EPIC, 'gen-local')
@@ -175,6 +217,7 @@ def main():
             fail('no C compiler found (install gcc or clang)')
         build_gcc(cc, gen, tmp)
     os.replace(tmp, exe)
+    progress(1.0, 'Done')
     say('DONE: built %s' % exe)
 
 if __name__ == '__main__':

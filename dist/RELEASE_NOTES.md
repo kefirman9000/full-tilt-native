@@ -13,6 +13,14 @@ programs are recompiled to C on your computer from your own copy, then all 13 ta
 The whole table fits on screen with no scrolling; **F11** switches to the original scrolling view. No DOS setup
 screens. Sound is not in yet. The game's code is never included in this download (see `epic/README.md`).
 
+**Launcher (next)**
+- **Install build tools** button: installs Python 3, the GCC compiler and capstone for your user (winget), so
+  compiling Epic Pinball needs no manual setup.
+- Compiling Epic Pinball shows a **progress bar**.
+- **Hide or reorder tables**: right-click a table card to move it left/right, to the start or end, or hide it.
+  "Show hidden tables" brings hidden ones back. The layout is kept in `tables/library.ini`.
+- Bottom-bar buttons wrap onto a second line instead of running off narrow windows.
+
 **Launcher (0.8.4)**: the "Put game files here" and "Scan for new game files" buttons moved to the bottom bar, next to the
 new Epic Pinball button.
 

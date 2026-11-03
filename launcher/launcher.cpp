@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <set>
@@ -45,6 +46,7 @@ struct Table
 	bool DataFound = false;
 	long long HighScore = 0;
 	std::string HighScoreName;
+	bool Hidden = false;     // hidden from the library (right-click a card); see tables/library.ini
 };
 
 static std::string Trim(const std::string& s)
@@ -248,6 +250,57 @@ static void ImportMarbleDrop(const fs::path& installDir, const fs::path& tablesD
 	fs::copy(installDir, store, fs::copy_options::recursive | fs::copy_options::skip_existing, ec);
 	report += (report.empty() ? "" : ", ") + std::string("Marble Drop marbles (Options > Ball)");
 	imported++;
+}
+
+// Next item on the same line if `width` still fits, otherwise on a new line (keeps button rows inside the window)
+static void SameLineIfFits(float width)
+{
+	ImGui::SameLine();
+	if (ImGui::GetContentRegionAvail().x < width)
+		ImGui::NewLine();
+}
+
+static float ButtonWidth(const char* label)
+{
+	return ImGui::CalcTextSize(label).x + ImGui::GetStyle().FramePadding.x * 2;
+}
+
+// The user's own arrangement of the library: card order and hidden tables, by table folder name.
+// tables/library.ini:  Order=<folder>  (one line per table, in order)  and  Hidden=<folder>
+struct LibraryPrefs
+{
+	std::vector<std::string> order;
+	std::set<std::string> hidden;
+};
+
+static LibraryPrefs LoadLibraryPrefs(const fs::path& tablesDir)
+{
+	LibraryPrefs prefs;
+	std::ifstream in(tablesDir / "library.ini");
+	std::string line;
+	while (std::getline(in, line))
+	{
+		auto eq = line.find('=');
+		if (eq == std::string::npos)
+			continue;
+		auto key = Trim(line.substr(0, eq)), value = Trim(line.substr(eq + 1));
+		if (key == "Order" && !value.empty())
+			prefs.order.push_back(value);
+		else if (key == "Hidden" && !value.empty())
+			prefs.hidden.insert(value);
+	}
+	return prefs;
+}
+
+static void SaveLibraryPrefs(const fs::path& tablesDir, const std::vector<Table>& tables)
+{
+	std::ofstream out(tablesDir / "library.ini");
+	out << "; Table library layout, written by the launcher (right-click a table card to move or hide it)\n[Library]\n";
+	for (auto& t : tables)
+		out << "Order=" << t.Folder.filename().string() << "\n";
+	for (auto& t : tables)
+		if (t.Hidden)
+			out << "Hidden=" << t.Folder.filename().string() << "\n";
 }
 
 // Epic Pinball (Epic MegaGames, 1993): a DOS game, played by EpicPinball, which is built on this computer from the
@@ -472,6 +525,8 @@ namespace epicbuild
 {
 	static bool running = false;
 	static std::string status;
+	static float fraction = 0;       // progress bar: last "PROGRESS <0..1> <step>" line from build_epic.py
+	static std::string step;
 	static fs::path logFile;
 #ifdef _WIN32
 	static HANDLE proc = nullptr;
@@ -486,6 +541,105 @@ namespace epicbuild
 			if (fs::exists(dir / "tools" / "build_epic.py", ec))
 				return dir;
 		return {};
+	}
+
+	enum class Job { Build, Install };
+	static Job job = Job::Build;
+
+#ifdef _WIN32
+	// Tools installed while the launcher runs ("Install build tools") are not on its PATH yet: reload it.
+	static void RefreshPath()
+	{
+		std::string path;
+		char buf[32767];
+		DWORD size = sizeof buf;
+		if (RegGetValueA(HKEY_LOCAL_MACHINE, "SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment", "Path",
+		                 RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ, nullptr, buf, &size) == ERROR_SUCCESS)
+			path += buf;
+		size = sizeof buf;
+		if (RegGetValueA(HKEY_CURRENT_USER, "Environment", "Path", RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ, nullptr, buf,
+		                 &size) == ERROR_SUCCESS)
+			path += std::string(";") + buf;
+		char expanded[32767];
+		if (ExpandEnvironmentStringsA(path.c_str(), expanded, sizeof expanded))
+			path = expanded;
+		if (auto local = getenv("LOCALAPPDATA"))
+			path += std::string(";") + local + "\\Microsoft\\WinGet\\Links";
+		if (!path.empty())
+			SetEnvironmentVariableA("PATH", path.c_str());
+	}
+
+	// "py -3", a user install from python.org, or python.exe on PATH (not the Microsoft Store stub)
+	static std::string FindPython()
+	{
+		char found[MAX_PATH]{};
+		if (SearchPathA(nullptr, "py.exe", nullptr, MAX_PATH, found, nullptr))
+			return std::string("\"") + found + "\" -3";
+		if (auto local = getenv("LOCALAPPDATA"))
+		{
+			std::error_code ec;
+			fs::path best;
+			for (auto& entry : fs::directory_iterator(fs::path(local) / "Programs" / "Python", ec))
+				if (fs::exists(entry.path() / "python.exe", ec) && Upper(entry.path().filename().string()).rfind("PYTHON3", 0) == 0)
+					if (best.empty() || entry.path().filename().string() > best.parent_path().filename().string())
+						best = entry.path() / "python.exe";
+			if (!best.empty())
+				return "\"" + best.string() + "\"";
+		}
+		if (SearchPathA(nullptr, "python.exe", nullptr, MAX_PATH, found, nullptr) &&
+			Upper(found).find("WINDOWSAPPS") == std::string::npos)
+			return std::string("\"") + found + "\"";
+		return "";
+	}
+
+	// run a command line without a console window, stdout+stderr into logFile
+	static std::string RunLogged(std::string cmd, const fs::path& dir)
+	{
+		SECURITY_ATTRIBUTES sa{sizeof sa, nullptr, TRUE};
+		HANDLE log = CreateFileA(logFile.string().c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa,
+		                         CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+		if (log == INVALID_HANDLE_VALUE)
+			return "Could not write " + logFile.filename().string();
+		STARTUPINFOA si{};
+		si.cb = sizeof si;
+		si.dwFlags = STARTF_USESTDHANDLES;
+		si.hStdOutput = si.hStdError = log;
+		PROCESS_INFORMATION pi{};
+		BOOL ok = CreateProcessA(nullptr, cmd.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW, nullptr,
+		                         dir.string().c_str(), &si, &pi);
+		CloseHandle(log);
+		if (!ok)
+			return "Could not start it (error " + std::to_string(GetLastError()) + ")";
+		CloseHandle(pi.hThread);
+		proc = pi.hProcess;
+		return "";
+	}
+#else
+	static std::string RunLogged(const std::vector<std::string>& args, const fs::path& dir, const char* missing)
+	{
+		pid = fork();
+		if (pid == 0)
+		{
+			if (chdir(dir.c_str()) != 0 || !freopen(logFile.c_str(), "w", stdout) || !freopen(logFile.c_str(), "a", stderr))
+				_exit(1);
+			std::vector<char*> argv;
+			for (auto& a : args) argv.push_back(const_cast<char*>(a.c_str()));
+			argv.push_back(nullptr);
+			execvp(argv[0], argv.data());
+			printf("ERROR: %s\n", missing);
+			_exit(1);
+		}
+		return pid < 0 ? "Could not start it" : "";
+	}
+#endif
+
+	static void Started(Job j)
+	{
+		job = j;
+		running = true;
+		status.clear();
+		fraction = 0;
+		step = "Starting...";
 	}
 
 	static std::string Start(const fs::path& basePath, const fs::path& gameDir)
@@ -503,49 +657,62 @@ namespace epicbuild
 		logFile = basePath / "EpicBuild.log";
 		ftlog::Line("Compiling Epic Pinball: " + script);
 #ifdef _WIN32
-		char python[MAX_PATH]{};
-		std::string py;
-		if (SearchPathA(nullptr, "py.exe", nullptr, MAX_PATH, python, nullptr))
-			py = std::string("\"") + python + "\" -3";
-		else if (SearchPathA(nullptr, "python.exe", nullptr, MAX_PATH, python, nullptr))
-			py = std::string("\"") + python + "\"";
-		else
-			return "Python 3 is needed to compile Epic Pinball: install it from python.org, then try again.";
-		SECURITY_ATTRIBUTES sa{sizeof sa, nullptr, TRUE};
-		HANDLE log = CreateFileA(logFile.string().c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa,
-		                         CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-		if (log == INVALID_HANDLE_VALUE)
-			return "Could not write EpicBuild.log";
-		STARTUPINFOA si{};
-		si.cb = sizeof si;
-		si.dwFlags = STARTF_USESTDHANDLES;
-		si.hStdOutput = si.hStdError = log;
-		std::string cmd = py + " -u \"" + script + "\" --game \"" + gameDir.string() + "\" --out \"" + basePath.string() + "\"";
-		PROCESS_INFORMATION pi{};
-		BOOL ok = CreateProcessA(nullptr, cmd.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW, nullptr,
-		                         basePath.string().c_str(), &si, &pi);
-		CloseHandle(log);
-		if (!ok)
-			return "Could not start Python (error " + std::to_string(GetLastError()) + ")";
-		CloseHandle(pi.hThread);
-		proc = pi.hProcess;
+		RefreshPath();
+		auto py = FindPython();
+		if (py.empty())
+			return "Python 3 is needed to compile Epic Pinball: click \"Install build tools\" first.";
+		auto err = RunLogged(py + " -u \"" + script + "\" --game \"" + gameDir.string() + "\" --out \"" + basePath.string() + "\"",
+		                     basePath);
 #else
-		pid = fork();
-		if (pid == 0)
-		{
-			if (!freopen(logFile.c_str(), "w", stdout) || !freopen(logFile.c_str(), "a", stderr))
-				_exit(1);
-			execlp("python3", "python3", "-u", script.c_str(), "--game", gameDir.c_str(), "--out", basePath.c_str(),
-			       static_cast<char*>(nullptr));
-			printf("ERROR: Python 3 is needed to compile Epic Pinball\n");
-			_exit(1);
-		}
-		if (pid < 0)
-			return "Could not start the build";
+		auto err = RunLogged({"python3", "-u", script, "--game", gameDir.string(), "--out", basePath.string()}, basePath,
+		                     "Python 3 is needed to compile Epic Pinball");
 #endif
-		running = true;
-		status = "Starting...";
+		if (!err.empty())
+			return "Could not start the build: " + err;
+		Started(Job::Build);
 		return "";
+	}
+
+	// "Install build tools": Python 3, a C compiler and capstone (Windows: winget, current user only)
+	static std::string StartInstall(const fs::path& basePath)
+	{
+		if (running)
+			return "";
+		auto epic = ToolsDir(basePath);
+		if (epic.empty())
+			return "The epic folder (build tools) is missing next to the launcher.";
+		logFile = basePath / "EpicTools.log";
+#ifdef _WIN32
+		auto script = (epic / "tools" / "install_build_tools.ps1").string();
+		ftlog::Line("Installing build tools: " + script);
+		auto err = RunLogged("powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"" + script + "\"",
+		                     basePath);
+		if (!err.empty())
+			return "Could not start the installer: " + err;
+		Started(Job::Install);
+		return "";
+#else
+		return "On Linux and macOS, install Python 3, a C compiler and SDL2 development files with your package manager "
+			"(for example: sudo apt install python3 python3-pip gcc libsdl2-dev), then pip install capstone.";
+#endif
+	}
+
+	// read the newest PROGRESS line of the log into fraction/step
+	static void ReadProgress()
+	{
+		std::ifstream in(logFile);
+		std::string line;
+		while (std::getline(in, line))
+		{
+			if (line.rfind("PROGRESS ", 0) != 0)
+				continue;
+			if (!line.empty() && line.back() == '\r')
+				line.pop_back();
+			auto rest = line.substr(9);
+			auto sp = rest.find(' ');
+			fraction = std::strtof(rest.c_str(), nullptr);
+			step = sp == std::string::npos ? "" : rest.substr(sp + 1);
+		}
 	}
 
 	static std::string LastLine(bool errorsOnly)
@@ -556,7 +723,7 @@ namespace epicbuild
 		{
 			if (!line.empty() && line.back() == '\r')
 				line.pop_back();
-			if (!line.empty() && (!errorsOnly || line.rfind("ERROR", 0) == 0))
+			if (!line.empty() && line.rfind("PROGRESS ", 0) != 0 && (!errorsOnly || line.rfind("ERROR", 0) == 0))
 				last = line;
 		}
 		return last;
@@ -578,22 +745,21 @@ namespace epicbuild
 #else
 		done = waitpid(pid, nullptr, WNOHANG) == pid;
 #endif
+		ReadProgress();
 		auto last = LastLine(false);
 		if (!done)
-		{
-			if (!last.empty())
-				status = last;
 			return false;
-		}
 		running = false;
 		if (last.rfind("DONE", 0) == 0)
 		{
-			status = "Epic Pinball is built. Click its card to play.";
-			ftlog::Line("Epic Pinball build finished");
-			return true;
+			status = job == Job::Install ? "Build tools are installed. Click \"Compile Epic Pinball tables\" next."
+			                             : "Epic Pinball is built. Click its card to play.";
+			ftlog::Line(job == Job::Install ? "Build tools installed" : "Epic Pinball build finished");
+			return job == Job::Build;
 		}
 		auto err = LastLine(true);
-		status = "Build failed: " + (err.empty() ? last : err) + "  (details in EpicBuild.log)";
+		status = std::string(job == Job::Install ? "Install failed: " : "Build failed: ") + (err.empty() ? last : err) +
+			"  (details in " + logFile.filename().string() + ")";
 		ftlog::Line("Epic Pinball build failed: " + status);
 		return false;
 	}
@@ -767,6 +933,18 @@ int main(int, char**)
 		{
 			return a.Order != b.Order ? a.Order < b.Order : a.Name < b.Name;
 		});
+		{
+			// the user's own order and hidden tables; tables added later keep their default place after those
+			auto prefs = LoadLibraryPrefs(tablesDir);
+			auto rank = [&](const Table& t)
+			{
+				auto it = std::find(prefs.order.begin(), prefs.order.end(), t.Folder.filename().string());
+				return it == prefs.order.end() ? prefs.order.size() : static_cast<size_t>(it - prefs.order.begin());
+			};
+			std::stable_sort(tables.begin(), tables.end(), [&](const Table& a, const Table& b) { return rank(a) < rank(b); });
+			for (auto& t : tables)
+				t.Hidden = prefs.hidden.count(t.Folder.filename().string()) > 0;
+		}
 		for (auto& t : tables)
 			EnsureMusicFolder(t.Folder, t.Name);
 		LoadHighScores(tables);
@@ -908,15 +1086,29 @@ int main(int, char**)
 		ImGui::Spacing();
 
 		// Size the cards so every table fits on screen without scrolling: try 1-5 columns, keep the biggest cards
+		static bool showHidden = false;
+		std::vector<size_t> shown;
+		int hiddenCount = 0;
+		for (size_t i = 0; i < tables.size(); i++)
+		{
+			hiddenCount += tables[i].Hidden ? 1 : 0;
+			if (!tables[i].Hidden || showHidden)
+				shown.push_back(i);
+		}
+		enum class CardAction { None, Left, Right, First, Last, Hide, Show };
+		CardAction action = CardAction::None;
+		size_t actionCard = 0;
 		float textH = ImGui::GetTextLineHeightWithSpacing() * 3 + 20;
-		float footerH = ImGui::GetTextLineHeightWithSpacing() * 3 + ImGui::GetFrameHeightWithSpacing() * 2 + 32;
+		// height of everything below the cards, measured on the previous frame (rows wrap on narrow windows)
+		static float measuredFooterH = 0;
+		float footerH = std::max(measuredFooterH + 8, ImGui::GetTextLineHeightWithSpacing() * 3 + ImGui::GetFrameHeightWithSpacing() * 2 + 32);
 		float availH = h - ImGui::GetCursorPosY() - footerH;
 		float availW = w - 48.0f;
 		int columns = 1;
 		float imgH = 0;
 		for (int c = 1; c <= 5; c++)
 		{
-			int r = std::max(1, static_cast<int>((tables.size() + c - 1) / c));
+			int r = std::max(1, static_cast<int>((shown.size() + c - 1) / c));
 			float byHeight = availH / r - textH;
 			float byWidth = (availW - 24.0f * (c - 1)) / c * 0.75f - 8;
 			float candidate = std::min(byHeight, byWidth);
@@ -930,13 +1122,16 @@ int main(int, char**)
 		float cardW = imgH * 4 / 3;
 		// Cards live in their own scrolling area so a big library can never push the footer off the window
 		ImGui::BeginChild("cards", {0, std::max(availH, 80.0f)}, false);
-		for (size_t i = 0; i < tables.size(); i++)
+		for (size_t k = 0; k < shown.size(); k++)
 		{
+			size_t i = shown[k];
 			auto& t = tables[i];
-			if (i % columns)
+			if (k % columns)
 				ImGui::SameLine(0, 24);
 			ImGui::BeginGroup();
 			ImGui::PushID(static_cast<int>(i));
+			if (t.Hidden)
+				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.4f);
 			bool clicked;
 			if (t.Texture)
 			{
@@ -952,6 +1147,22 @@ int main(int, char**)
 			}
 			else
 				clicked = ImGui::Button(t.Name.c_str(), {cardW + 8, imgH + 8});
+			// right-click a card: move it or hide it
+			if (ImGui::BeginPopupContextItem("card menu"))
+			{
+				ImGui::TextDisabled("%s", t.Name.c_str());
+				ImGui::Separator();
+				if (ImGui::MenuItem("Move left", nullptr, false, k > 0)) { action = CardAction::Left; actionCard = k; }
+				if (ImGui::MenuItem("Move right", nullptr, false, k + 1 < shown.size())) { action = CardAction::Right; actionCard = k; }
+				if (ImGui::MenuItem("Move to the start", nullptr, false, k > 0)) { action = CardAction::First; actionCard = k; }
+				if (ImGui::MenuItem("Move to the end", nullptr, false, k + 1 < shown.size())) { action = CardAction::Last; actionCard = k; }
+				ImGui::Separator();
+				if (!t.Hidden && ImGui::MenuItem("Hide this table")) { action = CardAction::Hide; actionCard = k; }
+				if (t.Hidden && ImGui::MenuItem("Show this table again")) { action = CardAction::Show; actionCard = k; }
+				ImGui::EndPopup();
+			}
+			if (ImGui::IsItemHovered() && !ImGui::IsPopupOpen("card menu"))
+				ImGui::SetTooltip("Click to play. Right-click to move or hide.");
 			if (clicked)
 			{
 				int wx, wy, ww, wh;
@@ -978,25 +1189,50 @@ int main(int, char**)
 			else
 				ImGui::TextColored({0.95f, 0.75f, 0.35f, 1}, "%s", t.Status.c_str());
 			ImGui::PopTextWrapPos();
+			if (t.Hidden)
+				ImGui::PopStyleVar();
 			ImGui::PopID();
 			ImGui::EndGroup();
 		}
 		ImGui::EndChild();
+		float footerTop = ImGui::GetCursorPosY();
+		if (action != CardAction::None)
+		{
+			// apply after drawing; positions are among the cards on screen
+			size_t from = shown[actionCard];
+			auto moveTo = [&](size_t to)
+			{
+				auto t = std::move(tables[from]);
+				tables.erase(tables.begin() + static_cast<long>(from));
+				tables.insert(tables.begin() + static_cast<long>(to > from ? to : to), std::move(t));
+			};
+			switch (action)
+			{
+			case CardAction::Left: std::swap(tables[from], tables[shown[actionCard - 1]]); break;
+			case CardAction::Right: std::swap(tables[from], tables[shown[actionCard + 1]]); break;
+			case CardAction::First: moveTo(0); break;
+			case CardAction::Last: moveTo(tables.size() - 1); break;
+			case CardAction::Hide: tables[from].Hidden = true; break;
+			case CardAction::Show: tables[from].Hidden = false; break;
+			default: break;
+			}
+			SaveLibraryPrefs(tablesDir, tables);
+		}
 
 		ImGui::Spacing();
 		ImGui::Separator();
 		// Adding tables: these used to sit under the title; the library itself comes first now
 		if (ImGui::Button("Open \"Put game files here\" folder"))
 			OpenFolder(dropDir);
-		ImGui::SameLine();
+		SameLineIfFits(ButtonWidth("Scan for new game files"));
 		if (ImGui::Button("Scan for new game files"))
 			scan();
-		ImGui::SameLine();
+		SameLineIfFits(ButtonWidth("Compile Epic Pinball tables"));
 		{
 			bool busy = epicbuild::running;
 			if (busy)
 				ImGui::BeginDisabled();
-			if (ImGui::Button(busy ? "Compiling Epic Pinball..." : "Compile Epic Pinball tables"))
+			if (ImGui::Button(busy && epicbuild::job == epicbuild::Job::Build ? "Compiling Epic Pinball..." : "Compile Epic Pinball tables"))
 			{
 				auto err = epicbuild::Start(basePath, tablesDir / "EpicPinball");
 				if (!err.empty())
@@ -1007,19 +1243,50 @@ int main(int, char**)
 			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 				ImGui::SetTooltip("Builds EpicPinball from your own Epic Pinball files (needs Python 3 and a C compiler).\n"
 				                  "It takes a few minutes; nothing from the game is uploaded or shared.");
+			SameLineIfFits(ButtonWidth("Install build tools"));
+			if (busy)
+				ImGui::BeginDisabled();
+			if (ImGui::Button("Install build tools"))
+			{
+				auto err = epicbuild::StartInstall(basePath);
+				if (!err.empty())
+					epicbuild::status = err;
+			}
+			if (busy)
+				ImGui::EndDisabled();
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				ImGui::SetTooltip("Installs what compiling Epic Pinball needs, for your user only: Python 3, the GCC C\n"
+				                  "compiler (WinLibs) and the capstone module. Uses winget; takes a few minutes.");
+		}
+		if (hiddenCount > 0 || showHidden)
+		{
+			char label[64];
+			std::snprintf(label, sizeof label, "Show hidden tables (%d)", hiddenCount);
+			SameLineIfFits(ImGui::CalcTextSize(label).x + ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x);
+			ImGui::Checkbox(label, &showHidden);
 		}
 		{
 			// Keep the hint on the button row only when it fits
-			const char* hint = "Drop game folders in, they get sorted.";
+			const char* hint = "Drop game folders in, they get sorted. Right-click a table to move or hide it.";
 			ImGui::SameLine();
 			if (ImGui::GetContentRegionAvail().x < ImGui::CalcTextSize(hint).x)
 				ImGui::NewLine();
 			ImGui::TextDisabled("%s", hint);
 		}
-		if (!epicbuild::status.empty())
+		if (epicbuild::running)
 		{
-			bool bad = epicbuild::status.rfind("Build failed", 0) == 0 || epicbuild::status.find("needed") != std::string::npos ||
-				epicbuild::status.rfind("No Epic", 0) == 0;
+			// progress bar for recompiling and compiling the Epic Pinball tables
+			char label[160];
+			std::snprintf(label, sizeof label, "%d%%  %s", static_cast<int>(epicbuild::fraction * 100 + 0.5f),
+			              epicbuild::step.c_str());
+			ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.95f, 0.70f, 0.20f, 1));
+			ImGui::ProgressBar(epicbuild::fraction, ImVec2(-1, 0), label);
+			ImGui::PopStyleColor();
+		}
+		else if (!epicbuild::status.empty())
+		{
+			bool bad = epicbuild::status.find("failed") != std::string::npos || epicbuild::status.find("needed") != std::string::npos ||
+				epicbuild::status.rfind("No Epic", 0) == 0 || epicbuild::status.rfind("Could not", 0) == 0;
 			ImGui::PushTextWrapPos(0);
 			ImGui::TextColored(bad ? ImVec4(1, 0.45f, 0.4f, 1) : ImVec4(0.55f, 0.85f, 0.55f, 1), "%s", epicbuild::status.c_str());
 			ImGui::PopTextWrapPos();
@@ -1045,6 +1312,7 @@ int main(int, char**)
 			ImGui::SameLine();
 			ImGui::TextDisabled("| Problems? Send the .log files");
 		}
+		measuredFooterH = ImGui::GetCursorPosY() - footerTop;
 		ImGui::End();
 
 		ImGui::Render();
