@@ -112,10 +112,13 @@ void TPlunger::FT2Launch()
 		}
 		if (bestDist > ball->Radius * 1.5f)
 			continue;
-		// FT2 shooter lanes climb (Alien's runs up-left past aim_wall), so a weak shot rolls back or dribbles into the
-		// drain. Like the tables' ray-gun style shooters, every release fires at 80-100% of full strength.
+		// The launch follows how far the plunger was pulled, from 45% of the table's strength for a quick tap to 100%
+		// for a full pull. 45% still clears every FT2 shooter lane (the weakest that does: Captain Hero 35%, Alien
+		// Daze and Mad Scientist 30%), so a short pull is a gentle shot (a skill shot), never a ball rolling back.
 		auto pull = MaxPullback > 0 ? std::min(1.0f, Boost / MaxPullback) : 1.0f;
-		auto speed = MaxPullback * (0.8f + 0.2f * pull) * (1.0f + RandFloat() * 0.03f);
+		auto speed = MaxPullback * (0.45f + 0.55f * pull) * (1.0f + RandFloat() * 0.03f);
+		if (pb::DevDebug && getenv("FT2_PLUNGE"))
+			speed = MaxPullback * static_cast<float>(atof(getenv("FT2_PLUNGE")));
 		ball->Direction.X = bestNormal.X;
 		ball->Direction.Y = bestNormal.Y;
 		ball->Speed = speed;

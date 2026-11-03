@@ -17,6 +17,11 @@ public:
 	void Collision(TBall* ball, vector2* nextPosition, vector2* direction, float distance,
 		TEdgeSegment* edge) override;
 	void Fire();
+	// Full Tilt 2 (Captain Hero's henchmen, attribute 1801): off the table until the rules bring it out
+	void SetShown(bool shown);
+
+	bool HiddenUntilMode = false;
+	bool Shown = true;
 
 	static void TimerExpired(int timerId, void* caller);
 	

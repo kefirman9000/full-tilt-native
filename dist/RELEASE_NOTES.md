@@ -13,6 +13,18 @@ programs are recompiled to C on your computer from your own copy, then all 13 ta
 The whole table fits on screen with no scrolling; **F11** switches to the original scrolling view. No DOS setup
 screens. Sound is not in yet. The game's code is never included in this download (see `epic/README.md`).
 
+**Captain Hero fixes in 0.8.9**
+- **Enemies only show up when the rules send them out.** The four henchmen on the playfield stood there from the
+  first ball. They now start off the table. Complete a set of lanes, targets or drop targets and one of them comes
+  out. Hit him three times to knock him out for 25,000 points (times the bonus multiplier).
+- **No more balls caught in the middle of the table.** Five invisible pockets in the open playfield kept grabbing
+  the ball and spitting it back out. They now stay closed like the other mid-table magnets, and open with them for
+  20 seconds when you complete a set.
+- **The launch follows the plunger** (all Full Tilt 2 tables): a quick tap is a gentle shot (45% strength) and a
+  full pull is the table's full strength. Before, every launch went at 80-100%. Even the weakest shot gets the
+  ball out of the shooter lane.
+- Pop-up targets that only appear in table modes no longer come up when the next player starts.
+
 **Fixes in 0.8.8: Full Tilt 2 table physics** (Captain Hero, Alien Daze, Mad Scientist)
 - **Pockets eject the ball at their real strength.** Many Full Tilt 2 pockets give their eject direction as a long
   line rather than a unit direction, and the engine multiplied the throw speed by that length: Captain Hero's

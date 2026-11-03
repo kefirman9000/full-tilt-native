@@ -57,6 +57,11 @@ TKickout::TKickout(TPinballTable* table, int groupIndex, bool someFlag): TCollis
 		       std::sqrt(BallThrowDirection.X * BallThrowDirection.X + BallThrowDirection.Y * BallThrowDirection.Y +
 		                 BallThrowDirection.Z * BallThrowDirection.Z), ThrowSpeedMult1);
 
+	if (pb::DevDebug)
+		printf("FT2DBG kickout %s at %.1f %.1f radius %.2f reach %.2f pull %.1f active %d notsome %d\n",
+		       GroupName ? GroupName : "?", Circle.Center.X, Circle.Center.Y, std::sqrt(Circle.RadiusSq),
+		       *loader::query_float_attribute(groupIndex, 0, 306), FieldMult, ActiveFlag, NotSomeFlag);
+
 	circle.RadiusSq = Circle.RadiusSq;
 	circle.Center.X = Circle.Center.X;
 	circle.Center.Y = Circle.Center.Y;
@@ -112,6 +117,8 @@ void TKickout::Collision(TBall* ball, vector2* nextPosition, vector2* direction,
 		OriginalBallZ = ball->Position.Z;
 		ball->Position.Z = CollisionBallSetZ;
 		ball->CollisionDisabledFlag = true;
+		if (pb::DevDebug)
+			printf("FT2DBG kickout %s captured ball (tick %d)\n", GroupName ? GroupName : "?", pb::time_ticks);
 		if (PinballTable->TiltLockFlag)
 		{
 			Message(MessageCode::TKickoutRestartTimer, 0.1f);
@@ -156,6 +163,9 @@ void TKickout::TimerExpired(int timerId, void* caller)
 		kick->Timer = timer::set(kick->TimerTime2, kick, ResetTimerExpired);
 		if (kick->Ball)
 		{		
+			if (pb::DevDebug)
+				printf("FT2DBG kickout %s ejects ball (tick %d)\n", kick->GroupName ? kick->GroupName : "?",
+				       pb::time_ticks);
 			loader::play_sound(kick->HardHitSoundId, kick->Ball, "TKickout2");
 			kick->Ball->Position.Z = kick->OriginalBallZ;
 			kick->Ball->throw_ball(&kick->BallThrowDirection, kick->ThrowAngleMult, kick->ThrowSpeedMult1,

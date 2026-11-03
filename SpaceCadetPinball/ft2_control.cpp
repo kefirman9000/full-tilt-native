@@ -159,7 +159,13 @@ namespace
 		// only switch them on during modes, so here they stay closed and open as a reward
 		std::vector<TKickout*> ModePockets;
 		int PocketTimer = 0;
+		// Bumpers that only come out in modes (Captain Hero's henchmen): one comes out per completed set or bank,
+		// and is knocked out by HenchmanHits hits
+		std::vector<TBumper*> Henchmen;
+		std::map<const TBumper*, int> HenchmanHits;
 	} rs;
+
+	const int HenchmanHitsNeeded = 3;
 
 	std::string set_key(TPinballComponent* part)
 	{
@@ -226,6 +232,21 @@ namespace
 			auto reach = loader::query_float_attribute(pocket->GroupIndex, 0, 306);
 			if (reach && *reach >= 0.9f)
 				rs.ModePockets.push_back(pocket);
+		}
+		for (auto part : t->ComponentList)
+		{
+			// Pockets with no picture and no ball height in the open playfield (Captain Hero's s_kout06..10) are
+			// mode targets too: in normal play they only trap the ball over and over
+			auto pocket = dynamic_cast<TKickout*>(part);
+			if (pocket && !loader::query_float_attribute(pocket->GroupIndex, 0, 408) &&
+				std::find(rs.ModePockets.begin(), rs.ModePockets.end(), pocket) == rs.ModePockets.end())
+				rs.ModePockets.push_back(pocket);
+		}
+		for (auto part : t->ComponentList)
+		{
+			auto bumper = dynamic_cast<TBumper*>(part);
+			if (bumper && bumper->HiddenUntilMode)
+				rs.Henchmen.push_back(bumper);
 		}
 		set_pockets(false);
 		for (auto& group : groups)
@@ -313,6 +334,41 @@ namespace
 		}
 	}
 
+	// One hidden henchman comes out onto the table (picked at random among those not out yet)
+	bool bring_out_henchman()
+	{
+		std::vector<TBumper*> hidden;
+		for (auto henchman : rs.Henchmen)
+			if (!henchman->Shown)
+				hidden.push_back(henchman);
+		if (hidden.empty())
+			return false;
+		auto henchman = hidden[rand() % hidden.size()];
+		henchman->SetShown(true);
+		if (pb::DevDebug)
+			printf("FT2DBG henchman out: %s\n", henchman->GroupName ? henchman->GroupName : "?");
+		rs.HenchmanHits[henchman] = 0;
+		show("ENEMY ON THE LOOSE  HIT IT " + std::to_string(HenchmanHitsNeeded) + " TIMES", 2.5f);
+		return true;
+	}
+
+	void henchman_hit(TBumper* henchman)
+	{
+		if (!henchman->Shown)
+			return;
+		auto hits = ++rs.HenchmanHits[henchman];
+		if (hits < HenchmanHitsNeeded)
+			return;
+		henchman->SetShown(false);
+		rs.HenchmanHits[henchman] = 0;
+		if (pb::DevDebug)
+			printf("FT2DBG henchman knocked out: %s\n", henchman->GroupName ? henchman->GroupName : "?");
+		auto award = 25000 * rs.Multiplier;
+		add_points(award);
+		show("ENEMY KNOCKED OUT  " + with_commas(award), 2.5f);
+		light_show(1.5f);
+	}
+
 	void set_hit(TPinballComponent* caller)
 	{
 		build_sets();
@@ -351,6 +407,7 @@ namespace
 			open_pockets(20.0f);
 			show("POCKETS LIT FOR 20 SECONDS", 2.5f);
 		}
+		bring_out_henchman();
 		if (set.DropBank)
 			timer::set(1.2f, reinterpret_cast<void*>(static_cast<intptr_t>(index)), reset_bank);
 		else
@@ -466,7 +523,12 @@ void ft2_control::handler(MessageCode code, TPinballComponent* caller)
 			rs.BonusHits++;
 		}
 		if (enhanced())
+		{
 			set_hit(caller);
+			if (auto bumper = dynamic_cast<TBumper*>(caller))
+				if (bumper->HiddenUntilMode)
+					henchman_hit(bumper);
+		}
 	}
 
 	// Captured balls: send them back out after a short pause
@@ -491,6 +553,11 @@ void ft2_control::table_handler(MessageCode code)
 			rs.PocketTimer = 0;
 		}
 		set_pockets(false);
+		rs.HenchmanHits.clear(); // the henchmen leave the table on Reset themselves
+		if (pb::DevDebug && getenv("FT2_HENCHMEN")) // development: start with every henchman out
+			while (bring_out_henchman())
+			{
+			}
 		for (auto& set : rs.Sets)
 			set.Hit.clear();
 		for (auto& given : rs.ExtraBallGiven)

@@ -3,6 +3,7 @@
 
 
 #include "control.h"
+#include "pb.h"
 #include "loader.h"
 #include "render.h"
 #include "timer.h"
@@ -21,6 +22,26 @@ TBumper::TBumper(TPinballTable* table, int groupIndex) : TCollisionComponent(tab
 	SoundIndex4 = visual.SoundIndex4;
 	SoundIndex3 = visual.SoundIndex3;
 	OriginalThreshold = Threshold;
+	if (pb::FT2Table)
+	{
+		auto mode = loader::query_float_attribute(groupIndex, 0, 1801);
+		HiddenUntilMode = mode && mode[0] > 0.0f;
+		if (HiddenUntilMode)
+			SetShown(false);
+	}
+}
+
+void TBumper::SetShown(bool shown)
+{
+	Shown = shown;
+	ActiveFlag = shown ? 1 : 0;
+	if (!shown && Timer)
+	{
+		timer::kill(Timer);
+		Timer = 0;
+		Threshold = OriginalThreshold;
+	}
+	SpriteSet(shown ? BmpIndex * 2 : -1);
 }
 
 int TBumper::Message(MessageCode code, float value)
@@ -91,6 +112,8 @@ int TBumper::Message(MessageCode code, float value)
 				playerPtr.MessageField = 0;
 			}
 			TimerExpired(0, this);
+			if (HiddenUntilMode)
+				SetShown(false); // back off the table until the rules bring it out again
 			break;
 		}
 	default:
@@ -112,13 +135,16 @@ void TBumper::Collision(TBall* ball, vector2* nextPosition, vector2* direction, 
 void TBumper::TimerExpired(int timerId, void* caller)
 {
 	auto bump = static_cast<TBumper*>(caller);
-	bump->SpriteSet(bump->BmpIndex * 2);
 	bump->Timer = 0;
 	bump->Threshold = bump->OriginalThreshold;
+	if (bump->Shown)
+		bump->SpriteSet(bump->BmpIndex * 2);
 }
 
 void TBumper::Fire()
 {
+	if (!Shown)
+		return;
 	SpriteSet(2 * BmpIndex + 1);
 	Timer = timer::set(TimerTime, this, TimerExpired);
 	Threshold = 1000000000.0;

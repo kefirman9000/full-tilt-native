@@ -36,7 +36,9 @@ int TPopupTarget::Message(MessageCode code, float value)
 	case MessageCode::PlayerChanged:
 		PlayerMessagefieldBackup[PinballTable->CurrentPlayer] = MessageField;
 		MessageField = PlayerMessagefieldBackup[static_cast<int>(floor(value))];
-		TPopupTarget::Message(MessageField ? MessageCode::TPopupTargetDisable : MessageCode::TPopupTargetEnable, 0.0);
+		// targets that only a table mode raises stay down when the next player comes up
+		TPopupTarget::Message(MessageField || HiddenUntilMode ? MessageCode::TPopupTargetDisable
+		                                                      : MessageCode::TPopupTargetEnable, 0.0);
 		break;
 	case MessageCode::Reset:
 	{
