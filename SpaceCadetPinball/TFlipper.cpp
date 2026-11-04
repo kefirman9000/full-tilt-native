@@ -1,4 +1,5 @@
 #include "pch.h"
+#include "rumble.h"
 #include "TFlipper.h"
 
 
@@ -82,6 +83,7 @@ int TFlipper::Message(MessageCode code, float value)
 		{
 			control::handler(MessageCode::TFlipperExtend, this);
 			loader::play_sound(HardHitSoundId, this, "TFlipper1");
+			rumble::Pulse(0.12f, 0.2f, 35);
 		}
 		else if (code == MessageCode::TFlipperRetract)
 		{

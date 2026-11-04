@@ -58,6 +58,12 @@ public:
 	static void init(gdrv_bitmap8* bmp, int width, int height);
 	static void uninit();
 	static void recreate_screen_texture();
+	// Paint a screen area back to the bare table: the background (or black), then every table sprite over it.
+	// FT2 tables have no background picture (their art is all sprites), so this is how their score and message
+	// boxes clear themselves without leaving black boxes on the table
+	static void restore_area(int x, int y, int width, int height);
+	// FT2 score and message boxes go to the side panel instead of the table while it is shown
+	static bool BoxesInSidePanel();
 	static void update();
 	static void AddSprite(render_sprite& sprite);
 	static void RemoveSprite(render_sprite& sprite);

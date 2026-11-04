@@ -852,7 +852,7 @@ void pb::tilt_no_more()
 
 bool pb::chk_highscore()
 {
-	if (demo_mode)
+	if (demo_mode || ft2_control::PracticeGame)
 		return false;
 	for (auto i = 0; i < MainTable->PlayerCount; ++i)
 	{

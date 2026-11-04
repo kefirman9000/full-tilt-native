@@ -1,4 +1,6 @@
 #include "pch.h"
+#include "table_guide.h"
+#include "rumble.h"
 #include "TPinballTable.h"
 
 
@@ -385,6 +387,7 @@ void TPinballTable::tilt(float time)
 		}
 		LightGroup->Message(MessageCode::TLightTurnOffTimed, 0);
 		TiltLockFlag = 1;
+		rumble::Pulse(1.0f, 1.0f, 500);
 		control::table_control_handler(MessageCode::SetTiltLock);
 	}
 }
@@ -469,6 +472,7 @@ int TPinballTable::Message(MessageCode code, float value)
 			Demo->Message(MessageCode::NewGame, 0.0);
 		break;
 	case MessageCode::NewGame:
+		table_guide::GameStarted();
 		if (EndGameTimeoutTimer)
 		{
 			timer::kill(EndGameTimeoutTimer);
@@ -644,6 +648,7 @@ int TPinballTable::Message(MessageCode code, float value)
 		}
 		break;
 	case MessageCode::GameOver:
+		table_guide::GameOver(this);
 		loader::play_sound(SoundIndex2, nullptr, "TPinballTable3");
 		pb::MissTextBox->Clear();
 		pb::InfoTextBox->Display(pb::get_rc_string(Msg::STRING135), -1.0);

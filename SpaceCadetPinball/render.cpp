@@ -1,5 +1,7 @@
 #include "pch.h"
 #include "render.h"
+#include "side_panel.h"
+#include "table_art.h"
 #include "TTextBox.h"
 
 #include "fullscrn.h"
@@ -313,6 +315,35 @@ void render::repaint(const render_sprite& sprite)
 }
 
 
+void render::restore_area(int x, int y, int width, int height)
+{
+	rectangle_type area{x, y, width, height}, clipRect{};
+	if (!maths::rectangle_clip(area, vscreen_rect, &area) || area.Width <= 0 || area.Height <= 0)
+		return;
+	zdrv::fill(zscreen, area.Width, area.Height, area.XPosition, area.YPosition, 0xFFFF);
+	if (background_bitmap)
+		gdrv::copy_bitmap(vscreen, area.Width, area.Height, area.XPosition, area.YPosition, background_bitmap,
+		                  area.XPosition, area.YPosition);
+	else
+		gdrv::fill_bitmap(vscreen, area.Width, area.Height, area.XPosition, area.YPosition, 0);
+	for (auto sprite : sprite_list)
+	{
+		if (sprite->DeleteFlag || !sprite->Bmp || sprite->VisualType == VisualTypes::Ball)
+			continue;
+		if (maths::rectangle_clip(sprite->BmpRect, area, &clipRect))
+			zdrv::paint(clipRect.Width, clipRect.Height, vscreen, clipRect.XPosition, clipRect.YPosition, zscreen,
+			            clipRect.XPosition, clipRect.YPosition, sprite->Bmp,
+			            clipRect.XPosition - sprite->BmpRect.XPosition, clipRect.YPosition - sprite->BmpRect.YPosition,
+			            sprite->ZMap, clipRect.XPosition + sprite->ZMapOffestY - sprite->BmpRect.XPosition,
+			            clipRect.YPosition + sprite->ZMapOffestX - sprite->BmpRect.YPosition);
+	}
+}
+
+bool render::BoxesInSidePanel()
+{
+	return pb::FT2FullScreen && SidePanelRect.w > 0;
+}
+
 void render::paint_balls()
 {
 	// Sort ball sprites by ascending depth
@@ -512,7 +543,7 @@ void render::SpriteViewer(bool* show)
 
 // --- Display enhancements (Options > Graphics) ---------------------------------------------------------------
 // Backdrop behind the table where the window is wider/taller than the table: 0 black, 1 ambient glow (the table,
-// blurred and dimmed), 2 the table's art (preview.bmp in its folder, else ambient). Sharp scaling: blow the table up
+// blurred and dimmed), 2 the table's art (its title screen or preview.bmp, see table_art; else ambient). Sharp scaling: blow the table up
 // by a whole number with hard pixels, then smooth only the last step - crisp on big screens without blocky edges.
 // Scanlines: optional CRT look.
 static SDL_Texture* AmbientTexture = nullptr;
@@ -526,7 +557,7 @@ static SDL_Texture* TableArt()
 	if (!ArtTried)
 	{
 		ArtTried = true;
-		if (auto surface = SDL_LoadBMP("preview.bmp"))
+		if (auto surface = table_art::Load())
 		{
 			ArtTexture = SDL_CreateTextureFromSurface(winmain::Renderer, surface);
 			SDL_FreeSurface(surface);
@@ -535,55 +566,6 @@ static SDL_Texture* TableArt()
 		}
 	}
 	return ArtTexture;
-}
-
-static void DrawSidePanel()
-{
-	auto& panel = render::SidePanelRect;
-	if (panel.w <= 0 || !pb::MainTable)
-		return;
-	SDL_SetRenderDrawBlendMode(winmain::Renderer, SDL_BLENDMODE_BLEND);
-	SDL_SetRenderDrawColor(winmain::Renderer, 8, 8, 14, 230);
-	SDL_RenderFillRect(winmain::Renderer, &panel);
-	// Art on top (the table's preview.bmp), keeping its shape
-	float y = static_cast<float>(panel.y) + panel.h * 0.03f;
-	if (auto art = TableArt())
-	{
-		int w, h;
-		SDL_QueryTexture(art, nullptr, nullptr, &w, &h);
-		float scale = std::min(panel.w * 0.92f / w, panel.h * 0.42f / h);
-		SDL_Rect dst{panel.x + static_cast<int>((panel.w - w * scale) / 2), static_cast<int>(y),
-		             static_cast<int>(w * scale), static_cast<int>(h * scale)};
-		SDL_SetTextureColorMod(art, 255, 255, 255);
-		SDL_RenderCopy(winmain::Renderer, art, nullptr, &dst);
-		y += dst.h + panel.h * 0.04f;
-	}
-	// Score, ball and player, Full Tilt 1 style
-	auto draw = ImGui::GetForegroundDrawList();
-	auto font = ImGui::GetFont();
-	float big = panel.h * 0.075f, small = panel.h * 0.04f;
-	auto line = [&](const std::string& text, float size, ImU32 color)
-	{
-		auto textSize = font->CalcTextSizeA(size, FLT_MAX, 0.0f, text.c_str());
-		draw->AddText(font, size, ImVec2(panel.x + (panel.w - textSize.x) / 2, y), color, text.c_str());
-		y += textSize.y * 1.15f;
-	};
-	auto table = pb::MainTable;
-	std::string score = std::to_string(table->CurScoreStruct ? table->CurScoreStruct->Score : 0);
-	for (int i = static_cast<int>(score.size()) - 3; i > 0; i -= 3)
-		score.insert(static_cast<size_t>(i), ",");
-	line("Player " + std::to_string(table->CurrentPlayer + 1), small, IM_COL32(200, 200, 200, 255));
-	line(score, big, IM_COL32(255, 210, 80, 255));
-	line("Ball " + std::to_string(std::max(1, table->MaxBallCount - table->BallCount + 1)), small, IM_COL32(200, 200, 200, 255));
-	y += small * 0.6f;
-	if (pb::InfoTextBox && pb::InfoTextBox->CurrentMessage)
-	{
-		auto wrapW = panel.w * 0.9f;
-		auto text = pb::InfoTextBox->CurrentMessage->Text;
-		auto textSize = font->CalcTextSizeA(small, FLT_MAX, wrapW, text);
-		draw->AddText(font, small, ImVec2(panel.x + (panel.w - std::min(wrapW, textSize.x)) / 2, y),
-		              IM_COL32(120, 220, 255, 255), text, nullptr, wrapW);
-	}
 }
 
 static void DrawBackdrop(SDL_Texture* table)
@@ -892,7 +874,15 @@ static std::vector<ColorRgba> UpscaleBuf[2];
 static SDL_Texture* UpscaleTexture = nullptr;
 static int UpscaleW = 0, UpscaleH = 0;
 
-static void Scale2x(const ColorRgba* src, int w, int h, ColorRgba* dst)
+// Half way between two colours (the smooth variant puts this in the corner pixels Scale2x would copy over)
+static uint32_t Mix(uint32_t a, uint32_t b)
+{
+	return ((a & 0xFEFEFEFEu) >> 1) + ((b & 0xFEFEFEFEu) >> 1) + (a & b & 0x01010101u);
+}
+
+// smooth: the rounded-off corners are blended half way with the pixel's own colour, so diagonals come out
+// anti-aliased instead of in hard steps, while flat areas and straight edges stay exactly as sharp
+static void Scale2x(const ColorRgba* src, int w, int h, ColorRgba* dst, bool smooth = false)
 {
 	for (int y = 0; y < h; y++)
 	{
@@ -908,10 +898,10 @@ static void Scale2x(const ColorRgba* src, int w, int h, ColorRgba* dst)
 			uint32_t e0 = e, e1 = e, e2 = e, e3 = e;
 			if (b != hh && d != f)
 			{
-				if (d == b) e0 = d;
-				if (b == f) e1 = f;
-				if (d == hh) e2 = d;
-				if (hh == f) e3 = f;
+				if (d == b) e0 = smooth ? Mix(d, e) : d;
+				if (b == f) e1 = smooth ? Mix(f, e) : f;
+				if (d == hh) e2 = smooth ? Mix(d, e) : d;
+				if (hh == f) e3 = smooth ? Mix(f, e) : f;
 			}
 			d0[2 * x].Color = e0;
 			d0[2 * x + 1].Color = e1;
@@ -925,7 +915,11 @@ static void Scale2x(const ColorRgba* src, int w, int h, ColorRgba* dst)
 static SDL_Texture* UpscaleArt(gdrv_bitmap8* screen, const ColorRgba* frame, int& factor)
 {
 	factor = 1;
-	int passes = std::min(static_cast<int>(options::Options.UpscaleArt), 2);
+	// 1 = 2x, 2 = 4x, 3 = 2x smooth, 4 = 4x smooth (the smooth blend on the first pass only: a second blend
+	// would soften the art)
+	int mode = options::Options.UpscaleArt;
+	bool smooth = mode >= 3;
+	int passes = smooth ? mode - 2 : std::min(mode, 2);
 	if (passes <= 0)
 		return screen->Texture;
 	int tw = screen->Width << passes, th = screen->Height << passes;
@@ -946,7 +940,7 @@ static SDL_Texture* UpscaleArt(gdrv_bitmap8* screen, const ColorRgba* frame, int
 	{
 		auto& out = UpscaleBuf[p];
 		out.resize(static_cast<size_t>(cw) * ch * 4);
-		Scale2x(src, cw, ch, out.data());
+		Scale2x(src, cw, ch, out.data(), smooth && p == 0);
 		src = out.data();
 		cw *= 2;
 		ch *= 2;
@@ -1171,7 +1165,7 @@ void render::PresentVScreen()
 	DrawLightPools(DestinationRect);
 	DrawVignette(DestinationRect);
 	DrawScanlines(vscreen->Height);
-	DrawSidePanel();
+	side_panel::Draw();
 
 	if (options::Options.DebugOverlay)
 	{

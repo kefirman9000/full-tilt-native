@@ -13,8 +13,9 @@
 - [x] GitHub Actions release build (MSVC) + in-app updater (asks before updating) + log files
 
 ## Next
-- [ ] Optional **Full Tilt 1-style side panel** for FT2 tables (score, ball, player, messages beside the table).
-      Panel art: the FT2 title screens the user supplied (Alien Daze, Mad Scientist, Captain Hero), with the stray
+- [x] Optional **Full Tilt 1-style side panel** for FT2 tables (0.9.0: on by default, dot-matrix display, rule status;
+      art = the SPLASH_BITMAP title screen read from the table's own exe at run time, see table_art.cpp) (score, ball, player, messages beside the table).
+      Was planned: the FT2 title screens the user supplied (Alien Daze, Mad Scientist, Captain Hero), with the stray
       hourglass cursor painted out; table icons (Alien.bmp / Hero.bmp / Mad.bmp) as fallback. Art is NOT committed
       (copyrighted game art); it ships with the user's local package.
 - [x] Debug hooks kept as developer options, read once at start-up (pb::DevDebug = FT2_DEBUG, pb::DevNoZ = FT2_NOZ)

@@ -1,4 +1,5 @@
 #include "pch.h"
+#include "rumble.h"
 #include "nudge.h"
 
 
@@ -64,6 +65,7 @@ void nudge::nudge_up()
 
 void nudge::_nudge(float xDiff, float yDiff)
 {
+	rumble::Pulse(0.45f, 0.15f, 120);
 	vector2 accelMod;
 
 	accelMod.X = xDiff * 0.5f;

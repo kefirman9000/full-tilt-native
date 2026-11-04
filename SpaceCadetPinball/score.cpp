@@ -116,6 +116,8 @@ void score::erase(scoreStruct* score, int blitFlag)
 				score->BackgroundBmp,
 				score->OffsetX,
 				score->OffsetY);
+		else if (pb::FT2FullScreen)
+			render::restore_area(score->OffsetX, score->OffsetY, score->Width, score->Height);
 		else
 			gdrv::fill_bitmap(render::vscreen, score->Width, score->Height, score->OffsetX, score->OffsetY, 0);
 	}
@@ -140,7 +142,7 @@ void score::update(scoreStruct* score)
 		int x = score->Width + score->OffsetX;
 		int y = score->OffsetY;
 		erase(score, 0);
-		if (score->Score >= 0)
+		if (score->Score >= 0 && !render::BoxesInSidePanel())
 		{
 			snprintf(scoreBuf, sizeof scoreBuf, "%d", score->Score);
 			for (ptrdiff_t index = strlen(scoreBuf) - 1; index >= 0; index--)
@@ -151,7 +153,7 @@ void score::update(scoreStruct* score)
 				x -= bmp->Width;
 				int height = bmp->Height;
 				int width = bmp->Width;
-				if (render::background_bitmap)
+				if (render::background_bitmap || pb::FT2FullScreen)
 					gdrv::copy_bitmap_w_transparency(render::vscreen, width, height, x, y, bmp, 0, 0);
 				else
 					gdrv::copy_bitmap(render::vscreen, width, height, x, y, bmp, 0, 0);

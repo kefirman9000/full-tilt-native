@@ -13,10 +13,27 @@ programs are recompiled to C on your computer from your own copy, then all 13 ta
 The whole table fits on screen with no scrolling; **F11** switches to the original scrolling view. No DOS setup
 screens. Sound is not in yet. The game's code is never included in this download (see `epic/README.md`).
 
+**New in 0.9.0: side panel, dot-matrix display, Table Guide** (Full Tilt 2 tables)
+- **Side panel on by default** (Options > Graphics > Side Score Panel): the table's title screen, a dot-matrix
+  display with the score and the rules' messages, every player's score, extra ball, the table's best score and
+  what the rules are doing now (bonus multiplier, lit pockets, Captain Hero's pop value, henchmen, skill shot).
+  The title screen is read from the table's own program (Alien.exe, hero.exe, mad.exe), so nothing extra to copy.
+  Put a `panel.bmp` in a table folder to use your own picture.
+- **No more black boxes on the table.** The score and message areas used to clear themselves to black over the
+  table art. They now show the art underneath, and move to the side panel while it is on.
+- **Dot-matrix display** (Options > Graphics, on by default; off shows plain text in the panel).
+- **Help > Table Guide**: how the table in play scores, and your statistics for it (games, best, average, last
+  game, time played).
+- **Practice mode** (Options > Table Rules): every lost ball comes back. Practice games are not high scores or
+  statistics.
+- **Controller rumble** (Options, on by default): bumpers, slingshots, flippers, nudges, drains and tilt.
+- **Upscale Table Art** has two new smooth settings (2x / 4x smooth) with anti-aliased diagonals.
+
 **Captain Hero in 0.9.0: real scoring and the skill shot**
-- **Real point values.** Captain Hero's scores were read from the original table program: lanes 5,000-20,000
-  (50,000 for the one that completes them), targets 5,000-100,000, drop target banks up to 150,000, mid-table
-  pockets 50,000, and so on. Scores now run at the original table's scale.
+- **Real point values.** Captain Hero's scores were read from the original table program: lanes 5,000-20,000,
+  targets and drop targets 5,000-100,000 a hit, scoops 25,000-70,000, mid-table pockets 50,000, and so on.
+  Scores now run at the original table's scale. (The original's bigger awards for lit targets and finished
+  banks come with the table's modes.)
 - **Pop bumpers build up**: 1,000 a hit, 1,000 more every 8 hits, up to 5,000; back to 1,000 for each new ball.
 - **Henchmen take five hits**, as on the original: 10,000, 20,000, 30,000, 40,000, and the fifth hit knocks him out
   (50,000 times the bonus multiplier, until the table's modes are in).

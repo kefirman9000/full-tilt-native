@@ -1,4 +1,6 @@
 #include "pch.h"
+#include "side_panel.h"
+#include "table_guide.h"
 #include "winmain.h"
 #include "marble_balls.h"
 #include "TBall.h"
@@ -746,8 +748,9 @@ void winmain::RenderUi()
 				}
 				if (ImGui::BeginMenu("Upscale Table Art"))
 				{
-					const char* names[] = {"Off", "2x (Scale2x)", "4x (Scale2x twice)"};
-					for (int i = 0; i < 3; i++)
+					const char* names[] = {"Off", "2x (Scale2x)", "4x (Scale2x twice)", "2x smooth (anti-aliased edges)",
+					                       "4x smooth (anti-aliased edges)"};
+					for (int i = 0; i < 5; i++)
 						if (ImGui::MenuItem(names[i], nullptr, Options.UpscaleArt.V == i))
 							Options.UpscaleArt.V = i;
 					ImGui::EndMenu();
@@ -756,14 +759,17 @@ void winmain::RenderUi()
 				{
 					Options.SidePanel ^= true;
 					fullscrn::window_size_changed();
+					side_panel::RefreshTableBoxes(); // the scores move between the table and the panel
 				}
+				if (ImGui::MenuItem("Dot Matrix Display (side panel)", nullptr, Options.DotMatrix, pb::FT2FullScreen))
+					Options.DotMatrix ^= true;
 				if (ImGui::BeginMenu("Backdrop"))
 				{
 					if (ImGui::MenuItem("Black", nullptr, Options.Backdrop.V == 0))
 						Options.Backdrop.V = 0;
 					if (ImGui::MenuItem("Ambient glow", nullptr, Options.Backdrop.V == 1))
 						Options.Backdrop.V = 1;
-					if (ImGui::MenuItem("Table art (preview.bmp)", nullptr, Options.Backdrop.V == 2))
+					if (ImGui::MenuItem("Table art (title screen)", nullptr, Options.Backdrop.V == 2))
 						Options.Backdrop.V = 2;
 					ImGui::EndMenu();
 				}
@@ -901,6 +907,11 @@ void winmain::RenderUi()
 						if (ImGui::MenuItem(label.c_str(), nullptr, Options.BallSave.V == secs))
 							Options.BallSave.V = secs;
 					}
+					ImGui::Separator();
+					if (ImGui::MenuItem("Practice Mode (lost balls come back)", nullptr, Options.Practice, pb::FT2Table))
+						Options.Practice ^= true;
+					ImGui::TextDisabled("Full Tilt tables. Practice games are not");
+					ImGui::TextDisabled("high scores or statistics.");
 					ImGui::EndMenu();
 				}
 				if (ImGui::BeginMenu("Flipper Keys"))
@@ -914,6 +925,8 @@ void winmain::RenderUi()
 					ImGui::TextDisabled("Every flipper on the table follows these keys.");
 					ImGui::EndMenu();
 				}
+				if (ImGui::MenuItem("Controller Rumble", nullptr, Options.Rumble))
+					Options.Rumble ^= true;
 				if (ImGui::MenuItem("Hide Cursor", nullptr, Options.HideCursor))
 				{
 					Options.HideCursor ^= true;
@@ -983,6 +996,9 @@ void winmain::RenderUi()
 				ShowImGuiDemo ^= true;
 			}
 #endif
+			if (ImGui::MenuItem("Table Guide (rules and statistics)", nullptr, table_guide::ShowWindow))
+				table_guide::ShowWindow ^= true;
+			ImGui::Separator();
 			if (ImGui::MenuItem("Sprite Viewer", nullptr, ShowSpriteViewer))
 			{
 				if (!ShowSpriteViewer)
@@ -1056,6 +1072,7 @@ void winmain::RenderUi()
 	a_dialog();
 	high_score::RenderHighScoreDialog();
 	font_selection::RenderDialog();
+	table_guide::Render();
 	if (ShowSpriteViewer)
 		render::SpriteViewer(&ShowSpriteViewer);
 	options::RenderControlDialog();

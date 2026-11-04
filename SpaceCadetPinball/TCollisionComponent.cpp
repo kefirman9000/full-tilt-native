@@ -1,4 +1,5 @@
 #include "pch.h"
+#include "rumble.h"
 #include "TCollisionComponent.h"
 #include "pb.h"
 #include "loader.h"
@@ -74,6 +75,8 @@ bool TCollisionComponent::DefaultCollision(TBall* ball, vector2* nextPosition, v
 	{
 		loader::play_sound(HardHitSoundId, ball, "TCollisionComponent1");
 		collision = true;
+		if (Boost > 0.0f)
+			rumble::Pulse(0.35f, 0.6f, 70); // bumpers, slingshots and other kickers
 	}
 	else if (projSpeed > 0.2f)
 		loader::play_sound(SoftHitSoundId, ball, "TCollisionComponent2");

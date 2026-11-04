@@ -169,6 +169,7 @@ namespace
 		int PopHits = 0;
 		bool SkillShotLive = false;
 		bool SkillShotExtraBall = false;
+		bool AwaitingLaunch = false; // a ball sits in the shooter lane
 	} rs;
 
 	// Captain Hero's henchmen take five hits: 10,000 x the hit number for hits 1-4 (hero.exe 0x402668), the fifth
@@ -517,6 +518,13 @@ namespace
 		if (t->MultiballCount > 0 || t->TiltLockFlag)
 			return; // other balls still in play
 		build_sets();
+		if (options::Options.Practice)
+		{
+			ft2_control::PracticeGame = true;
+			end_of_ball();
+			show("PRACTICE  BALL BACK", 2.5f);
+			return; // same player, same ball number: the drain timer serves a new ball
+		}
 		auto saveMs = options::Options.BallSave.V * 1000;
 		if (saveMs > 0 && !rs.BallSaveUsed && pb::time_ticks - rs.LaunchTick < saveMs)
 		{
@@ -549,11 +557,13 @@ namespace
 		else if (t->Plunger)
 		{
 			t->Plunger->Message(MessageCode::PlungerStartFeedTimer, 0.0);
+			rs.AwaitingLaunch = true;
 		}
 	}
 }
 
 TBall* ft2_control::CollidingBall = nullptr;
+bool ft2_control::PracticeGame = false;
 
 void ft2_control::handler(MessageCode code, TPinballComponent* caller)
 {
@@ -589,6 +599,7 @@ void ft2_control::handler(MessageCode code, TPinballComponent* caller)
 		build_sets();
 		rs.LaunchTick = pb::time_ticks; // ball save counts from the launch
 		rs.SkillShotLive = true; // the first pass over Captain Hero's skill shot trigger after a launch decides it
+		rs.AwaitingLaunch = false;
 		return;
 	}
 
@@ -628,6 +639,36 @@ void ft2_control::handler(MessageCode code, TPinballComponent* caller)
 		caller->Message(MessageCode::TSinkResetTimer, 1.0f);
 }
 
+std::vector<std::string> ft2_control::StatusLines()
+{
+	std::vector<std::string> lines;
+	auto t = table();
+	if (!t || rs.Table != t || pb::game_mode != GameModes::InGame)
+		return lines;
+	if (options::Options.Practice)
+		lines.emplace_back("PRACTICE  (balls come back)");
+	if (is_hero() && rs.AwaitingLaunch)
+		lines.emplace_back("Skill shot: short pull");
+	if (enhanced() && rs.Multiplier > 1)
+		lines.push_back("Bonus x" + std::to_string(rs.Multiplier));
+	if (rs.PocketTimer)
+		lines.emplace_back("Pockets lit");
+	if (is_hero() && rs.PopValue > 1000)
+		lines.push_back("Pop bumpers " + with_commas(rs.PopValue));
+	int out = 0, mostHits = 0;
+	for (auto henchman : rs.Henchmen)
+		if (henchman->Shown)
+		{
+			out++;
+			if (rs.HenchmanHits.count(henchman))
+				mostHits = std::max(mostHits, rs.HenchmanHits.at(henchman));
+		}
+	if (out)
+		lines.push_back((out == 1 ? std::string("Enemy out") : std::to_string(out) + " enemies out") + ": " +
+		                std::to_string(mostHits) + " of " + std::to_string(HenchmanHitsNeeded) + " hits");
+	return lines;
+}
+
 void ft2_control::table_handler(MessageCode code)
 {
 	if (!table())
@@ -660,6 +701,8 @@ void ft2_control::table_handler(MessageCode code)
 		rs.PopHits = 0;
 		rs.SkillShotLive = false;
 		rs.SkillShotExtraBall = false;
+		rs.AwaitingLaunch = true;
+		ft2_control::PracticeGame = options::Options.Practice;
 		break;
 	case MessageCode::GameOver:
 		if (enhanced() && !rs.AttractTimer)

@@ -47,6 +47,10 @@ set(SOURCE_FILES
         SpaceCadetPinball/control.cpp
         SpaceCadetPinball/control.h
         SpaceCadetPinball/ft2_control.cpp
+        SpaceCadetPinball/side_panel.cpp
+        SpaceCadetPinball/rumble.cpp
+        SpaceCadetPinball/table_art.cpp
+        SpaceCadetPinball/table_guide.cpp
         SpaceCadetPinball/ft_log.cpp
         SpaceCadetPinball/ft_log.h
         SpaceCadetPinball/ft_music.cpp
@@ -62,6 +66,10 @@ set(SOURCE_FILES
         SpaceCadetPinball/ft_music.h
         SpaceCadetPinball/marble_balls.h
         SpaceCadetPinball/ft2_control.h
+        SpaceCadetPinball/side_panel.h
+        SpaceCadetPinball/rumble.h
+        SpaceCadetPinball/table_art.h
+        SpaceCadetPinball/table_guide.h
         SpaceCadetPinball/EmbeddedData.cpp
         SpaceCadetPinball/EmbeddedData.h
         SpaceCadetPinball/font_selection.cpp

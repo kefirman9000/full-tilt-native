@@ -1,4 +1,5 @@
 #include "pch.h"
+#include "rumble.h"
 #include "TDrain.h"
 
 
@@ -31,6 +32,7 @@ int TDrain::Message(MessageCode code, float value)
 void TDrain::Collision(TBall* ball, vector2* nextPosition, vector2* direction, float distance, TEdgeSegment* edge)
 {
 	ball->Disable();
+	rumble::Pulse(0.5f, 0.25f, 220);
 	--PinballTable->MultiballCount;
 	if (PinballTable->MultiballCount <= 0)
 	{

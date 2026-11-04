@@ -308,5 +308,8 @@ struct optionsStruct
 	BoolOption MotionTrails;
 	BoolOption BallShadow; // soft shadow under the ball and a faint gloss reflection on the playfield
 	IntOption LightPools; // lit lamps cast coloured light onto the artwork around them: 0 off, 1 soft, 2 strong
-	IntOption UpscaleArt; // pixel-art upscaling of the table picture (Scale2x): 0 off, 1 = 2x, 2 = 4x
+	IntOption UpscaleArt; // table picture upscaling (Scale2x): 0 off, 1 = 2x, 2 = 4x, 3 = 2x smooth, 4 = 4x smooth
+	BoolOption DotMatrix; // side panel shows score and messages on a dot-matrix display (else plain text)
+	BoolOption Rumble; // game controller rumbles on bumpers, slingshots, kickers, flippers and tilt
+	BoolOption Practice; // practice: a drained ball always comes back; scores are not saved as high scores
 };

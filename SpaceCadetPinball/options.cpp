@@ -161,7 +161,7 @@ optionsStruct options::Options
 	{"Backdrop", 1},
 	{"Scanlines", false},
 	{"Smooth Flippers", true},
-	{"Side Score Panel", false},
+	{"Side Score Panel", true},
 	{"Enhanced Rules", true},
 	{"Ball Save", 8},
 	{"Glow", 1},
@@ -171,6 +171,9 @@ optionsStruct options::Options
 	{"Ball Shadow", true},
 	{"Light Pools", 1},
 	{"Upscale Art", 0},
+	{"Dot Matrix Display", true},
+	{"Controller Rumble", true},
+	{"Practice Mode", false},
 };
 
 void options::InitPrimary()

@@ -84,6 +84,8 @@ void TTextBox::Clear(bool lowPriorityOnly)
 			bmp,
 			OffsetX,
 			OffsetY);
+	else if (pb::FT2FullScreen)
+		render::restore_area(OffsetX, OffsetY, Width, Height);
 	else
 		gdrv::fill_bitmap(render::vscreen, Width, Height, OffsetX, OffsetY, 0);
 	if (Timer)
@@ -146,7 +148,7 @@ void TTextBox::Display(const char* text, float time, bool lowPriority)
 void TTextBox::DrawImGui()
 {
 	// Do nothing when using a font (the text will be rendered to VScreen in TTextBox::Draw)
-	if (Font || !CurrentMessage)
+	if (Font || !CurrentMessage || render::BoxesInSidePanel())
 		return;
 
 	char windowName[64];
@@ -195,6 +197,8 @@ void TTextBox::Draw()
 			bmp,
 			OffsetX,
 			OffsetY);
+	else if (pb::FT2FullScreen)
+		render::restore_area(OffsetX, OffsetY, Width, Height);
 	else
 		gdrv::fill_bitmap(render::vscreen, Width, Height, OffsetX, OffsetY, 0);
 
@@ -260,7 +264,7 @@ void TTextBox::Draw()
 				{
 					auto height = charBmp->Height;
 					auto width = charBmp->Width;
-					if (render::background_bitmap)
+					if (render::background_bitmap || pb::FT2FullScreen)
 						gdrv::copy_bitmap_w_transparency(render::vscreen, width, height, offX, offY, charBmp, 0,
 						                                 0);
 					else
