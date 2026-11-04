@@ -783,6 +783,10 @@ void winmain::RenderUi()
 						Options.Backdrop.V = 1;
 					if (ImGui::MenuItem("Table art (title screen)", nullptr, Options.Backdrop.V == 2))
 						Options.Backdrop.V = 2;
+					ImGui::Separator();
+					if (ImGui::MenuItem("Transparent table background", nullptr, Options.TransparentTable))
+						Options.TransparentTable ^= true;
+					ImGui::TextDisabled("The black around the table art lets the backdrop show through.");
 					ImGui::EndMenu();
 				}
 				ImGui::Separator();
@@ -932,7 +936,7 @@ void winmain::RenderUi()
 						Options.FlipperKeys.V = 0;
 					if (ImGui::MenuItem("Z and / (your key settings)", nullptr, Options.FlipperKeys.V == 1))
 						Options.FlipperKeys.V = 1;
-					if (ImGui::MenuItem("Left/Right Shift", nullptr, Options.FlipperKeys.V == 2))
+					if (ImGui::MenuItem("Left/Right Shift (Z and / nudge the table)", nullptr, Options.FlipperKeys.V == 2))
 						Options.FlipperKeys.V = 2;
 					ImGui::TextDisabled("Every flipper on the table follows these keys.");
 					ImGui::EndMenu();

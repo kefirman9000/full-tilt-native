@@ -13,6 +13,17 @@ programs are recompiled to C on your computer from your own copy, then all 13 ta
 The whole table fits on screen with no scrolling; **F11** switches to the original scrolling view. No DOS setup
 screens. Sound is not in yet. The game's code is never included in this download (see `epic/README.md`).
 
+**Also new in 0.9.0**
+- **Transparent table background** (Options > Graphics > Backdrop): the black around the table art becomes
+  see-through, so the ambient glow or the table's title screen shows behind the table, not only beside it.
+- **Nudge with Z and /** when the flippers are on Left/Right Shift (Options > Flipper Keys). The nudge keys can
+  also be set to any key in Options > Player Controls (F8).
+- **The side panel switches itself on once** after updating (settings from older versions had it off); turn it off
+  in Options > Graphics if you prefer, and it stays off.
+- **Fixed: a crash after a minute without pressing a key** on every table except Space Cadet.
+- **Self-test**: `FullTiltEngine --table HERO.DAT --selftest 120` plays a table by itself and reports PASS/FAIL;
+  `selftest.ps1` does it for every table in the library.
+
 **Captain Hero in 0.9.0: villain battles**
 - **Battle the villains.** Shoot the scoop: the display offers a villain (left flipper for the next, right
   flipper to fight). Quake, Mad Scientist, Mystman, Slime Man, Mr. Pling and Evil Twin each have their own shots

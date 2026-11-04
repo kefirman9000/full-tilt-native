@@ -573,8 +573,8 @@ static void DrawBackdrop(SDL_Texture* table)
 	int outW, outH;
 	SDL_GetRendererOutputSize(winmain::Renderer, &outW, &outH);
 	auto& dst = render::DestinationRect;
-	if (dst.w >= outW - 2 && dst.h >= outH - 2)
-		return; // no bars to fill
+	if (dst.w >= outW - 2 && dst.h >= outH - 2 && !options::Options.TransparentTable)
+		return; // no bars to fill (with a see-through table the backdrop shows behind it too)
 	auto style = options::Options.Backdrop.V;
 	if (style == 2)
 	{
@@ -604,6 +604,8 @@ static void DrawBackdrop(SDL_Texture* table)
 	// Shrinking the table to 24x18 and stretching it back is a cheap, smooth blur
 	auto previous = SDL_GetRenderTarget(winmain::Renderer);
 	SDL_SetRenderTarget(winmain::Renderer, AmbientTexture);
+	SDL_SetRenderDrawColor(winmain::Renderer, 0, 0, 0, 255);
+	SDL_RenderClear(winmain::Renderer);
 	SDL_SetTextureScaleMode(table, SDL_ScaleModeLinear);
 	SDL_RenderCopy(winmain::Renderer, table, nullptr, nullptr);
 	SDL_SetRenderTarget(winmain::Renderer, previous);
@@ -633,9 +635,14 @@ static bool DrawSharp(SDL_Texture* table, int srcW, int srcH)
 	}
 	auto previous = SDL_GetRenderTarget(winmain::Renderer);
 	SDL_SetRenderTarget(winmain::Renderer, SharpTexture);
+	SDL_BlendMode tableMode;
+	SDL_GetTextureBlendMode(table, &tableMode);
+	SDL_SetTextureBlendMode(table, SDL_BLENDMODE_NONE); // copied as it is, see-through parts included
 	SDL_SetTextureScaleMode(table, SDL_ScaleModeNearest);
 	SDL_RenderCopy(winmain::Renderer, table, nullptr, nullptr);
+	SDL_SetTextureBlendMode(table, tableMode);
 	SDL_SetRenderTarget(winmain::Renderer, previous);
+	SDL_SetTextureBlendMode(SharpTexture, tableMode);
 	SDL_RenderCopy(winmain::Renderer, SharpTexture, nullptr, &dst);
 	return true;
 }
@@ -1080,16 +1087,49 @@ static void DrawLightPools(const SDL_Rect& dst)
 	}
 }
 
+// Options > Graphics > Backdrop > Transparent table background: pixels of the table picture that nothing was drawn
+// on (still at the empty depth and black) become see-through, so the backdrop shows there. Black that belongs to
+// the art (outlines, shadows) has a depth and stays solid.
+static std::vector<ColorRgba> SeeThroughFrame;
+
+static const ColorRgba* MakeSeeThrough(gdrv_bitmap8* screen, const ColorRgba* frame, int frameStride)
+{
+	auto z = render::ZScreen();
+	int w = screen->Width, h = screen->Height;
+	SeeThroughFrame.resize(static_cast<size_t>(w) * h);
+	for (int y = 0; y < h; y++)
+	{
+		auto src = frame + static_cast<size_t>(y) * frameStride;
+		auto depth = z && y < z->Height ? z->ZPtr1 + static_cast<size_t>(y) * z->Stride : nullptr;
+		auto dst = &SeeThroughFrame[static_cast<size_t>(y) * w];
+		for (int x = 0; x < w; x++)
+		{
+			auto color = src[x].Color;
+			bool empty = (color & 0x00FFFFFFu) == 0 && (!depth || x >= z->Width || depth[x] == 0xFFFF);
+			dst[x].Color = empty ? 0u : color | 0xFF000000u;
+		}
+	}
+	return SeeThroughFrame.data();
+}
+
 void render::PresentVScreen()
 {
 	auto frame = ApplyBallShadows(vscreen);
-	if (frame == vscreen->BmpBufPtr1)
+	auto seeThrough = options::Options.TransparentTable.V;
+	if (seeThrough)
+	{
+		frame = MakeSeeThrough(vscreen, frame, frame == vscreen->BmpBufPtr1 ? vscreen->Stride : vscreen->Width);
+		SDL_UpdateTexture(vscreen->Texture, nullptr, frame, vscreen->Width * static_cast<int>(sizeof(ColorRgba)));
+	}
+	else if (frame == vscreen->BmpBufPtr1)
 		vscreen->BlitToTexture();
 	else
 		SDL_UpdateTexture(vscreen->Texture, nullptr, frame, vscreen->Width * static_cast<int>(sizeof(ColorRgba)));
+	SDL_SetTextureBlendMode(vscreen->Texture, seeThrough ? SDL_BLENDMODE_BLEND : SDL_BLENDMODE_NONE);
 	int artScale = 1;
 	auto artTexture = UpscaleArt(vscreen, frame, artScale);
 	auto tableTexture = ApplyTrails(artTexture, vscreen->Width * artScale, vscreen->Height * artScale);
+	SDL_SetTextureBlendMode(tableTexture, seeThrough ? SDL_BLENDMODE_BLEND : SDL_BLENDMODE_NONE);
 	DrawBackdrop(tableTexture);
 
 	if (offset_x == 0 && offset_y == 0)

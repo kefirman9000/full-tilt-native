@@ -312,4 +312,5 @@ struct optionsStruct
 	IntOption DotMatrix; // dot-matrix display: 0 off (plain text), 1 in the FT2 side panel, 2 also over every table's message box
 	BoolOption Rumble; // game controller rumbles on bumpers, slingshots, kickers, flippers and tilt
 	BoolOption Practice; // practice: a drained ball always comes back; scores are not saved as high scores
+	BoolOption TransparentTable; // the table picture's empty black parts are see-through: the backdrop shows behind
 };

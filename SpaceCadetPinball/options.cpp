@@ -174,6 +174,7 @@ optionsStruct options::Options
 	{"Dot Matrix Display", 1},
 	{"Controller Rumble", true},
 	{"Practice Mode", false},
+	{"Transparent Table Background", false},
 };
 
 void options::InitPrimary()
@@ -196,6 +197,14 @@ void options::InitPrimary()
 
 	for (const auto opt : AllOptions)
 		opt->Load();
+	// Settings saved by an older version: switch on once what is now on by default but used to be off
+	// (the side panel, 0.9.0), so updating shows it; turning it off afterwards sticks
+	auto settingsVersion = get_int("Settings Version", 1);
+	if (settingsVersion < 2)
+	{
+		Options.SidePanel = true;
+		set_int("Settings Version", 2);
+	}
 	PostProcessOptions();
 }
 
@@ -477,12 +486,22 @@ std::vector<GameBindings> options::MapGameInput(GameInput key)
 	}
 	// Flipper keys (Options > Flipper Keys): 0 = configured keys and Left/Right Shift, 1 = configured keys only,
 	// 2 = Left/Right Shift only. Applies to every flipper on the table.
+	// With Shift flipping, the flipper keys (Z and / unless changed) nudge the table instead: the left one from the
+	// left, the right one from the right.
 	auto flipperKeys = Options.FlipperKeys.V;
 	if (flipperKeys == 2 && key.Type == InputTypes::Keyboard)
+	{
+		auto has = [&](GameBindings b) { return std::find(result.begin(), result.end(), b) != result.end(); };
+		bool left = has(GameBindings::LeftFlipper), right = has(GameBindings::RightFlipper);
 		result.erase(std::remove_if(result.begin(), result.end(), [](GameBindings b)
 		{
 			return b == GameBindings::LeftFlipper || b == GameBindings::RightFlipper;
 		}), result.end());
+		if (left && !has(GameBindings::LeftTableBump))
+			result.push_back(GameBindings::LeftTableBump);
+		if (right && !has(GameBindings::RightTableBump))
+			result.push_back(GameBindings::RightTableBump);
+	}
 	if (flipperKeys != 1 && key.Type == InputTypes::Keyboard)
 	{
 		if (key.Value == SDLK_LSHIFT &&
