@@ -1,4 +1,5 @@
 #include "pch.h"
+#include "selftest.h"
 #include "side_panel.h"
 #include "table_guide.h"
 #include "winmain.h"
@@ -84,6 +85,7 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 		if (win != std::string::npos)
 			HasHandover = sscanf(args.c_str() + win + 9, "%d,%d,%d,%d", &HandoverX, &HandoverY, &HandoverW, &HandoverH) == 4 &&
 				HandoverW > 100 && HandoverH > 100;
+		selftest::Parse(args); // --selftest SECONDS: the engine plays the table by itself (see selftest.h)
 		auto pos = args.find("--table ");
 		if (pos != std::string::npos)
 		{
@@ -353,7 +355,7 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 	SDL_DestroyWindow(window);
 	SDL_Quit();
 
-	return return_value;
+	return selftest::Active() ? selftest::ExitCode() : return_value;
 }
 
 void winmain::MainLoop()

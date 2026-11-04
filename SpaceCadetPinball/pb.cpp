@@ -1,4 +1,5 @@
 #include "pch.h"
+#include "selftest.h"
 #include "pb.h"
 #include "ft2_control.h"
 #include <fstream>
@@ -342,8 +343,11 @@ void pb::frame(float dtMilliSec, bool composite)
 		dtMilliSec = 100;
 	if (dtMilliSec <= 0)
 		return;
+	selftest::Frame(dtMilliSec);
 
-	if (FullTiltMode && !demo_mode)
+	// Space Cadet's credits after a minute without input (an easter egg of the Full Tilt version). Only Space Cadet
+	// has them and the message box they go to: on the other tables this crashed after a minute of no key presses.
+	if (FullTiltMode && !demo_mode && !FT2Table)
 	{
 		IdleTimerMs += dtMilliSec;
 		if (IdleTimerMs >= 60000 && !CreditsActive)
@@ -852,7 +856,7 @@ void pb::tilt_no_more()
 
 bool pb::chk_highscore()
 {
-	if (demo_mode || ft2_control::PracticeGame)
+	if (demo_mode || ft2_control::PracticeGame || selftest::Active())
 		return false;
 	for (auto i = 0; i < MainTable->PlayerCount; ++i)
 	{

@@ -51,6 +51,7 @@ set(SOURCE_FILES
         SpaceCadetPinball/rumble.cpp
         SpaceCadetPinball/table_art.cpp
         SpaceCadetPinball/table_guide.cpp
+        SpaceCadetPinball/selftest.cpp
         SpaceCadetPinball/ft_log.cpp
         SpaceCadetPinball/ft_log.h
         SpaceCadetPinball/ft_music.cpp
@@ -70,6 +71,7 @@ set(SOURCE_FILES
         SpaceCadetPinball/rumble.h
         SpaceCadetPinball/table_art.h
         SpaceCadetPinball/table_guide.h
+        SpaceCadetPinball/selftest.h
         SpaceCadetPinball/EmbeddedData.cpp
         SpaceCadetPinball/EmbeddedData.h
         SpaceCadetPinball/font_selection.cpp

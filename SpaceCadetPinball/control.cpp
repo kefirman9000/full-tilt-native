@@ -1008,6 +1008,8 @@ void control::pbctrl_bdoor_controller(char key)
 	{
 		// Full Tilt in-game credits, shown when idle for 60sec
 		float time = 0;
+		if (!mission_text_box)
+			return;
 		for (auto line : credits)
 			mission_text_box->Display(line, time += 2, true);
 		pb::CreditsActive = true;

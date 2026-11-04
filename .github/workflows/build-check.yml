@@ -1,0 +1,50 @@
+name: Build check
+
+# Every push and pull request: build the engine, launcher and updater on Windows (MSVC, as the release does) and
+# Linux (GCC), and check the Python tools compile. Game data is not in the repository, so tables are not played
+# here; run ft2/tools/selftest.ps1 (Windows) or ft2/tools/selftest.sh (Linux) with your own game files for that.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Get SDL2 and SDL2_mixer (Visual C++ development packages)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path Libs | Out-Null
+          Invoke-WebRequest https://github.com/libsdl-org/SDL/releases/download/release-2.30.9/SDL2-devel-2.30.9-VC.zip -OutFile sdl2.zip
+          Invoke-WebRequest https://github.com/libsdl-org/SDL_mixer/releases/download/release-2.8.0/SDL2_mixer-devel-2.8.0-VC.zip -OutFile mixer.zip
+          Expand-Archive sdl2.zip -DestinationPath Libs
+          Expand-Archive mixer.zip -DestinationPath Libs
+          Rename-Item Libs/SDL2-2.30.9 SDL2
+          Rename-Item Libs/SDL2_mixer-2.8.0 SDL2_mixer
+
+      - name: Build
+        shell: pwsh
+        run: |
+          cmake -S . -B build -A x64 -DCMAKE_WIN32_EXECUTABLE:BOOL=1 "-DFTN_VERSION=check"
+          cmake --build build --config Release
+
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install SDL2
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libsdl2-mixer-dev ninja-build
+
+      - name: Build
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+
+      - name: Python tools compile
+        run: python3 -m py_compile ft2/tools/*.py epic/tools/*.py
