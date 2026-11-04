@@ -14,6 +14,7 @@
 #include "TTextBox.h"
 #include "TTextBoxMessage.h"
 #include "winmain.h"
+#include "fullscrn.h"
 
 namespace
 {
@@ -194,9 +195,9 @@ namespace
 			return std::max(2, static_cast<int>(w / DmdW));
 		}
 
-		float draw(float x, float y, float w)
+		float draw(float x, float y, float w, int fixedPitch = 0)
 		{
-			int k = pitch(w);
+			int k = fixedPitch > 0 ? fixedPitch : pitch(w);
 			static SDL_Texture* texture = nullptr;
 			static int textureK = 0;
 			static std::vector<uint32_t> pixels;
@@ -213,7 +214,7 @@ namespace
 				pixels.assign(static_cast<size_t>(DmdW * k * DmdH * k), 0xFF0C0602);
 			}
 			const uint32_t gap = 0xFF0C0602;
-			auto dot = k == 2 ? 2 : k - 1;
+			auto dot = k <= 2 ? k : k - 1;
 			for (int row = 0; row < DmdH; row++)
 				for (int col = 0; col < DmdW; col++)
 				{
@@ -229,7 +230,7 @@ namespace
 							if (dx < dot && dy < dot)
 							{
 								auto corner = (dx == 0 || dx == dot - 1) && (dy == 0 || dy == dot - 1);
-								color = k == 2 ? (dx == 0 && dy == 0 ? on : soft) : k >= 4 && corner ? soft : on;
+								color = k == 1 ? on : k == 2 ? (dx == 0 && dy == 0 ? on : soft) : k >= 4 && corner ? soft : on;
 							}
 							pixels[static_cast<size_t>((row * k + dy) * DmdW * k + col * k + dx)] = color;
 						}
@@ -272,6 +273,183 @@ namespace
 		}
 		return nullptr;
 	}
+	// ---- What the dot-matrix display shows ----
+	// In play: the score, PLAYER n and BALL n. A new message wipes in from the left; the big ones (skill shot,
+	// extra ball, knockouts, jackpots, ball saved, game over) flash three times first and get a chasing border.
+	// Between games it cycles through the table's name, its best scores, the last game and PRESS F2.
+	bool big_message(const std::string& text)
+	{
+		for (auto word : {"SKILL", "EXTRA BALL", "KNOCKED", "JACKPOT", "SAVED", "GAME OVER", "SHOOT AGAIN", "COMPLETE",
+		                  "CAPTURED", "DEFEATED", "HIGH SCORE"})
+			if (text.find(word) != std::string::npos)
+				return true;
+		return false;
+	}
+
+	std::string upper(std::string text)
+	{
+		for (auto& c : text)
+			c = static_cast<char>(toupper(static_cast<unsigned char>(c)));
+		return text;
+	}
+
+	std::string table_title()
+	{
+		std::string key = upper(pb::DatFileName);
+		auto slash = key.find_last_of("/\\");
+		if (slash != std::string::npos)
+			key = key.substr(slash + 1);
+		const char* names[][2] = {{"HERO.DAT", "CAPTAIN HERO"}, {"ALIEN.DAT", "ALIEN DAZE"}, {"MAD.DAT", "MAD SCIENTIST"},
+		                          {"CADET.DAT", "SPACE CADET"}, {"DRAGON.DAT", "DRAGON'S KEEP"},
+		                          {"PIRATES.DAT", "SKULDUGGERY"}};
+		for (auto& name : names)
+			if (key == name[0])
+				return name[1];
+		return "FULL TILT!";
+	}
+
+	void message_lines(Dmd& dmd, const std::string& text)
+	{
+		auto lines = Dmd::wrap(text, 21);
+		if (lines.size() == 1 && Dmd::width(lines[0], 2) <= DmdW)
+			dmd.centred(lines[0], 9, 2);
+		else
+		{
+			if (lines.size() > 4)
+				lines.resize(4);
+			int top = (DmdH - static_cast<int>(lines.size()) * 8 + 1) / 2;
+			for (size_t i = 0; i < lines.size(); i++)
+				dmd.centred(lines[i], top + static_cast<int>(i) * 8, 1);
+		}
+	}
+
+	void attract(Dmd& dmd, TPinballTable* table, Uint32 now)
+	{
+		auto page = now / 3000 % 4;
+		auto& best = high_score::highscore_table;
+		switch (page)
+		{
+		case 0:
+			message_lines(dmd, table_title());
+			break;
+		case 1:
+			if (best[0].Score > 0)
+			{
+				dmd.centred("HIGH SCORES", 0, 1, 150);
+				for (int i = 0; i < 3 && best[i].Score > 0; i++)
+				{
+					auto name = upper(best[i].Name).substr(0, 8);
+					dmd.centred(std::to_string(i + 1) + " " + name + " " + with_commas(best[i].Score), 9 + i * 8, 1);
+				}
+				break;
+			}
+			// fall through: no high scores yet
+		case 2:
+			dmd.centred("LAST GAME", 2, 1, 150);
+			{
+				auto score = with_commas(player_score(table, 0));
+				dmd.centred(score, 13, Dmd::width(score, 2) <= DmdW ? 2 : 1);
+			}
+			break;
+		default:
+			message_lines(dmd, "PRESS F2 TO START");
+			break;
+		}
+	}
+
+	void compose(Dmd& dmd, TPinballTable* table, const char* message, int ballNumber)
+	{
+		static std::string lastText;
+		static Uint32 started = 0;
+		auto now = SDL_GetTicks();
+		std::string text = message ? upper(message) : "";
+		if (high_score::IsAskingForName())
+			text = "NEW HIGH SCORE!  ENTER YOUR NAME";
+		if (text != lastText)
+		{
+			lastText = text;
+			started = now;
+		}
+		auto age = now - started;
+		if (!text.empty())
+		{
+			auto big = big_message(text);
+			message_lines(dmd, text);
+			// Wipe in from the left over a quarter of a second
+			int shown = std::min(DmdW, static_cast<int>(age * DmdW / 250));
+			for (auto& row : dmd.Dots)
+				for (int col = shown; col < DmdW; col++)
+					row[col] = 0;
+			if (big)
+			{
+				if (age < 600 && age / 100 % 2 == 1)
+					for (auto& row : dmd.Dots) // flash: the display inverted
+						for (auto& dot : row)
+							dot = dot ? 0 : 200;
+				// Chasing border: every fourth dot round the edge, moving
+				int phase = static_cast<int>(now / 60 % 4);
+				for (int col = 0; col < DmdW; col++)
+				{
+					if ((col + phase) % 4 == 0)
+						dmd.Dots[0][col] = dmd.Dots[DmdH - 1][DmdW - 1 - col] = 255;
+				}
+				for (int row = 0; row < DmdH; row++)
+					if ((row + phase) % 4 == 0)
+						dmd.Dots[DmdH - 1 - row][0] = dmd.Dots[row][DmdW - 1] = 255;
+			}
+			return;
+		}
+		if (pb::game_mode != GameModes::InGame)
+		{
+			attract(dmd, table, now);
+			return;
+		}
+		auto score = with_commas(player_score(table, table->CurrentPlayer));
+		int scale = Dmd::width(score, 3) <= DmdW ? 3 : 2;
+		dmd.centred(score, scale == 3 ? 1 : 4, scale);
+		dmd.centred("PLAYER " + std::to_string(table->CurrentPlayer + 1) + "    BALL " + std::to_string(ballNumber),
+		            DmdH - 8, 1, 150);
+	}
+}
+
+void side_panel::DrawOverlay()
+{
+	auto table = pb::MainTable;
+	if (!table || options::Options.DotMatrix.V != 2 || render::SidePanelRect.w > 0)
+		return; // only when asked for, and the side panel shows it already
+	SDL_Rect area{};
+	if (!pb::FT2FullScreen)
+	{
+		// Full Tilt 1 and Space Cadet: over the table's own message box in its panel
+		auto box = pb::InfoTextBox;
+		if (!box || box->Width <= 0 || box->Height <= 0)
+			return;
+		area = fullscrn::GetScreenRectFromPinballRect(SDL_Rect{box->OffsetX, box->OffsetY, box->Width, box->Height});
+	}
+	else
+	{
+		// Full Tilt 2 without the panel: in the bar beside the table if there is room, else across the top
+		int outW, outH;
+		SDL_GetRendererOutputSize(winmain::Renderer, &outW, &outH);
+		auto& table_rect = render::DestinationRect;
+		int barW = outW - (table_rect.x + table_rect.w);
+		if (barW >= DmdW * 2 + 16)
+			area = SDL_Rect{table_rect.x + table_rect.w + 8, outH / 2 - DmdH * barW / DmdW / 2, barW - 16,
+			                DmdH * (barW - 16) / DmdW};
+		else
+			area = SDL_Rect{table_rect.x + table_rect.w / 4, table_rect.y + 24, table_rect.w / 2, table_rect.w / 8};
+	}
+	int k = std::min(area.w / DmdW, area.h / DmdH);
+	if (k < 1)
+		return;
+	SDL_SetRenderDrawBlendMode(winmain::Renderer, SDL_BLENDMODE_BLEND);
+	Dmd dmd;
+	compose(dmd, table, live_message(), std::max(1, table->MaxBallCount - table->BallCount + 1));
+	int edge = k >= 2 ? 3 : 2;
+	SDL_Rect box{area.x + (area.w - DmdW * k) / 2 - edge - 1, area.y + (area.h - DmdH * k) / 2 - edge - 1,
+	             DmdW * k + 2 * edge + 2, DmdH * k + 2 * edge + 2};
+	inset_box(box, edge, 255);
+	dmd.draw(static_cast<float>(box.x), static_cast<float>(box.y + edge + 1), static_cast<float>(box.w), k);
 }
 
 void side_panel::Draw()
@@ -347,28 +525,7 @@ void side_panel::Draw()
 	if (options::Options.DotMatrix)
 	{
 		Dmd dmd;
-		if (message)
-		{
-			auto lines = Dmd::wrap(message, 21);
-			if (lines.size() == 1 && Dmd::width(lines[0], 2) <= DmdW)
-				dmd.centred(lines[0], 9, 2);
-			else
-			{
-				if (lines.size() > 4)
-					lines.resize(4);
-				int top = (DmdH - static_cast<int>(lines.size()) * 8 + 1) / 2;
-				for (size_t i = 0; i < lines.size(); i++)
-					dmd.centred(lines[i], top + static_cast<int>(i) * 8, 1);
-			}
-		}
-		else
-		{
-			auto score = with_commas(player_score(table, table->CurrentPlayer));
-			int scale = Dmd::width(score, 3) <= DmdW ? 3 : 2;
-			dmd.centred(score, scale == 3 ? 1 : 4, scale);
-			dmd.centred("PLAYER " + std::to_string(table->CurrentPlayer + 1) + "    BALL " + std::to_string(ballNumber),
-			            DmdH - 8, 1, 150);
-		}
+		compose(dmd, table, message, ballNumber);
 		// The display wants 128 dots at 2 pixels or more: in a narrow panel the box uses the whole width inside the
 		// frame and a thinner border
 		int k = Dmd::pitch(static_cast<float>(boxArea.w - 2 * boxEdge - 4));
@@ -422,9 +579,35 @@ void side_panel::Draw()
 			}
 		if (table->ExtraBalls > 0)
 			line("EXTRA BALL LIT", small, IM_COL32(120, 255, 140, 255));
-		// What the table rules are doing (bonus multiplier, lit pockets, Captain Hero's pops and henchmen, ...)
+		// What the table rules are doing (bonus multiplier, lit pockets, Captain Hero's battles, ...)
 		for (auto& status : ft2_control::StatusLines())
 			line(status, small, cyan, wrap);
+		// The last few messages, newest first, below a thin rule, while there is room
+		static std::vector<std::string> recent;
+		static std::string lastMessage;
+		std::string current = message ? message : "";
+		if (!current.empty() && current != lastMessage)
+		{
+			recent.erase(std::remove(recent.begin(), recent.end(), current), recent.end());
+			recent.insert(recent.begin(), current);
+			if (recent.size() > 5)
+				recent.resize(5);
+		}
+		lastMessage = current;
+		if (pb::game_mode != GameModes::InGame)
+			recent.clear();
+		if (!recent.empty() && y + small * 2.5f < infoBox.y + infoBox.h)
+		{
+			y += small * 0.4f;
+			draw->AddLine(ImVec2(static_cast<float>(infoBox.x + boxEdge) + small, y),
+			              ImVec2(static_cast<float>(infoBox.x + infoBox.w - boxEdge) - small, y), IM_COL32(110, 85, 40, 255));
+			y += small * 0.4f;
+			for (size_t i = 0; i < recent.size() && y + small * 1.2f < infoBox.y + infoBox.h; i++)
+			{
+				auto shade = static_cast<int>(185 - 25 * i);
+				line(recent[i], small * 0.9f, IM_COL32(shade, shade - 10, shade - 30, 255), wrap);
+			}
+		}
 		draw->PopClipRect();
 	}
 	inset_box(bestBox, boxEdge);

@@ -7,6 +7,9 @@ class side_panel
 {
 public:
 	static void Draw();
+	// Options > Graphics > Dot Matrix Display > "Also over the table": the display over a Full Tilt 1 or Space Cadet
+	// table's own message box, or beside / above a Full Tilt 2 table when its side panel is off
+	static void DrawOverlay();
 	// Redraw the table's own score and message boxes (after the panel is switched on or off)
 	static void RefreshTableBoxes();
 };

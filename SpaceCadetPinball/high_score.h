@@ -25,6 +25,7 @@ public:
 	static void show_high_score_dialog();
 	static void show_and_set_high_score_dialog(high_score_entry score);
 	static void RenderHighScoreDialog();
+	static bool IsAskingForName() { return ShowDialog && dlg_enter_name; }
 private:
 	static bool dlg_enter_name;
 	static high_score_entry DlgData;

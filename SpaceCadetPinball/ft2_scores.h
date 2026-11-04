@@ -2,7 +2,8 @@
 // Real point values recovered from the original table programs (rule table in each exe: component name,
 // rule function, scores). Generated from Alien.exe, DRAGON.EXE and PIRATES.EXE. Captain Hero keeps its values inside
 // the rule functions (hero.exe, see ft2/hero_controls.txt): the first value is what a normal hit scores, the others
-// are what the same rule awards when the part is lit or completes its set. Mad Scientist is still to do.
+// are what the same rule awards when the part is lit or completes its set. Mad Scientist (mad.exe) the same; it keeps
+// its points in data variables, whose starting values are used.
 #include <vector>
 
 struct ft2_score_entry
@@ -248,4 +249,40 @@ static const ft2_score_entry ft2_scores[] =
 	{"HERO.DAT", "s_kout10", {50000}},
 	{"HERO.DAT", "downtown_ramp", {25000}},
 	{"HERO.DAT", "ss_trigger", {0}},
+	{"MAD.DAT", "beaker_bumper01", {1000, 10000}},
+	{"MAD.DAT", "beaker_bumper02", {1000, 10000}},
+	{"MAD.DAT", "beaker_bumper03", {1000, 10000}},
+	{"MAD.DAT", "slingshot_left", {400}},
+	{"MAD.DAT", "slingshot_right", {400}},
+	{"MAD.DAT", "monster_drop01", {15000, 100000}},
+	{"MAD.DAT", "monster_drop02", {15000, 100000}},
+	{"MAD.DAT", "monster_drop03", {15000, 100000}},
+	{"MAD.DAT", "monster_drop04", {15000, 100000}},
+	{"MAD.DAT", "monster_drop05", {15000, 100000}},
+	{"MAD.DAT", "monster_drop06", {15000, 100000}},
+	{"MAD.DAT", "monster_drop07", {15000, 100000}},
+	{"MAD.DAT", "plasma_drop01", {25000, 150000}},
+	{"MAD.DAT", "plasma_drop02", {25000, 150000}},
+	{"MAD.DAT", "angrymob_drop01", {10000}},
+	{"MAD.DAT", "angrymob_drop02", {10000}},
+	{"MAD.DAT", "angrymob_drop03", {10000}},
+	{"MAD.DAT", "angrymob_drop04", {10000}},
+	{"MAD.DAT", "angrymob_drop05", {10000}},
+	{"MAD.DAT", "angrymob_drop06", {10000}},
+	{"MAD.DAT", "angrymob_drop07", {10000}},
+	{"MAD.DAT", "angrymob_drop08", {10000}},
+	{"MAD.DAT", "angrymob_drop09", {10000}},
+	{"MAD.DAT", "igor_sink", {150000}},
+	{"MAD.DAT", "teleporter_sink", {150000}},
+	{"MAD.DAT", "tower_sink", {50000}},
+	{"MAD.DAT", "left_outlane", {25000}},
+	{"MAD.DAT", "right_outlane", {25000}},
+	{"MAD.DAT", "left_return", {10000}},
+	{"MAD.DAT", "right_return", {10000}},
+	{"MAD.DAT", "spinner01", {2000}},
+	{"MAD.DAT", "spinner02", {2000}},
+	{"MAD.DAT", "spinner03", {2000}},
+	{"MAD.DAT", "element_a_kickout", {40000}},
+	{"MAD.DAT", "flask_kickout", {40000}},
+	{"MAD.DAT", "element_d_kickout", {75000, 125000}},
 };

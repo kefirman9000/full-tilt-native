@@ -76,20 +76,31 @@ namespace
 	{
 		{
 			"HERO.DAT", "Captain Hero",
-			"Rules recovered from the original table program so far (the table's seven modes and the jackpot are "
-			"still to come):\n"
+			"Rules recovered from the original table program.\n"
+			"\n"
+			"Villain battles: shoot the scoop when no battle is on. The display offers a villain: left flipper for "
+			"the next one, right flipper to fight (or wait 20 seconds). Starting a battle pays 100,000; beating the "
+			"villain pays the jackpot, which then goes back to 500,000. Losing the ball loses the battle.\n"
+			"- Quake: knock down the 9 drop targets (75,000 each during the battle).\n"
+			"- Mad Scientist: shoot the scoop again.\n"
+			"- Mystman: a henchman comes out; hit him 5 times (10,000, 20,000, 30,000, 40,000).\n"
+			"- Slime Man: hit the pop bumpers 8 times.\n"
+			"- Mr. Pling: hit Mr. Pling's target 8 times.\n"
+			"- Evil Twin: blow up Krypton-@ with 5 shots at its four drop targets, its kickout, its scoop or the "
+			"downtown ramp (200,000 each).\n"
+			"Beat all six and they all come back.\n"
 			"\n"
 			"- Skill shot: pull the plunger back a little (about a quarter of a second) so the ball only just "
-			"reaches the top of the shooter lane: 500,000, 1,000,000 with luck, and once a game it can light an "
-			"extra ball. Too soft and the ball comes back down: just plunge again.\n"
+			"reaches the top of the shooter lane: 500,000 and the jackpot grows by 500,000, or 500,000 and the "
+			"forcefields (the ball saver between the flippers opens until it saves a ball), or 1,000,000, or once "
+			"a game 500,000 and an extra ball. Too soft and the ball comes back down: just plunge again.\n"
+			"- Ball saver: the hole between the flippers is open for the ball save time after each launch "
+			"(Options > Table Rules) and saves one ball.\n"
 			"- Pop bumpers: 1,000 a hit, 1,000 more every 8 hits, up to 5,000. Back to 1,000 for each new ball.\n"
-			"- Henchmen: completing a set sends one of the four out onto the table. Hit him five times: 10,000, "
-			"20,000, 30,000, 40,000, then he is knocked out for 50,000 times the bonus multiplier.\n"
 			"- Mid-table pockets open for 20 seconds when you complete a set: 50,000 each.\n"
 			"- Slingshots and spinner 750. Lanes 5,000 to 20,000, lower lanes 3,500.\n"
-			"- Targets and drop targets 5,000 to 100,000 a hit; scoop holes 25,000 to 70,000.\n"
-			"- Downtown ramp 25,000.\n"
-			"The original's bigger awards for lit targets and finished banks come with the modes.",
+			"- Targets and drop targets 5,000 to 100,000 a hit; scoop holes 25,000 to 70,000. Downtown ramp 25,000.\n"
+			"Not in yet: the battles' time limits and the final stage.",
 			true
 		},
 		{
@@ -100,7 +111,8 @@ namespace
 		},
 		{
 			"MAD.DAT", "Mad Scientist",
-			"Mad Scientist plays on the generic rules for now (its real point values are next).",
+			"Every part scores its real value from the original table program; the beaker bumpers build up from "
+			"1,000 by 1,000 every 10 hits, up to 10,000. The table's own missions are not ported yet.",
 			true
 		},
 		{

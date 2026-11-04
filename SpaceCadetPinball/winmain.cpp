@@ -761,8 +761,18 @@ void winmain::RenderUi()
 					fullscrn::window_size_changed();
 					side_panel::RefreshTableBoxes(); // the scores move between the table and the panel
 				}
-				if (ImGui::MenuItem("Dot Matrix Display (side panel)", nullptr, Options.DotMatrix, pb::FT2FullScreen))
-					Options.DotMatrix ^= true;
+				if (ImGui::BeginMenu("Dot Matrix Display"))
+				{
+					const char* names[] = {"Off (plain text in the side panel)", "In the side panel",
+					                       "In the side panel and over every table"};
+					for (int i = 0; i < 3; i++)
+						if (ImGui::MenuItem(names[i], nullptr, Options.DotMatrix.V == i))
+							Options.DotMatrix.V = i;
+					ImGui::TextDisabled("\"Over every table\": Full Tilt 1 and Space Cadet show it in");
+					ImGui::TextDisabled("their message box; Full Tilt 2 without the side panel");
+					ImGui::TextDisabled("beside or above the table.");
+					ImGui::EndMenu();
+				}
 				if (ImGui::BeginMenu("Backdrop"))
 				{
 					if (ImGui::MenuItem("Black", nullptr, Options.Backdrop.V == 0))

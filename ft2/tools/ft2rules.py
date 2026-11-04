@@ -12,6 +12,7 @@ function and the control.cpp functions it calls, two levels deep. "@addr" marks 
 
 Message codes in FT2 rule functions: 76 = collision, 1017 = reset (Space Cadet: 63 and 1024).
 hero.exe: score helper 0x401a38, current mode 0x43d088 (modes 1-7), mode start 0x40787c(mode), mode end 0x407e08.
+mad.exe: score helper 0x42d41c; points mostly in data variables ($value = the variable's starting value).
 """
 import bisect
 import collections
@@ -124,12 +125,21 @@ def score_scan(path, pe, rows, helper):
                 continue
             callee = int(m.group(1), 16)
             if callee == helper:
-                pushes = [x[1] for x in b[max(0, k - 4):k] if x[1].startswith('push')]
+                window = b[max(0, k - 6):k]
+                pushes = [x[1] for x in window if x[1].startswith('push')]
                 arg = pushes[-2].split()[-1] if len(pushes) >= 2 else '?'
                 try:
                     arg = str(int(arg, 16))
                 except ValueError:
-                    pass
+                    # A register loaded from a data variable just before (mad.exe keeps its points in variables):
+                    # report the variable's starting value as $value
+                    for _, t2 in reversed(window):
+                        m2 = re.match(r'mov\s+' + re.escape(arg) + r',(?:DWORD PTR )?ds:0x([0-9a-f]+)$', t2)
+                        if m2:
+                            value = pe.u32(int(m2.group(1), 16))
+                            if value is not None:
+                                arg = f'${value}'
+                            break
                 out.append(arg if depth == 0 else f'{arg}@{f:x}')
             elif control_lo <= callee < control_hi and depth < 2 and callee not in seen:
                 out += scores(callee, depth + 1, seen | {callee})

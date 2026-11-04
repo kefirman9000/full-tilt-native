@@ -13,6 +13,26 @@ programs are recompiled to C on your computer from your own copy, then all 13 ta
 The whole table fits on screen with no scrolling; **F11** switches to the original scrolling view. No DOS setup
 screens. Sound is not in yet. The game's code is never included in this download (see `epic/README.md`).
 
+**Captain Hero in 0.9.0: villain battles**
+- **Battle the villains.** Shoot the scoop: the display offers a villain (left flipper for the next, right
+  flipper to fight). Quake, Mad Scientist, Mystman, Slime Man, Mr. Pling and Evil Twin each have their own shots
+  to beat them, read from the original table program. Beating one pays the jackpot. Messages are the table's
+  own, read from hero.exe ("Mystman Captured, Jackpot Awarded!!!").
+- **Skill shot awards as on the original**: jackpot increase, forcefields (the ball saver), 1,000,000 or an extra
+  ball.
+- **Fixed: the ball that never drained.** The hole between the flippers is the table's ball saver; it was always
+  open, so most balls came straight back. It now opens only for the ball save time after a launch and from the
+  skill shot's forcefields.
+- The henchmen now only come out in Mystman's battle.
+
+**Mad Scientist: real point values** read from mad.exe; its beaker bumpers build up to 10,000.
+
+**Dot-matrix display everywhere** (Options > Graphics > Dot Matrix Display > "In the side panel and over every
+table"): Space Cadet and the Full Tilt 1 tables show it in their message box, Full Tilt 2 tables without the side
+panel beside or above the table. The display animates big moments (flash and chasing border), cycles through the
+table's name, high scores and PRESS F2 between games, and asks for your name on a new high score. The side panel
+lists the last few messages.
+
 **New in 0.9.0: side panel, dot-matrix display, Table Guide** (Full Tilt 2 tables)
 - **Side panel on by default** (Options > Graphics > Side Score Panel): the table's title screen, a dot-matrix
   display with the score and the rules' messages, every player's score, extra ball, the table's best score and
@@ -37,8 +57,7 @@ screens. Sound is not in yet. The game's code is never included in this download
   Scores now run at the original table's scale. (The original's bigger awards for lit targets and finished
   banks come with the table's modes.)
 - **Pop bumpers build up**: 1,000 a hit, 1,000 more every 8 hits, up to 5,000; back to 1,000 for each new ball.
-- **Henchmen take five hits**, as on the original: 10,000, 20,000, 30,000, 40,000, and the fifth hit knocks him out
-  (50,000 times the bonus multiplier, until the table's modes are in).
+- **Henchmen take five hits**, as on the original: 10,000, 20,000, 30,000, 40,000; the fifth wins Mystman's battle.
 - **Skill shot.** Pull the plunger back a little (about a quarter of a second) so the ball only just makes it to
   the top of the shooter lane: 500,000, sometimes 1,000,000, and once a game it can light an extra ball. A tap
   is too soft: the ball comes back down the lane, so just plunge again. A harder pull plays as before.

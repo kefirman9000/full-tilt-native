@@ -309,7 +309,7 @@ struct optionsStruct
 	BoolOption BallShadow; // soft shadow under the ball and a faint gloss reflection on the playfield
 	IntOption LightPools; // lit lamps cast coloured light onto the artwork around them: 0 off, 1 soft, 2 strong
 	IntOption UpscaleArt; // table picture upscaling (Scale2x): 0 off, 1 = 2x, 2 = 4x, 3 = 2x smooth, 4 = 4x smooth
-	BoolOption DotMatrix; // side panel shows score and messages on a dot-matrix display (else plain text)
+	IntOption DotMatrix; // dot-matrix display: 0 off (plain text), 1 in the FT2 side panel, 2 also over every table's message box
 	BoolOption Rumble; // game controller rumbles on bumpers, slingshots, kickers, flippers and tilt
 	BoolOption Practice; // practice: a drained ball always comes back; scores are not saved as high scores
 };

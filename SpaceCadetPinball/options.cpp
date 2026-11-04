@@ -171,7 +171,7 @@ optionsStruct options::Options
 	{"Ball Shadow", true},
 	{"Light Pools", 1},
 	{"Upscale Art", 0},
-	{"Dot Matrix Display", true},
+	{"Dot Matrix Display", 1},
 	{"Controller Rumble", true},
 	{"Practice Mode", false},
 };

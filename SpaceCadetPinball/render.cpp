@@ -1166,6 +1166,7 @@ void render::PresentVScreen()
 	DrawVignette(DestinationRect);
 	DrawScanlines(vscreen->Height);
 	side_panel::Draw();
+	side_panel::DrawOverlay();
 
 	if (options::Options.DebugOverlay)
 	{

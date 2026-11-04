@@ -6,6 +6,7 @@
 
 #include "pb.h"
 #include "TBall.h"
+#include "table_art.h"
 #include "loader.h"
 #include "options.h"
 #include "timer.h"
@@ -130,6 +131,13 @@ namespace
 		return digits;
 	}
 
+	std::string upper_copy(std::string text)
+	{
+		for (auto& c : text)
+			c = static_cast<char>(toupper(static_cast<unsigned char>(c)));
+		return text;
+	}
+
 	void show(const std::string& text, float seconds = 2.0f)
 	{
 		if (pb::InfoTextBox)
@@ -170,6 +178,12 @@ namespace
 		bool SkillShotLive = false;
 		bool SkillShotExtraBall = false;
 		bool AwaitingLaunch = false; // a ball sits in the shooter lane
+		// Captain Hero's ball saver (s_sink30, the hole between the flippers): the original keeps it shut and opens
+		// it only while a save is lit (hero.exe 0x404eec / drain rule 0x4070bc). Here it is open during the ball
+		// save time after a launch, and saves one ball.
+		TSink* SaveSink = nullptr;
+		int SaveSinkTimer = 0;
+		TSink* Scoop = nullptr; // Captain Hero's battle scoop (s_sink01)
 	} rs;
 
 	// Captain Hero's henchmen take five hits: 10,000 x the hit number for hits 1-4 (hero.exe 0x402668), the fifth
@@ -211,6 +225,24 @@ namespace
 			else if (!pocket->BallCaputeredFlag)
 				pocket->ActiveFlag = 0;
 		}
+	}
+
+	void set_save_sink(bool open)
+	{
+		if (!rs.SaveSink)
+			return;
+		rs.SaveSink->ActiveFlag = open ? 1 : 0;
+		if (!open && rs.SaveSinkTimer)
+		{
+			timer::kill(rs.SaveSinkTimer);
+			rs.SaveSinkTimer = 0;
+		}
+	}
+
+	void close_save_sink(int, void*)
+	{
+		rs.SaveSinkTimer = 0;
+		set_save_sink(false);
 	}
 
 	void close_pockets(int, void*)
@@ -273,8 +305,13 @@ namespace
 				rs.Henchmen.push_back(bumper);
 			if (t->Plunger && named(part, {"ss_trigger"}))
 				t->Plunger->SkillShotLow = 0.26f; // a tap falls short and rolls back, as on the original table
+			if (is_hero() && named(part, {"s_sink30"}))
+				rs.SaveSink = dynamic_cast<TSink*>(part);
+			if (is_hero() && named(part, {"s_sink01"}))
+				rs.Scoop = dynamic_cast<TSink*>(part);
 		}
 		set_pockets(false);
+		set_save_sink(false);
 		for (auto& group : groups)
 		{
 			if (group.second.size() < 2 || group.second.size() > 10)
@@ -378,6 +415,9 @@ namespace
 		return true;
 	}
 
+	void win_battle();
+	bool hero_mystman_battle();
+
 	void henchman_hit(TBumper* henchman)
 	{
 		if (!henchman->Shown)
@@ -395,23 +435,50 @@ namespace
 		rs.HenchmanHits[henchman] = 0;
 		if (pb::DevDebug)
 			printf("FT2DBG henchman knocked out: %s\n", henchman->GroupName ? henchman->GroupName : "?");
-		// The original finishes the henchman's mode here; until modes are ported the knockout pays the next step
-		// of the hit ladder
+		// The fifth hit wins Mystman's battle (Captain Hero: the henchmen only come out in it)
+		if (hero_mystman_battle())
+		{
+			win_battle();
+			return;
+		}
 		auto award = 10000 * HenchmanHitsNeeded * rs.Multiplier;
 		add_points(award);
 		show("ENEMY KNOCKED OUT  " + with_commas(award), 2.5f);
 		light_show(1.5f);
 	}
 
-	// Captain Hero's three pop bumpers (hero.exe 0x4022f8): worth 1,000, plus 1,000 every 8 hits up to 5,000, back to
-	// 1,000 for each new ball
-	int hero_pop_points()
+	// Pop bumpers that build up (hero.exe 0x4022f8, mad.exe 0x42d484): worth Start, Step more every Every hits, up to
+	// Max; back to Start for each new ball
+	struct PopRule
 	{
+		const char* Table;
+		const char* Names[3];
+		int Start, Step, Every, Max;
+	};
+	const PopRule PopRules[] =
+	{
+		{"HERO.DAT", {"a_bump01", "a_bump02", "a_bump03"}, 1000, 1000, 8, 5000},
+		{"MAD.DAT", {"beaker_bumper01", "beaker_bumper02", "beaker_bumper03"}, 1000, 1000, 10, 10000},
+	};
+
+	const PopRule* pop_rule(TPinballComponent* caller)
+	{
+		auto key = table_key();
+		for (auto& rule : PopRules)
+			if (key == rule.Table && named(caller, {rule.Names[0], rule.Names[1], rule.Names[2]}))
+				return &rule;
+		return nullptr;
+	}
+
+	int pop_points(const PopRule& rule)
+	{
+		if (rs.PopValue < rule.Start)
+			rs.PopValue = rule.Start;
 		auto value = rs.PopValue;
-		if (++rs.PopHits >= 8)
+		if (++rs.PopHits >= rule.Every)
 		{
 			rs.PopHits = 0;
-			rs.PopValue = std::min(5000, rs.PopValue + 1000);
+			rs.PopValue = std::min(rule.Max, rs.PopValue + rule.Step);
 			if (rs.PopValue > value)
 				show("BUMPERS NOW " + with_commas(rs.PopValue), 1.5f);
 		}
@@ -423,6 +490,278 @@ namespace
 	// faster for the softest launch that gets there, so the limit here is 100. Too soft and the ball rolls back to
 	// the plunger (try again), just right is the skill shot, harder is a normal launch. Award: 7 in 10 500,000,
 	// 2 in 10 1,000,000, 1 in 10 500,000 and an extra ball (once per game; after that 500,000).
+
+
+	// ---- Captain Hero's villain battles (hero.exe: battle number 0x43d088, start 0x40787c, end 0x407e08) ----
+	// Shoot the scoop (s_sink01, 0x406580) when no battle is on: it holds the ball and offers the villains not yet
+	// beaten (left flipper: next, right flipper: accept, 20 s: taken as it is). A battle pays 100,000 to start and is
+	// won by its own shots (from each villain's checks in the rules): 1 Quake the nine drop targets a_drop01..09,
+	// 2 Mad Scientist the scoop again, 3 Mystman a henchman out after 4 s, hit 5 times, 4 Slime Man 8 pop bumper hits,
+	// 5 Mr. Pling 8 hits on a_rebo04, 6 Evil Twin "Blow up Krypton-@": five shots at its targets (drop targets
+	// a_drop18..21, s_kout01, s_sink14 and the downtown ramp), 200,000 each. Winning pays the jackpot (starts at and
+	// goes back to 500,000; the skill shot raises it). Losing the ball loses the battle. Not ported yet: battle
+	// timers (the original counts down on the display), Mr. Pling's path through s_ramp02, the seventh stage.
+	const int VillainCount = 6;
+	const char* const VillainNames[VillainCount] = {"Quake", "Mad Scientist", "Mystman", "Slime Man", "Mr. Pling",
+	                                                 "Evil Twin"};
+	const char* const VillainGoals[VillainCount] = {"knock down the 9 drop targets", "shoot the scoop again",
+	                                                 "hit the henchman 5 times", "hit the pop bumpers 8 times",
+	                                                 "hit Mr. Pling's target 8 times",
+	                                                 "blow up Krypton-@ (5 shots)"};
+	const int VillainGoal[VillainCount] = {9, 1, 5, 8, 8, 5};
+	const int CaptureTexts[VillainCount] = {3069, 3071, 3073, 3075, 3077, 0};
+
+	struct HeroBattles
+	{
+		int Battle = 0; // 0 none, else 1..6
+		int Progress = 0;
+		bool Defeated[VillainCount]{};
+		bool Choosing = false;
+		std::vector<int> Choices;
+		size_t ChoiceIndex = 0;
+		int ChooseTimer = 0;
+		int HenchmanTimer = 0;
+		bool QuakeDown[9]{};
+		long long Jackpot = 500000;
+		long long Captured = 0;
+	} hb;
+
+	bool hero_mystman_battle()
+	{
+		return is_hero() && hb.Battle == 3;
+	}
+
+	// A text of the table program (hero.exe), cleaned for display: its '>' is an apostrophe, '`' and '[' are
+	// padding and icons
+	std::string hero_text(int id, const std::string& fallback)
+	{
+		auto text = table_art::Text(id, fallback);
+		std::string out;
+		for (size_t i = 0; i < text.size(); i++)
+		{
+			auto c = text[i];
+			if (c == '>' && i > 0 && isalpha(static_cast<unsigned char>(text[i - 1])))
+				out += '\'';
+			else if (c == '\n')
+				out += ' ';
+			else if (c != '`' && c != '[')
+				out += c;
+		}
+		while (!out.empty() && out[0] == ' ')
+			out.erase(0, 1);
+		while (!out.empty() && out.back() == ' ')
+			out.pop_back();
+		return out;
+	}
+
+	std::string villain(int index)
+	{
+		return hero_text(3042 + index, VillainNames[index]);
+	}
+
+	void hide_henchmen()
+	{
+		if (hb.HenchmanTimer)
+		{
+			timer::kill(hb.HenchmanTimer);
+			hb.HenchmanTimer = 0;
+		}
+		for (auto henchman : rs.Henchmen)
+			if (henchman->Shown)
+				henchman->SetShown(false);
+		rs.HenchmanHits.clear();
+	}
+
+	void henchman_arrives(int, void*)
+	{
+		hb.HenchmanTimer = 0;
+		if (hb.Battle == 3)
+			bring_out_henchman();
+	}
+
+	void start_battle(int index)
+	{
+		if (pb::DevDebug)
+			printf("FT2DBG battle start %d %s\n", index + 1, VillainNames[index]);
+		hb.Battle = index + 1;
+		hb.Progress = 0;
+		for (auto& down : hb.QuakeDown)
+			down = false;
+		add_points(100000);
+		show("BATTLE " + upper_copy(villain(index)) + "  " + upper_copy(VillainGoals[index]), 3.5f);
+		light_show(1.5f);
+		if (hb.Battle == 3)
+			hb.HenchmanTimer = timer::set(4.0f, nullptr, henchman_arrives);
+	}
+
+	void show_choice()
+	{
+		auto text = hero_text(3063, "Battle %s? Right flipper to accept, Left flipper for next villain.");
+		auto at = text.find("%s");
+		auto name = villain(hb.Choices[hb.ChoiceIndex]);
+		if (at != std::string::npos)
+			text.replace(at, 2, name);
+		else
+			text = "Battle " + name + "?";
+		if (pb::InfoTextBox)
+			pb::InfoTextBox->Clear();
+		show(text, 20.0f);
+	}
+
+	void accept_battle(int, void*)
+	{
+		if (!hb.Choosing)
+			return;
+		hb.Choosing = false;
+		if (hb.ChooseTimer)
+		{
+			timer::kill(hb.ChooseTimer);
+			hb.ChooseTimer = 0;
+		}
+		if (pb::InfoTextBox)
+			pb::InfoTextBox->Clear();
+		start_battle(hb.Choices[hb.ChoiceIndex]);
+		if (rs.Scoop && !(pb::DevDebug && getenv("FT2_OFFER")))
+			rs.Scoop->Message(MessageCode::TSinkResetTimer, 2.0f); // the ball comes back out
+	}
+
+	void offer_battle()
+	{
+		hb.Choices.clear();
+		for (int i = 0; i < VillainCount; i++)
+			if (!hb.Defeated[i])
+				hb.Choices.push_back(i);
+		if (hb.Choices.empty()) // every villain beaten: they all come back
+		{
+			for (auto& defeated : hb.Defeated)
+				defeated = false;
+			for (int i = 0; i < VillainCount; i++)
+				hb.Choices.push_back(i);
+		}
+		hb.ChoiceIndex = 0;
+		hb.Choosing = true;
+		if (pb::DevDebug)
+			printf("FT2DBG battle offer, %d villains\n", static_cast<int>(hb.Choices.size()));
+		if (hb.Choices.size() == 1)
+		{
+			accept_battle(0, nullptr);
+			return;
+		}
+		show_choice();
+		hb.ChooseTimer = timer::set(20.0f, nullptr, accept_battle);
+	}
+
+	void win_battle()
+	{
+		auto index = hb.Battle - 1;
+		if (pb::DevDebug)
+			printf("FT2DBG battle won %d jackpot %lld\n", hb.Battle, hb.Jackpot);
+		hb.Defeated[index] = true;
+		hb.Captured++;
+		hb.Battle = 0;
+		hide_henchmen();
+		auto award = hb.Jackpot;
+		add_points(static_cast<int>(std::min<long long>(award, 2000000000)));
+		auto fallback = std::string(VillainNames[index]) + " Captured, Jackpot Awarded!!!";
+		auto text = CaptureTexts[index] ? hero_text(CaptureTexts[index], fallback) : fallback;
+		show(upper_copy(text) + "  " + with_commas(award), 4.0f);
+		light_show(3.0f);
+		hb.Jackpot = 500000;
+	}
+
+	void battle_progress(int step = 1)
+	{
+		if (!hb.Battle)
+			return;
+		hb.Progress += step;
+		auto index = hb.Battle - 1;
+		if (pb::DevDebug)
+			printf("FT2DBG battle %d progress %d/%d\n", hb.Battle, hb.Progress, VillainGoal[index]);
+		if (hb.Progress >= VillainGoal[index])
+		{
+			win_battle();
+			return;
+		}
+		show(upper_copy(villain(index)) + "  " + std::to_string(VillainGoal[index] - hb.Progress) + " TO GO", 1.5f);
+	}
+
+	void lose_battle()
+	{
+		if (hb.Choosing)
+		{
+			hb.Choosing = false;
+			if (hb.ChooseTimer)
+				timer::kill(hb.ChooseTimer);
+			hb.ChooseTimer = 0;
+		}
+		if (!hb.Battle)
+			return;
+		if (pb::DevDebug)
+			printf("FT2DBG battle lost %d\n", hb.Battle);
+		show(upper_copy(villain(hb.Battle - 1)) + " GOT AWAY", 2.5f);
+		hb.Battle = 0;
+		hide_henchmen();
+	}
+
+	// Quake's drop targets: each target has two parts sharing one rule (hero.exe 0x403e00..0x403f10)
+	int quake_target(TPinballComponent* part)
+	{
+		const char* pairs[9][2] = {{"a_drop01", "a_drop10"}, {"a_drop02", "a_drop23"}, {"a_drop03", "a_drop22"},
+		                           {"a_drop04", "a_drop24"}, {"a_drop05", "a_drop26"}, {"a_drop06", "a_drop27"},
+		                           {"a_drop07", "a_drop28"}, {"a_drop08", "a_drop47"}, {"a_drop09", "a_drop48"}};
+		for (int i = 0; i < 9; i++)
+			if (named(part, {pairs[i][0], pairs[i][1]}))
+				return i;
+		return -1;
+	}
+
+	// The battle rules for one hit; returns the points to score instead of the part's own, or -1 for its own
+	int hero_battle_hit(TPinballComponent* caller)
+	{
+		switch (hb.Battle)
+		{
+		case 1:
+			{
+				auto target = quake_target(caller);
+				if (target >= 0)
+				{
+					if (!hb.QuakeDown[target])
+					{
+						hb.QuakeDown[target] = true;
+						battle_progress();
+					}
+					return 75000; // lit during Quake's battle (0x403aec)
+				}
+				break;
+			}
+		case 4:
+			if (named(caller, {"a_bump01", "a_bump02", "a_bump03"}))
+				battle_progress();
+			break;
+		case 5:
+			if (named(caller, {"a_rebo04"}))
+				battle_progress();
+			break;
+		case 6:
+			if (named(caller, {"a_drop18", "a_drop19", "a_drop20", "a_drop21", "s_kout01", "s_sink14", "downtown_ramp"}))
+			{
+				add_points(200000); // a piece of Krypton-@ (0x406c14)
+				battle_progress();
+			}
+			break;
+		default:
+			break;
+		}
+		return -1;
+	}
+
+	// Captain Hero's skill shot (hero.exe 0x401da0): a launch that only just reaches the trigger at the top of the
+	// shooter lane. The original pays when the ball crosses slower than 80; this engine's ball can arrive a little
+	// faster for the softest launch that gets there, so the limit here is 100. Too soft and the ball rolls back to
+	// the plunger (try again), just right is the skill shot, harder is a normal launch. Award (a roll of 1-10):
+	// 1-5 500,000 and the jackpot grows by 500,000 (up to 5,000,000), 6-7 500,000 and the forcefields (the ball
+	// saver between the flippers stays open until it saves a ball), 8-9 1,000,000, 10 500,000 and an extra ball
+	// (once per game; after that it is the forcefields).
 	void hero_skill_shot()
 	{
 		if (!rs.SkillShotLive)
@@ -434,16 +773,35 @@ namespace
 		if (!ball || ball->Speed >= 100.0f)
 			return;
 		auto roll = rand() % 10 + 1;
-		auto award = roll == 8 || roll == 9 ? 1000000 : 500000;
-		add_points(award);
-		std::string text = "SKILL SHOT  " + with_commas(award);
-		if (roll == 10 && !rs.SkillShotExtraBall)
+		if (pb::DevDebug && getenv("FT2_SKILLROLL"))
+			roll = atoi(getenv("FT2_SKILLROLL"));
+		std::string text;
+		if (roll <= 5)
 		{
+			add_points(500000);
+			hb.Jackpot = std::min<long long>(5000000, hb.Jackpot + 500000);
+			text = hero_text(3051, "500,000! JACKPOT INCREASE!");
+		}
+		else if (roll >= 8 && roll <= 9)
+		{
+			add_points(1000000);
+			text = hero_text(3053, "1,000,000!");
+		}
+		else if (roll == 10 && !rs.SkillShotExtraBall)
+		{
+			add_points(500000);
 			rs.SkillShotExtraBall = true;
 			table()->ExtraBalls++;
-			text += "  EXTRA BALL";
+			text = hero_text(3054, "500,000! EXTRA BALL!");
 		}
-		show(text, 3.0f);
+		else
+		{
+			add_points(500000);
+			set_save_sink(true); // forcefields: open until the saver catches a ball
+			rs.BallSaveUsed = false;
+			text = hero_text(3052, "500,000! FORCEFIELDS!");
+		}
+		show("SKILL SHOT  " + upper_copy(text), 3.0f);
 		light_show(2.0f);
 	}
 
@@ -485,7 +843,8 @@ namespace
 			open_pockets(20.0f);
 			show("POCKETS LIT FOR 20 SECONDS", 2.5f);
 		}
-		bring_out_henchman();
+		if (!is_hero()) // Captain Hero's henchmen only come out in Mystman's battle
+			bring_out_henchman();
 		if (set.DropBank)
 			timer::set(1.2f, reinterpret_cast<void*>(static_cast<intptr_t>(index)), reset_bank);
 		else
@@ -510,6 +869,8 @@ namespace
 		rs.LaunchTick = -1000000;
 		rs.PopValue = 1000;
 		rs.PopHits = 0;
+		if (is_hero() && !(pb::DevDebug && getenv("FT2_KEEPBATTLE"))) // development: keep the battle over drains
+			lose_battle();
 	}
 
 	void drain_collision()
@@ -600,11 +961,50 @@ void ft2_control::handler(MessageCode code, TPinballComponent* caller)
 		rs.LaunchTick = pb::time_ticks; // ball save counts from the launch
 		rs.SkillShotLive = true; // the first pass over Captain Hero's skill shot trigger after a launch decides it
 		rs.AwaitingLaunch = false;
+		if (rs.SaveSink && !rs.BallSaveUsed && options::Options.BallSave.V > 0)
+		{
+			set_save_sink(true);
+			if (rs.SaveSinkTimer)
+				timer::kill(rs.SaveSinkTimer);
+			rs.SaveSinkTimer = timer::set(static_cast<float>(options::Options.BallSave.V), nullptr, close_save_sink);
+		}
+		return;
+	}
+
+	if (code == MessageCode::TFlipperExtend && is_hero() && hb.Choosing)
+	{
+		if (named(caller, {"flpr01"})) // left flipper: the next villain
+		{
+			hb.ChoiceIndex = (hb.ChoiceIndex + 1) % hb.Choices.size();
+			show_choice();
+		}
+		else if (named(caller, {"flpr02"})) // right flipper: fight this one
+			accept_battle(0, nullptr);
 		return;
 	}
 
 	if (code != MessageCode::ControlCollision)
 		return;
+
+	// Captain Hero's scoop: battles start (and Mad Scientist's ends) here; while choosing it keeps the ball
+	if (is_hero() && rs.Scoop && caller == rs.Scoop && !t->TiltLockFlag)
+	{
+		play_component_sound(caller);
+		if (hb.Battle == 2)
+		{
+			win_battle();
+			caller->Message(MessageCode::TSinkResetTimer, 2.0f);
+			return;
+		}
+		if (!hb.Battle && !hb.Choosing && t->MultiballCount < 2)
+		{
+			add_points(points_for(caller));
+			offer_battle();
+			if (hb.Choosing)
+				return; // the ball stays in the scoop until a villain is chosen
+			return;
+		}
+	}
 
 	if (!t->TiltLockFlag)
 	{
@@ -612,11 +1012,14 @@ void ft2_control::handler(MessageCode code, TPinballComponent* caller)
 		auto bumper = dynamic_cast<TBumper*>(caller);
 		auto henchman = bumper && bumper->HiddenUntilMode;
 		auto points = henchman ? 0 : points_for(caller); // a henchman's hits are scored by henchman_hit
+		if (auto pops = pop_rule(caller))
+			points = pop_points(*pops);
 		if (is_hero())
 		{
-			if (named(caller, {"a_bump01", "a_bump02", "a_bump03"}))
-				points = hero_pop_points();
-			else if (named(caller, {"ss_trigger"}))
+			auto battlePoints = hero_battle_hit(caller);
+			if (battlePoints >= 0)
+				points = battlePoints;
+			if (named(caller, {"ss_trigger"}))
 				hero_skill_shot();
 			else if (rs.SkillShotLive && !named(caller, {"downtown_ramp"}))
 				rs.SkillShotLive = false; // the ball went somewhere else first
@@ -630,6 +1033,13 @@ void ft2_control::handler(MessageCode code, TPinballComponent* caller)
 			henchman_hit(bumper);
 		if (enhanced())
 			set_hit(caller);
+	}
+
+	if (rs.SaveSink && caller == rs.SaveSink)
+	{
+		rs.BallSaveUsed = true;
+		set_save_sink(false); // shut again once the ball is thrown back out (it stays inside until then)
+		show("BALL SAVED", 2.5f);
 	}
 
 	// Captured balls: send them back out after a short pause
@@ -649,11 +1059,29 @@ std::vector<std::string> ft2_control::StatusLines()
 		lines.emplace_back("PRACTICE  (balls come back)");
 	if (is_hero() && rs.AwaitingLaunch)
 		lines.emplace_back("Skill shot: short pull");
+	if (is_hero())
+	{
+		if (hb.Choosing)
+			lines.emplace_back("Pick a villain: left flipper next, right flipper fight");
+		else if (hb.Battle)
+		{
+			auto index = hb.Battle - 1;
+			lines.push_back("Battle " + villain(index) + ": " + VillainGoals[index] + " (" +
+			                std::to_string(VillainGoal[index] - hb.Progress) + " to go)");
+		}
+		else
+			lines.emplace_back("Shoot the scoop to battle a villain");
+		lines.push_back("Jackpot " + with_commas(hb.Jackpot));
+		if (hb.Captured)
+			lines.push_back("Villains captured: " + std::to_string(hb.Captured));
+		if (rs.SaveSink && rs.SaveSink->ActiveFlag)
+			lines.emplace_back("Forcefields on (ball saver open)");
+	}
 	if (enhanced() && rs.Multiplier > 1)
 		lines.push_back("Bonus x" + std::to_string(rs.Multiplier));
 	if (rs.PocketTimer)
 		lines.emplace_back("Pockets lit");
-	if (is_hero() && rs.PopValue > 1000)
+	if (rs.PopValue > 1000)
 		lines.push_back("Pop bumpers " + with_commas(rs.PopValue));
 	int out = 0, mostHits = 0;
 	for (auto henchman : rs.Henchmen)
@@ -703,6 +1131,17 @@ void ft2_control::table_handler(MessageCode code)
 		rs.SkillShotExtraBall = false;
 		rs.AwaitingLaunch = true;
 		ft2_control::PracticeGame = options::Options.Practice;
+		set_save_sink(false);
+		lose_battle();
+		hb = HeroBattles{};
+		if (pb::DevDebug && getenv("FT2_BATTLE") && is_hero()) // development: start a battle at once
+		{
+			start_battle(std::max(0, std::min(VillainCount - 1, atoi(getenv("FT2_BATTLE")) - 1)));
+			if (getenv("FT2_BATTLEPROGRESS"))
+				hb.Progress = atoi(getenv("FT2_BATTLEPROGRESS"));
+		}
+		if (pb::DevDebug && getenv("FT2_OFFER") && is_hero()) // development: the villain choice at once
+			offer_battle();
 		break;
 	case MessageCode::GameOver:
 		if (enhanced() && !rs.AttractTimer)

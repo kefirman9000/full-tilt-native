@@ -58,7 +58,11 @@
       each function passes to it. Mad Scientist's table reads the same way (53 entries in mad.exe).
 - [x] Real Hero point values in use (ft2_scores.h); pops escalate 1,000..5,000; henchmen take 5 hits (10,000 x hit)
 - [x] Hero skill shot (ss_trigger): soft launch that only just reaches the top, 500,000 / 1,000,000 / extra ball
-- [ ] Hero modes (0x43d088, 1-7): started by 0x40787c, ended by 0x407e08. Port next: which shots start each mode,
-      what finishes it (8 pop hits in mode 4, 5 henchman hits, 8 a_rebo04 hits ...), and the mode award
+- [x] Hero battles (0x43d088 1-6 = Quake, Mad Scientist, Mystman, Slime Man, Mr. Pling, Evil Twin; 7 = "Battle
+      Villain"): offered at s_sink01 (0x406580, flippers choose: 0x406500/0x406528), started by 0x40787c,
+      won via 0x407e08(1) (jackpot, reset to 500,000), lost on drain. Table texts from hero.exe's string table.
+- [ ] Hero: battle timers (countdown texts 3068...), Mr. Pling's s_ramp02 path (ball layer 5), stage 7, Evil Twin's
+      exact Krypton-@ rule (0x406c14/0x406954), mystery award, building repair (3001/3028), Super Jackpot
+- [x] Hero ball saver s_sink30 shut except ball save time / forcefields (was the "endless ball")
 - [ ] Hero jackpot (table field 0x141, raised by the skill shot), playfield/pop multiplier (0x405de8)
-- [ ] Mad Scientist: same treatment (rule table + scores)
+- [x] Mad Scientist: rule table + scores (points in data variables; ft2rules.py reads their starting values)
