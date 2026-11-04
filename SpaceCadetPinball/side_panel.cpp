@@ -17,23 +17,85 @@
 
 namespace
 {
-	// ---- Table art: the table's title screen (see table_art) ----
+	// ---- Table art: the table's title screen (see table_art), and a tiny copy of it that, stretched over the panel,
+	// is a soft blur of the same colours: the backdrop the picture fades into ----
+	SDL_Texture* ArtTexture = nullptr;
+	SDL_Texture* BlurTexture = nullptr;
+
 	SDL_Texture* art()
 	{
 		static bool tried = false;
-		static SDL_Texture* texture = nullptr;
 		if (!tried)
 		{
 			tried = true;
 			if (auto surface = table_art::Load())
 			{
-				texture = SDL_CreateTextureFromSurface(winmain::Renderer, surface);
+				ArtTexture = SDL_CreateTextureFromSurface(winmain::Renderer, surface);
+				if (ArtTexture)
+					SDL_SetTextureScaleMode(ArtTexture, SDL_ScaleModeLinear);
+				if (auto rgb = SDL_ConvertSurfaceFormat(surface, SDL_PIXELFORMAT_ARGB8888, 0))
+				{
+					if (auto tiny = SDL_CreateRGBSurfaceWithFormat(0, 12, 9, 32, SDL_PIXELFORMAT_ARGB8888))
+					{
+						SDL_BlitScaled(rgb, nullptr, tiny, nullptr);
+						BlurTexture = SDL_CreateTextureFromSurface(winmain::Renderer, tiny);
+						if (BlurTexture)
+							SDL_SetTextureScaleMode(BlurTexture, SDL_ScaleModeLinear);
+						SDL_FreeSurface(tiny);
+					}
+					SDL_FreeSurface(rgb);
+				}
 				SDL_FreeSurface(surface);
-				if (texture)
-					SDL_SetTextureScaleMode(texture, SDL_ScaleModeLinear);
 			}
 		}
-		return texture;
+		return ArtTexture;
+	}
+
+	// ---- Full Tilt 1-style frames: a bevelled gold border, light along the top and left, dark along the bottom
+	// and right, shaded across its width like a rounded metal edge, with a dark line on both sides ----
+	void bevel(const SDL_Rect& r, int thickness)
+	{
+		auto renderer = winmain::Renderer;
+		for (int i = 0; i < thickness; i++)
+		{
+			SDL_Rect ring{r.x + i, r.y + i, r.w - 2 * i, r.h - 2 * i};
+			if (ring.w <= 1 || ring.h <= 1)
+				break;
+			Uint8 lr, lg, lb, dr, dg, db;
+			if (i == 0 || (i == thickness - 1 && thickness >= 3))
+			{
+				lr = dr = 24;
+				lg = dg = 16;
+				lb = db = 6;
+			}
+			else
+			{
+				auto f = thickness >= 3 ? static_cast<float>(i) / (thickness - 1) : 0.5f;
+				auto shine = 0.55f + 0.45f * std::sin(f * 3.14159f); // brightest in the middle of the edge
+				lr = static_cast<Uint8>(235 * shine);
+				lg = static_cast<Uint8>(190 * shine);
+				lb = static_cast<Uint8>(95 * shine);
+				dr = static_cast<Uint8>(140 * shine);
+				dg = static_cast<Uint8>(96 * shine);
+				db = static_cast<Uint8>(38 * shine);
+			}
+			int x0 = ring.x, y0 = ring.y, x1 = ring.x + ring.w - 1, y1 = ring.y + ring.h - 1;
+			SDL_SetRenderDrawColor(renderer, lr, lg, lb, 255);
+			SDL_RenderDrawLine(renderer, x0, y0, x1, y0);
+			SDL_RenderDrawLine(renderer, x0, y0, x0, y1);
+			SDL_SetRenderDrawColor(renderer, dr, dg, db, 255);
+			SDL_RenderDrawLine(renderer, x0, y1, x1, y1);
+			SDL_RenderDrawLine(renderer, x1, y0, x1, y1);
+		}
+	}
+
+	// A black inset box (score, messages) inside a bevel, like the boxes of the Full Tilt 1 panels
+	void inset_box(const SDL_Rect& r, int thickness, Uint8 alpha = 215)
+	{
+		SDL_SetRenderDrawColor(winmain::Renderer, 4, 3, 2, alpha);
+		SDL_Rect inside{r.x + thickness, r.y + thickness, r.w - 2 * thickness, r.h - 2 * thickness};
+		SDL_RenderFillRect(winmain::Renderer, &inside);
+		bevel(r, thickness);
 	}
 
 	// ---- Dot-matrix display: 128 x 32 dots, 5 x 7 font (columns, bit 0 = top row), ASCII ' ' to 'Z' ----
@@ -126,10 +188,15 @@ namespace
 		}
 
 		// Drawn at a whole number of screen pixels per dot (copied 1:1, so the dots stay even at any size): the dot,
-		// then a dark gap; from 4 pixels a dot the corners are softened. Returns the height used.
+		// then a dark gap; from 4 pixels a dot the corners are softened. Centred in w. Returns the height used.
+		static int pitch(float w)
+		{
+			return std::max(2, static_cast<int>(w / DmdW));
+		}
+
 		float draw(float x, float y, float w)
 		{
-			int k = std::max(2, static_cast<int>(w / DmdW));
+			int k = pitch(w);
 			static SDL_Texture* texture = nullptr;
 			static int textureK = 0;
 			static std::vector<uint32_t> pixels;
@@ -169,16 +236,9 @@ namespace
 				}
 			SDL_UpdateTexture(texture, nullptr, pixels.data(), DmdW * k * 4);
 			int dw = DmdW * k, dh = DmdH * k;
-			int dx0 = static_cast<int>(x + (w - dw) / 2), dy0 = static_cast<int>(y);
-			SDL_Rect frame{dx0 - k * 2, dy0 - k * 2, dw + k * 4, dh + k * 4};
-			SDL_SetRenderDrawColor(winmain::Renderer, 70, 45, 20, 255);
-			SDL_RenderFillRect(winmain::Renderer, &frame);
-			SDL_Rect inner{frame.x + 1, frame.y + 1, frame.w - 2, frame.h - 2};
-			SDL_SetRenderDrawColor(winmain::Renderer, 12, 6, 2, 255);
-			SDL_RenderFillRect(winmain::Renderer, &inner);
-			SDL_Rect dst{dx0, dy0, dw, dh};
+			SDL_Rect dst{static_cast<int>(x + (w - dw) / 2), static_cast<int>(y), dw, dh};
 			SDL_RenderCopy(winmain::Renderer, texture, nullptr, &dst);
-			return static_cast<float>(dh + k * 2);
+			return static_cast<float>(dh);
 		}
 	};
 
@@ -220,32 +280,70 @@ void side_panel::Draw()
 	auto table = pb::MainTable;
 	if (panel.w <= 0 || !table)
 		return;
-	SDL_SetRenderDrawBlendMode(winmain::Renderer, SDL_BLENDMODE_BLEND);
-	SDL_SetRenderDrawColor(winmain::Renderer, 8, 8, 14, 235);
-	SDL_RenderFillRect(winmain::Renderer, &panel);
+	auto renderer = winmain::Renderer;
+	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
-	float margin = panel.w * 0.05f;
-	float y = static_cast<float>(panel.y) + panel.h * 0.025f;
-	if (auto texture = art())
+	// Backdrop: the art's own colours, blurred and dark, under everything (black without art)
+	auto texture = art();
+	SDL_SetRenderDrawColor(renderer, 6, 5, 8, 255);
+	SDL_RenderFillRect(renderer, &panel);
+	if (BlurTexture)
+	{
+		SDL_SetTextureColorMod(BlurTexture, 70, 70, 76);
+		SDL_RenderCopy(renderer, BlurTexture, nullptr, &panel);
+	}
+
+	int edge = std::max(3, std::min(8, panel.w / 55)); // frame thickness
+	SDL_Rect inner{panel.x + edge, panel.y + edge, panel.w - 2 * edge, panel.h - 2 * edge};
+	float y = static_cast<float>(inner.y);
+
+	// The title screen across the full width at the top; its lower part fades into the backdrop
+	if (texture)
 	{
 		int w, h;
 		SDL_QueryTexture(texture, nullptr, nullptr, &w, &h);
-		float scale = std::min((panel.w - margin * 2) / w, panel.h * 0.33f / h);
-		SDL_Rect dst{panel.x + static_cast<int>((panel.w - w * scale) / 2), static_cast<int>(y),
-		             static_cast<int>(w * scale), static_cast<int>(h * scale)};
+		int artH = std::min(static_cast<int>(static_cast<float>(inner.w) * h / w), static_cast<int>(panel.h * 0.42f));
+		int fadeH = artH / 4;
 		SDL_SetTextureColorMod(texture, 255, 255, 255);
-		SDL_RenderCopy(winmain::Renderer, texture, nullptr, &dst);
-		y += dst.h + panel.h * 0.03f;
+		SDL_SetTextureAlphaMod(texture, 255);
+		SDL_Rect src{0, 0, w, h - h * fadeH / artH};
+		SDL_Rect dst{inner.x, inner.y, inner.w, artH - fadeH};
+		SDL_RenderCopy(renderer, texture, &src, &dst);
+		const int strips = 16;
+		for (int i = 0; i < strips; i++)
+		{
+			int sy0 = h - h * fadeH / artH + h * fadeH / artH * i / strips;
+			int sy1 = h - h * fadeH / artH + h * fadeH / artH * (i + 1) / strips;
+			int dy0 = inner.y + artH - fadeH + fadeH * i / strips, dy1 = inner.y + artH - fadeH + fadeH * (i + 1) / strips;
+			if (sy1 <= sy0 || dy1 <= dy0)
+				continue;
+			SDL_Rect fs{0, sy0, w, sy1 - sy0}, fd{inner.x, dy0, inner.w, dy1 - dy0};
+			SDL_SetTextureAlphaMod(texture, static_cast<Uint8>(255 * (strips - i) / (strips + 1)));
+			SDL_RenderCopy(renderer, texture, &fs, &fd);
+		}
+		SDL_SetTextureAlphaMod(texture, 255);
+		y = static_cast<float>(inner.y + artH - fadeH / 5); // the score box just overlaps the fade, as on Space Cadet
 	}
 
 	auto draw = ImGui::GetForegroundDrawList();
 	auto font = ImGui::GetFont();
-	float small = std::max(12.0f, panel.h * 0.032f), big = small * 1.9f;
+	float small = std::max(12.0f, panel.h * 0.03f), big = small * 1.9f;
 	auto ballNumber = std::max(1, table->MaxBallCount - table->BallCount + 1);
 	auto message = live_message();
+	int boxEdge = std::max(3, edge - 1);
+	int pad = std::max(4, inner.w / 28);
+	SDL_Rect boxArea{inner.x + pad, 0, inner.w - 2 * pad, 0}; // boxes span this width
 
-	// Dot-matrix display (or plain text): the score, or the message while one is showing
-	float dmdW = panel.w - margin * 2;
+	const ImU32 grey = IM_COL32(200, 196, 186, 255), gold = IM_COL32(255, 210, 80, 255),
+	            cyan = IM_COL32(120, 220, 255, 255), dim = IM_COL32(150, 140, 120, 255);
+	auto line = [&](const std::string& text, float size, ImU32 color, float wrap = 0.0f)
+	{
+		auto textSize = font->CalcTextSizeA(size, FLT_MAX, wrap, text.c_str());
+		draw->AddText(font, size, ImVec2(panel.x + (panel.w - textSize.x) / 2, y), color, text.c_str(), nullptr, wrap);
+		y += textSize.y * 1.15f;
+	};
+
+	// Score box: the dot-matrix display, or the score in plain text
 	if (options::Options.DotMatrix)
 	{
 		Dmd dmd;
@@ -271,55 +369,70 @@ void side_panel::Draw()
 			dmd.centred("PLAYER " + std::to_string(table->CurrentPlayer + 1) + "    BALL " + std::to_string(ballNumber),
 			            DmdH - 8, 1, 150);
 		}
-		y += dmd.draw(panel.x + margin, y, dmdW) + small * 1.0f;
-	}
-
-	auto line = [&](const std::string& text, float size, ImU32 color, float wrap = 0.0f)
-	{
-		auto textSize = font->CalcTextSizeA(size, FLT_MAX, wrap, text.c_str());
-		draw->AddText(font, size, ImVec2(panel.x + (panel.w - textSize.x) / 2, y), color, text.c_str(), nullptr, wrap);
-		y += textSize.y * 1.15f;
-	};
-	const ImU32 grey = IM_COL32(190, 190, 200, 255), gold = IM_COL32(255, 210, 80, 255),
-	            cyan = IM_COL32(120, 220, 255, 255), dim = IM_COL32(130, 130, 145, 255);
-
-	if (!options::Options.DotMatrix)
-	{
-		line("Player " + std::to_string(table->CurrentPlayer + 1), small, grey);
-		line(with_commas(player_score(table, table->CurrentPlayer)), big, gold);
-		line("Ball " + std::to_string(ballNumber), small, grey);
-		if (message)
-			line(message, small, cyan, panel.w - margin * 2);
-		y += small * 0.5f;
-	}
-
-	// Every player's score in a multi-player game, the one playing marked
-	if (table->PlayerCount > 1)
-	{
-		for (int player = 0; player < table->PlayerCount; player++)
+		// The display wants 128 dots at 2 pixels or more: in a narrow panel the box uses the whole width inside the
+		// frame and a thinner border
+		int k = Dmd::pitch(static_cast<float>(boxArea.w - 2 * boxEdge - 4));
+		int dmdEdge = boxEdge, gap = k;
+		SDL_Rect box{boxArea.x, static_cast<int>(y), boxArea.w, 0};
+		if (DmdW * k + 2 * (dmdEdge + gap) > box.w)
 		{
-			auto current = player == table->CurrentPlayer;
-			line((current ? "> " : "") + std::string("Player ") + std::to_string(player + 1) + "   " +
-			     with_commas(player_score(table, player)), small, current ? gold : grey);
+			box.x = inner.x;
+			box.w = inner.w;
+			dmdEdge = box.w >= DmdW * k + 6 ? 3 : 2;
+			gap = std::max(0, (box.w - DmdW * k - 2 * dmdEdge) / 2);
 		}
-		y += small * 0.5f;
+		box.h = DmdH * k + 2 * (dmdEdge + std::min(gap, k));
+		inset_box(box, dmdEdge, 255);
+		dmd.draw(static_cast<float>(box.x), static_cast<float>(box.y + dmdEdge + std::min(gap, k)),
+		         static_cast<float>(box.w));
+		y = static_cast<float>(box.y + box.h) + small * 0.6f;
 	}
-
-	if (table->ExtraBalls > 0)
-		line("EXTRA BALL LIT", small, IM_COL32(120, 255, 140, 255));
-
-	// What the table rules are doing (bonus multiplier, lit pockets, Captain Hero's pops and henchmen, ...)
-	for (auto& status : ft2_control::StatusLines())
-		line(status, small, cyan, panel.w - margin * 2);
-
-	// The table's best score
-	auto& best = high_score::highscore_table[0];
-	if (best.Score > 0)
+	else
 	{
-		y = std::max(y, static_cast<float>(panel.y + panel.h) - small * 3.0f);
-		line("High score", small * 0.85f, dim);
-		line(with_commas(best.Score) + "  " + best.Name, small, grey);
+		SDL_Rect box{boxArea.x, static_cast<int>(y), boxArea.w, static_cast<int>(small * 1.3f + big * 1.2f + small * 0.6f)};
+		inset_box(box, boxEdge, 235);
+		y += boxEdge + small * 0.2f;
+		line("Player " + std::to_string(table->CurrentPlayer + 1) + "    Ball " + std::to_string(ballNumber), small, grey);
+		line(with_commas(player_score(table, table->CurrentPlayer)), big, gold);
+		y = static_cast<float>(box.y + box.h) + small * 0.6f;
 	}
+
+	// High score box at the bottom, message box between the two
+	auto& best = high_score::highscore_table[0];
+	int bestH = static_cast<int>(small * 2.6f) + 2 * boxEdge;
+	SDL_Rect bestBox{boxArea.x, inner.y + inner.h - pad - bestH, boxArea.w, bestH};
+	SDL_Rect infoBox{boxArea.x, static_cast<int>(y), boxArea.w, bestBox.y - static_cast<int>(small * 0.6f) - static_cast<int>(y)};
+	if (infoBox.h > small * 2)
+	{
+		inset_box(infoBox, boxEdge);
+		draw->PushClipRect(ImVec2(static_cast<float>(infoBox.x + boxEdge), static_cast<float>(infoBox.y + boxEdge)),
+		                   ImVec2(static_cast<float>(infoBox.x + infoBox.w - boxEdge),
+		                          static_cast<float>(infoBox.y + infoBox.h - boxEdge)), true);
+		y = static_cast<float>(infoBox.y + boxEdge) + small * 0.5f;
+		float wrap = static_cast<float>(infoBox.w - 2 * boxEdge) - small;
+		if (!options::Options.DotMatrix && message)
+			line(message, small, cyan, wrap);
+		// Every player's score in a multi-player game, the one playing marked
+		if (table->PlayerCount > 1)
+			for (int player = 0; player < table->PlayerCount; player++)
+			{
+				auto current = player == table->CurrentPlayer;
+				line((current ? "> " : "") + std::string("Player ") + std::to_string(player + 1) + "   " +
+				     with_commas(player_score(table, player)), small, current ? gold : grey);
+			}
+		if (table->ExtraBalls > 0)
+			line("EXTRA BALL LIT", small, IM_COL32(120, 255, 140, 255));
+		// What the table rules are doing (bonus multiplier, lit pockets, Captain Hero's pops and henchmen, ...)
+		for (auto& status : ft2_control::StatusLines())
+			line(status, small, cyan, wrap);
+		draw->PopClipRect();
+	}
+	inset_box(bestBox, boxEdge);
+	y = static_cast<float>(bestBox.y + boxEdge) + small * 0.25f;
+	line("HIGH SCORE", small * 0.85f, dim);
+	line(best.Score > 0 ? with_commas(best.Score) + "  " + best.Name : std::string("-"), small, grey);
+
+	bevel(panel, edge); // the panel's own frame last, over the art's edges
 }
 
 void side_panel::RefreshTableBoxes()

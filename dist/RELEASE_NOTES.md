@@ -18,7 +18,9 @@ screens. Sound is not in yet. The game's code is never included in this download
   display with the score and the rules' messages, every player's score, extra ball, the table's best score and
   what the rules are doing now (bonus multiplier, lit pockets, Captain Hero's pop value, henchmen, skill shot).
   The title screen is read from the table's own program (Alien.exe, hero.exe, mad.exe), so nothing extra to copy.
-  Put a `panel.bmp` in a table folder to use your own picture.
+  Put a `panel.bmp` in a table folder to use your own picture. Framed like the Full Tilt 1 panels: a bevelled
+  gold border, the picture across the top fading into a dark, blurred backdrop of its own colours, and the score,
+  message and high score in black inset boxes.
 - **No more black boxes on the table.** The score and message areas used to clear themselves to black over the
   table art. They now show the art underneath, and move to the side panel while it is on.
 - **Dot-matrix display** (Options > Graphics, on by default; off shows plain text in the panel).
