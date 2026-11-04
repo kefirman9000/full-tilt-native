@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "pb.h"
+#include "ft2_control.h"
 #include <fstream>
 
 
@@ -569,7 +570,9 @@ void pb::timed_frame(float timeDelta)
 						fprintf(stderr, "FT2DBG hit at %.1f %.1f speed %.0f comp group %d %s\n", ball->Position.X, ball->Position.Y,
 						        ball->Speed, comp ? comp->GroupIndex : -1, comp && comp->GroupName ? comp->GroupName : "");
 					}
+					ft2_control::CollidingBall = ball;
 					edge->EdgeCollision(ball, distance);
+					ft2_control::CollidingBall = nullptr;
 					if (distance <= 0.0f || ball->CollisionDisabledFlag)
 						break;
 					distanceSum += distance;

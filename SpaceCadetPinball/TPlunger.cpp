@@ -116,7 +116,17 @@ void TPlunger::FT2Launch()
 		// for a full pull. 45% still clears every FT2 shooter lane (the weakest that does: Captain Hero 35%, Alien
 		// Daze and Mad Scientist 30%), so a short pull is a gentle shot (a skill shot), never a ball rolling back.
 		auto pull = MaxPullback > 0 ? std::min(1.0f, Boost / MaxPullback) : 1.0f;
-		auto speed = MaxPullback * (0.45f + 0.55f * pull) * (1.0f + RandFloat() * 0.03f);
+		auto strength = 0.45f + 0.55f * pull;
+		if (SkillShotLow > 0.0f)
+		{
+			// The first 35% of the pull covers SkillShotLow..45% (a quick tap falls short and rolls back, a little
+			// more pull is the skill shot), the rest 45%..100% as on the other tables
+			const float knee = 0.35f;
+			strength = pull < knee
+				           ? SkillShotLow + (0.45f - SkillShotLow) * pull / knee
+				           : 0.45f + 0.55f * (pull - knee) / (1.0f - knee);
+		}
+		auto speed = MaxPullback * strength * (1.0f + RandFloat() * 0.03f);
 		if (pb::DevDebug && getenv("FT2_PLUNGE"))
 			speed = MaxPullback * static_cast<float>(atof(getenv("FT2_PLUNGE")));
 		ball->Direction.X = bestNormal.X;

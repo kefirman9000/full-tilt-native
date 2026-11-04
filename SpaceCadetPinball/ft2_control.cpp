@@ -5,6 +5,7 @@
 #include "ft2_animation.h"
 
 #include "pb.h"
+#include "TBall.h"
 #include "loader.h"
 #include "options.h"
 #include "timer.h"
@@ -163,9 +164,31 @@ namespace
 		// and is knocked out by HenchmanHits hits
 		std::vector<TBumper*> Henchmen;
 		std::map<const TBumper*, int> HenchmanHits;
+		// Captain Hero (rules recovered from hero.exe): pop bumper value, skill shot
+		int PopValue = 1000;
+		int PopHits = 0;
+		bool SkillShotLive = false;
+		bool SkillShotExtraBall = false;
 	} rs;
 
-	const int HenchmanHitsNeeded = 3;
+	// Captain Hero's henchmen take five hits: 10,000 x the hit number for hits 1-4 (hero.exe 0x402668), the fifth
+	// knocks him out
+	const int HenchmanHitsNeeded = 5;
+
+	bool is_hero()
+	{
+		return table_key() == "HERO.DAT";
+	}
+
+	bool named(TPinballComponent* part, std::initializer_list<const char*> names)
+	{
+		if (!part->GroupName)
+			return false;
+		for (auto name : names)
+			if (strcmp(part->GroupName, name) == 0)
+				return true;
+		return false;
+	}
 
 	std::string set_key(TPinballComponent* part)
 	{
@@ -247,6 +270,8 @@ namespace
 			auto bumper = dynamic_cast<TBumper*>(part);
 			if (bumper && bumper->HiddenUntilMode)
 				rs.Henchmen.push_back(bumper);
+			if (t->Plunger && named(part, {"ss_trigger"}))
+				t->Plunger->SkillShotLow = 0.26f; // a tap falls short and rolls back, as on the original table
 		}
 		set_pockets(false);
 		for (auto& group : groups)
@@ -358,15 +383,67 @@ namespace
 			return;
 		auto hits = ++rs.HenchmanHits[henchman];
 		if (hits < HenchmanHitsNeeded)
+		{
+			add_points(10000 * hits);
+			rs.BonusHits++;
+			show("HIT " + std::to_string(hits) + " OF " + std::to_string(HenchmanHitsNeeded) + "  " +
+			     with_commas(10000 * hits), 1.5f);
 			return;
+		}
 		henchman->SetShown(false);
 		rs.HenchmanHits[henchman] = 0;
 		if (pb::DevDebug)
 			printf("FT2DBG henchman knocked out: %s\n", henchman->GroupName ? henchman->GroupName : "?");
-		auto award = 25000 * rs.Multiplier;
+		// The original finishes the henchman's mode here; until modes are ported the knockout pays the next step
+		// of the hit ladder
+		auto award = 10000 * HenchmanHitsNeeded * rs.Multiplier;
 		add_points(award);
 		show("ENEMY KNOCKED OUT  " + with_commas(award), 2.5f);
 		light_show(1.5f);
+	}
+
+	// Captain Hero's three pop bumpers (hero.exe 0x4022f8): worth 1,000, plus 1,000 every 8 hits up to 5,000, back to
+	// 1,000 for each new ball
+	int hero_pop_points()
+	{
+		auto value = rs.PopValue;
+		if (++rs.PopHits >= 8)
+		{
+			rs.PopHits = 0;
+			rs.PopValue = std::min(5000, rs.PopValue + 1000);
+			if (rs.PopValue > value)
+				show("BUMPERS NOW " + with_commas(rs.PopValue), 1.5f);
+		}
+		return value;
+	}
+
+	// Captain Hero's skill shot (hero.exe 0x401da0): a launch that only just reaches the trigger at the top of the
+	// shooter lane. The original pays when the ball crosses slower than 80; this engine's ball can arrive a little
+	// faster for the softest launch that gets there, so the limit here is 100. Too soft and the ball rolls back to
+	// the plunger (try again), just right is the skill shot, harder is a normal launch. Award: 7 in 10 500,000,
+	// 2 in 10 1,000,000, 1 in 10 500,000 and an extra ball (once per game; after that 500,000).
+	void hero_skill_shot()
+	{
+		if (!rs.SkillShotLive)
+			return;
+		rs.SkillShotLive = false;
+		auto ball = ft2_control::CollidingBall;
+		if (pb::DevDebug)
+			printf("FT2DBG skill shot trigger speed %.1f\n", ball ? ball->Speed : -1.0f);
+		if (!ball || ball->Speed >= 100.0f)
+			return;
+		auto roll = rand() % 10 + 1;
+		auto award = roll == 8 || roll == 9 ? 1000000 : 500000;
+		add_points(award);
+		std::string text = "SKILL SHOT  " + with_commas(award);
+		if (roll == 10 && !rs.SkillShotExtraBall)
+		{
+			rs.SkillShotExtraBall = true;
+			table()->ExtraBalls++;
+			text += "  EXTRA BALL";
+		}
+		show(text, 3.0f);
+		light_show(2.0f);
 	}
 
 	void set_hit(TPinballComponent* caller)
@@ -430,6 +507,8 @@ namespace
 		rs.Multiplier = 1;
 		rs.BallSaveUsed = false;
 		rs.LaunchTick = -1000000;
+		rs.PopValue = 1000;
+		rs.PopHits = 0;
 	}
 
 	void drain_collision()
@@ -474,6 +553,8 @@ namespace
 	}
 }
 
+TBall* ft2_control::CollidingBall = nullptr;
+
 void ft2_control::handler(MessageCode code, TPinballComponent* caller)
 {
 	auto t = table();
@@ -507,6 +588,7 @@ void ft2_control::handler(MessageCode code, TPinballComponent* caller)
 		play_component_sound(caller);
 		build_sets();
 		rs.LaunchTick = pb::time_ticks; // ball save counts from the launch
+		rs.SkillShotLive = true; // the first pass over Captain Hero's skill shot trigger after a launch decides it
 		return;
 	}
 
@@ -516,19 +598,27 @@ void ft2_control::handler(MessageCode code, TPinballComponent* caller)
 	if (!t->TiltLockFlag)
 	{
 		play_component_sound(caller);
-		auto points = points_for(caller);
+		auto bumper = dynamic_cast<TBumper*>(caller);
+		auto henchman = bumper && bumper->HiddenUntilMode;
+		auto points = henchman ? 0 : points_for(caller); // a henchman's hits are scored by henchman_hit
+		if (is_hero())
+		{
+			if (named(caller, {"a_bump01", "a_bump02", "a_bump03"}))
+				points = hero_pop_points();
+			else if (named(caller, {"ss_trigger"}))
+				hero_skill_shot();
+			else if (rs.SkillShotLive && !named(caller, {"downtown_ramp"}))
+				rs.SkillShotLive = false; // the ball went somewhere else first
+		}
 		if (points)
 		{
 			add_points(points);
 			rs.BonusHits++;
 		}
+		if (henchman)
+			henchman_hit(bumper);
 		if (enhanced())
-		{
 			set_hit(caller);
-			if (auto bumper = dynamic_cast<TBumper*>(caller))
-				if (bumper->HiddenUntilMode)
-					henchman_hit(bumper);
-		}
 	}
 
 	// Captured balls: send them back out after a short pause
@@ -566,6 +656,10 @@ void ft2_control::table_handler(MessageCode code)
 		rs.Multiplier = 1;
 		rs.BallSaveUsed = false;
 		rs.LaunchTick = -1000000;
+		rs.PopValue = 1000;
+		rs.PopHits = 0;
+		rs.SkillShotLive = false;
+		rs.SkillShotExtraBall = false;
 		break;
 	case MessageCode::GameOver:
 		if (enhanced() && !rs.AttractTimer)

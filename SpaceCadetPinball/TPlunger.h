@@ -30,5 +30,8 @@ public:
 	bool DirectLaunch() const;
 	vector2 FT2Center{};
 	float FT2Reach{};
+	// Tables with a skill shot (Captain Hero): the low end of the pull is spread over the soft shots, from one that
+	// falls short to one that only just reaches the top of the lane (set by the table rules; 0 = off)
+	float SkillShotLow{};
 	std::vector<vector2> FT2Shape;
 };

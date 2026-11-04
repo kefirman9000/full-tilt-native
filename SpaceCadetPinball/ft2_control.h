@@ -2,6 +2,7 @@
 
 enum class MessageCode;
 class TPinballComponent;
+class TBall;
 
 // Generic table rules for Full Tilt! 2 tables (Alien, Hero, Mad) until each table's real rules are recovered from its
 // original exe. Gives every table a playable game: points for hits, captured balls are kicked back out, the drain serves
@@ -12,4 +13,7 @@ public:
 	static void handler(MessageCode code, TPinballComponent* caller);
 	// Table-wide events (new game, game over, next player)
 	static void table_handler(MessageCode code);
+	// The ball whose collision is being handled (set by the physics loop just before it), for rules that look at
+	// the ball itself, such as Captain Hero's skill shot (only a slow ball counts)
+	static TBall* CollidingBall;
 };

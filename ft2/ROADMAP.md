@@ -5,7 +5,8 @@
 - [x] Generic rules (ft2_control): points per component type, kickouts/sinks re-fire, drain serves next ball, game over
 - [x] Full Tilt 1 extra tables (Dragon's Keep, Skulduggery) load with the Space Cadet layout + generic rules
 - [x] `--table NAME.DAT` command line option; Windows 64-bit build (llvm-mingw, UCRT, SDL2)
-- [ ] Hero: plunger shot goes up the wire ramp and comes back down (ramp exit / gate needs rules)
+- [x] Hero: plunger shot goes up the wire ramp and comes back down: only a too-soft launch does that now (it rolls
+      back to the plunger, as on the original); a short pull is the skill shot, a harder one plays normally
 - [ ] Dragon's Keep: ball not launching yet; Skulduggery: hangs on load (no plunger, unknown object types 1034-1038, 1042)
 - [ ] Unknown FT engine object types: 1034-1038, 1042-1045 (skipped today)
 - [ ] Table picker in the game (menu), instead of launch scripts
@@ -49,3 +50,14 @@
       offsets in the dumps). Next: disassemble seg 23 (16-bit x86), starting with the launcher (s_launcher1 23:4152,
       lights v_lite569) and drain, then lights per target so tables light up during play.
 - [ ] Skulduggery's cannon (a_cannon, 4-frame blocker) and launcher have no rules yet; launcher has no art in the data.
+
+## Status 2026-11-03 (Captain Hero rules, first pass)
+- [x] Hero rule table recovered from hero.exe (133 entries; ft2/tools/ft2rules.py, notes in ft2/hero_controls.txt).
+      Hero scores straight from its rule functions through one helper (0x401a38), so the tool also lists the points
+      each function passes to it. Mad Scientist's table reads the same way (53 entries in mad.exe).
+- [x] Real Hero point values in use (ft2_scores.h); pops escalate 1,000..5,000; henchmen take 5 hits (10,000 x hit)
+- [x] Hero skill shot (ss_trigger): soft launch that only just reaches the top, 500,000 / 1,000,000 / extra ball
+- [ ] Hero modes (0x43d088, 1-7): started by 0x40787c, ended by 0x407e08. Port next: which shots start each mode,
+      what finishes it (8 pop hits in mode 4, 5 henchman hits, 8 a_rebo04 hits ...), and the mode award
+- [ ] Hero jackpot (table field 0x141, raised by the skill shot), playfield/pop multiplier (0x405de8)
+- [ ] Mad Scientist: same treatment (rule table + scores)

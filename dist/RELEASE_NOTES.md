@@ -13,6 +13,17 @@ programs are recompiled to C on your computer from your own copy, then all 13 ta
 The whole table fits on screen with no scrolling; **F11** switches to the original scrolling view. No DOS setup
 screens. Sound is not in yet. The game's code is never included in this download (see `epic/README.md`).
 
+**Captain Hero in 0.9.0: real scoring and the skill shot**
+- **Real point values.** Captain Hero's scores were read from the original table program: lanes 5,000-20,000
+  (50,000 for the one that completes them), targets 5,000-100,000, drop target banks up to 150,000, mid-table
+  pockets 50,000, and so on. Scores now run at the original table's scale.
+- **Pop bumpers build up**: 1,000 a hit, 1,000 more every 8 hits, up to 5,000; back to 1,000 for each new ball.
+- **Henchmen take five hits**, as on the original: 10,000, 20,000, 30,000, 40,000, and the fifth hit knocks him out
+  (50,000 times the bonus multiplier, until the table's modes are in).
+- **Skill shot.** Pull the plunger back a little (about a quarter of a second) so the ball only just makes it to
+  the top of the shooter lane: 500,000, sometimes 1,000,000, and once a game it can light an extra ball. A tap
+  is too soft: the ball comes back down the lane, so just plunge again. A harder pull plays as before.
+
 **Captain Hero fixes in 0.8.9**
 - **Enemies only show up when the rules send them out.** The four henchmen on the playfield stood there from the
   first ball. They now start off the table. Complete a set of lanes, targets or drop targets and one of them comes
