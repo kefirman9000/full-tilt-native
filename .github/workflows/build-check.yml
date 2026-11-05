@@ -32,6 +32,12 @@ jobs:
           cmake -S . -B build -A x64 -DCMAKE_WIN32_EXECUTABLE:BOOL=1 "-DFTN_VERSION=check"
           cmake --build build --config Release
 
+      - name: Sierra runtime compiles with MSVC
+        # the same compiler and flags "Compile 3-D Ultra Pinball" uses (the recompiled game itself needs game files)
+        shell: pwsh
+        run: |
+          python -c "import sys, subprocess, glob; sys.path.insert(0, 'epic/tools'); import build_epic as be; env = be.vs_env(); assert env, 'no MSVC'; srcs = glob.glob('sierra/runtime/*.c'); cl = be.msvc_tool(env, 'cl'); print('cl:', cl); rc = [subprocess.run([cl, '/nologo', '/O2', '/W1', '/std:c11', '/c', '/Isierra/runtime', '/ILibs/SDL2/include', '/Fo' + s[:-2] + '.obj', s], env=env).returncode for s in srcs]; sys.exit(max(rc))"
+
   linux:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -47,4 +53,8 @@ jobs:
           cmake --build build
 
       - name: Python tools compile
-        run: python3 -m py_compile ft2/tools/*.py epic/tools/*.py
+        run: python3 -m py_compile ft2/tools/*.py epic/tools/*.py sierra/tools/*.py
+
+      - name: Sierra runtime compiles
+        run: |
+          for f in sierra/runtime/*.c; do gcc -std=c99 -Wall -Wno-unused-function -Wno-misleading-indentation -fsyntax-only $(sdl2-config --cflags) "$f" || exit 1; done
