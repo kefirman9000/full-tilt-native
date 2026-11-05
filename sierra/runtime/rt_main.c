@@ -7,15 +7,18 @@
  * --game     folder with the original game files (PINBALL.EXE, RESOURCE.MAP, RESOURCE.00n; default: current folder)
  * --save     where settings and high scores are written (default: <game>/save)
  * --script   test automation, one event per line, times in ms from start-up:
- *              "<ms> key <SDL key name>"           press and release (80 ms)
+ *              "<ms> key <SDL key name>"           press and release (80 ms); _ for spaces: Left_Shift
  *              "<ms> hold <SDL key name> <ms>"     press, release after the given time
  *              "<ms> down|up <SDL key name>"       press or release only
  *              "<ms> click <x> <y>"                left click at game coordinates
+ *              "<ms> button left|right <ms>"       hold a mouse button where the pointer is
  *              "<ms> shot <file.bmp>"              save what the game shows
- *              "<ms> quit"
+ *              "<ms> close"                        close the game window, like F12
+ *              "<ms> quit"                         stop at once
  * --headless no window (with --script, for automated tests)
  *
- * Keys: Alt+Enter fullscreen, F12 closes the game (back to the table library). Everything else goes to the game.
+ * Keys: Alt+Enter fullscreen, F12 closes the game (back to the table library). Everything else goes to the game;
+ * Shift keys flip and Space launches as on the Full Tilt tables (see rt_key_polled).
  */
 #include "rt_internal.h"
 #define SDL_MAIN_HANDLED
@@ -48,9 +51,32 @@ static uint8_t keys[256];                              /* by virtual-key code */
 uint64_t rt_ticks_us(void) { return (SDL_GetPerformanceCounter() - perf_t0) * 1000000ull / perf_freq; }
 uint32_t rt_ticks_ms(void) { return (uint32_t)(rt_ticks_us() / 1000) + 10000; }   /* never 0 near start-up */
 
+/* the launcher's card picture: the last thing the game showed, at half size, written once */
+static void save_preview(void)
+{
+    char path[1200];
+    if (!frame || frame_w < 64 || frame_h < 64) return;
+    snprintf(path, sizeof path, "%s/preview.bmp", rt_game_dir);
+    FILE *f = fopen(path, "rb");
+    if (f) { fclose(f); return; }
+    int w = frame_w / 2, h = frame_h / 2;
+    SDL_Surface *s = SDL_CreateRGBSurfaceWithFormat(0, w, h, 24, SDL_PIXELFORMAT_RGB24);
+    if (!s) return;
+    for (int y = 0; y < h; y++) {
+        uint8_t *o = (uint8_t *)s->pixels + (size_t)y * s->pitch;
+        for (int x = 0; x < w; x++) {
+            uint32_t c = frame[(size_t)(2 * y) * frame_w + 2 * x];
+            o[3 * x] = (uint8_t)(c >> 16); o[3 * x + 1] = (uint8_t)(c >> 8); o[3 * x + 2] = (uint8_t)c;
+        }
+    }
+    if (SDL_SaveBMP(s, path) == 0) rt_log("card picture %s\n", path);
+    SDL_FreeSurface(s);
+}
+
 void rt_exit(int code)
 {
     rt_log("exit %d\n", code);
+    save_preview();
     SDL_Quit();
     exit(code);
 }
@@ -224,6 +250,22 @@ int rt_key_down(int vk)
     return vk >= 0 && vk < 256 && keys[vk];
 }
 
+/* Key state as the game polls it (GetAsyncKeyState / GetKeyState). Its controls are Ctrl = left flipper, Shift =
+ * right flipper (Windows 95 could not tell the Shift keys apart) and Down = plunger. So the keys work like on the
+ * Full Tilt tables, Left Shift also reads as Ctrl, only Right Shift reads as Shift, and Space also reads as Down.
+ * Key messages (typing a name for the high scores) are not changed. */
+int rt_key_polled(int vk)
+{
+    switch (vk) {
+    case 0x10: return keys[0xa1];                       /* VK_SHIFT: Right Shift */
+    case 0xa0: return 0;                                /* VK_LSHIFT */
+    case 0x11: return keys[0x11] || keys[0xa0];         /* VK_CONTROL: either Ctrl or Left Shift */
+    case 0xa2: return keys[0xa2] || keys[0xa0];         /* VK_LCONTROL */
+    case 0x28: return keys[0x28] || keys[0x20];         /* VK_DOWN: Down or Space */
+    default: return rt_key_down(vk);
+    }
+}
+
 static void to_game(int wx, int wy, int *gx, int *gy)
 {
     SDL_Rect d = dest_rect();
@@ -257,7 +299,13 @@ void rt_warp_mouse(int x, int y)
 /* ------------------------------------------------------------------------ */
 typedef struct { uint32_t ms; char cmd[8]; char arg[200]; } script_ev;
 static script_ev *script; static int nscript, iscript;
-static int pend_key[64]; static uint32_t pend_ms[64]; static int npend;   /* key releases; -1 - x*4096 - y: mouse up */
+typedef struct { int kind, code, x, y; uint32_t ms; } pending;   /* releases due later */
+enum { P_KEY, P_MOUSE_LEFT, P_MOUSE_RIGHT };
+static pending pend[64]; static int npend;
+static void pend_add(int kind, int code, int x, int y, uint32_t ms)
+{
+    if (npend < 64) { pend[npend].kind = kind; pend[npend].code = code; pend[npend].x = x; pend[npend].y = y; pend[npend].ms = ms; npend++; }
+}
 
 static void load_script(const char *path)
 {
@@ -288,10 +336,12 @@ static void run_script(void)
 {
     uint32_t ms = (uint32_t)(rt_ticks_us() / 1000);
     for (int i = 0; i < npend;) {
-        if (ms >= pend_ms[i]) {
-            if (pend_key[i] < 0) { int v = -1 - pend_key[i]; mouse_buttons &= ~1; mouse_msg(0x202, v >> 12, v & 4095); }
-            else key((SDL_Scancode)pend_key[i], 0, 0);
-            pend_key[i] = pend_key[--npend]; pend_ms[i] = pend_ms[npend];
+        if (ms >= pend[i].ms) {
+            pending p = pend[i];
+            pend[i] = pend[--npend];
+            if (p.kind == P_KEY) key((SDL_Scancode)p.code, 0, 0);
+            else if (p.kind == P_MOUSE_LEFT) { mouse_buttons &= ~1; mouse_msg(0x202, p.x, p.y); }
+            else { mouse_buttons &= ~2; mouse_msg(0x205, p.x, p.y); }
         }
         else i++;
     }
@@ -301,20 +351,28 @@ static void run_script(void)
         if (!strcmp(e->cmd, "key") || !strcmp(e->cmd, "hold") || !strcmp(e->cmd, "down") || !strcmp(e->cmd, "up")) {
             if (sscanf(e->arg, "%63s %u", nm, &hold) < 1) continue;
             if (strcmp(e->cmd, "hold")) hold = 80;
+            for (char *c = nm; *c; c++) if (*c == '_') *c = ' ';     /* Left_Shift = "Left Shift" */
             SDL_Scancode s = SDL_GetScancodeFromName(nm);
             if (s == SDL_SCANCODE_UNKNOWN) { rt_log("script: unknown key %s\n", nm); continue; }
             if (!strcmp(e->cmd, "up")) { key(s, 0, 0); continue; }
             key(s, 1, 0);
             if (!strcmp(e->cmd, "down")) continue;
-            if (npend < 64) { pend_key[npend] = s; pend_ms[npend++] = ms + hold; }
+            pend_add(P_KEY, s, 0, 0, ms + hold);
         } else if (!strcmp(e->cmd, "click") && sscanf(e->arg, "%d %d", &x, &y) == 2) {
             /* held for 150 ms: the game also polls the button with GetAsyncKeyState */
             mouse_msg(0x200, x, y);
             mouse_buttons |= 1; mouse_msg(0x201, x, y);
-            if (npend < 64 && x >= 0 && y >= 0 && x < 4096 && y < 4096) { pend_key[npend] = -1 - (x * 4096 + y); pend_ms[npend++] = ms + 150; }
+            pend_add(P_MOUSE_LEFT, 0, x, y, ms + 150);
+        } else if (!strcmp(e->cmd, "button") && sscanf(e->arg, "%63s %u", nm, &hold) == 2) {
+            /* hold a mouse button where the pointer is: "button left 500" / "button right 500" */
+            int b = !strcmp(nm, "right") ? 2 : 1;
+            extern int rt_mouse_x(void), rt_mouse_y(void);
+            mouse_buttons |= b; mouse_msg(b == 1 ? 0x201 : 0x204, rt_mouse_x(), rt_mouse_y());
+            pend_add(b == 1 ? P_MOUSE_LEFT : P_MOUSE_RIGHT, 0, rt_mouse_x(), rt_mouse_y(), ms + hold);
         } else if (!strcmp(e->cmd, "move") && sscanf(e->arg, "%d %d", &x, &y) == 2) {
             mouse_msg(0x200, x, y);
         } else if (!strcmp(e->cmd, "shot")) save_shot(e->arg);
+        else if (!strcmp(e->cmd, "close")) { rt_log("script: close (like F12)\n"); rt_quit_requested = 1; }
         else if (!strcmp(e->cmd, "quit")) { rt_log("script: quit\n"); rt_exit(0); }
     }
 }
@@ -436,6 +494,7 @@ int main(int argc, char **argv)
     EIP = entry;
     rt_run();
     rt_log("program returned %u\n", EAX);
+    save_preview();
     SDL_Quit();
     return (int)EAX;
 }

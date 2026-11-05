@@ -733,6 +733,8 @@ static uint32_t def_window_proc(uint32_t hwnd, uint32_t msg, uint32_t wp, uint32
 }
 U(DefWindowProcA, 4) { return def_window_proc(a[0], a[1], a[2], a[3]); }
 U(PostMessageA, 4) { q_post(a[0], a[1], a[2], a[3]); return 1; }
+int rt_mouse_x(void) { return mouse_x; }
+int rt_mouse_y(void) { return mouse_y; }
 void rt_post_message(uint32_t hwnd, uint32_t msg, uint32_t wp, uint32_t lp) { q_post(hwnd, msg, wp, lp); }
 U(SendMessageA, 4) { return send(a[0], a[1], a[2], a[3]); }
 U(PostQuitMessage, 1) { quit_posted = 1; quit_code = a[0]; return 0; }
@@ -791,7 +793,36 @@ static int fetch(uint32_t p, uint32_t hfilter, uint32_t lo, uint32_t hi, int rem
     return 0;
 }
 
-U(PeekMessageA, 5) { return (uint32_t)fetch(a[0], a[1], a[2], a[3], a[4] & 1); }
+static uint32_t stat_peeks, stat_empty, stat_blits, stat_t0;
+static void stats(void)
+{
+    static int on = -1;
+    if (on < 0) on = getenv("SIERRA_STATS") != NULL;
+    if (!on) return;
+    uint32_t now = rt_ticks_ms();
+    if (!stat_t0) stat_t0 = now;
+    if (now - stat_t0 >= 2000) {
+        rt_log("stats: %u peeks/s (%u empty), %u window blits/s\n", stat_peeks * 1000 / (now - stat_t0),
+               stat_empty * 1000 / (now - stat_t0), stat_blits * 1000 / (now - stat_t0));
+        stat_peeks = stat_empty = stat_blits = 0; stat_t0 = now;
+    }
+}
+U(PeekMessageA, 5)
+{
+    int r = fetch(a[0], a[1], a[2], a[3], a[4] & 1);
+    stat_peeks++; if (!r) stat_empty++;
+    stats();
+    /* The game waits for its next frame by calling PeekMessage in a loop (about two million times a second). Its
+     * timing comes from timeGetTime, so after a run of empty peeks it can give the CPU back for a millisecond. */
+    static uint32_t idle;
+    if (r) idle = 0;
+    else if (++idle >= 256) {
+        idle = 0;
+        extern void rt_idle_wait(int ms);
+        rt_idle_wait(1);
+    }
+    return (uint32_t)r;
+}
 U(GetMessageA, 4)
 {
     while (!fetch(a[0], a[1], a[2], a[3], 1)) {
@@ -954,9 +985,9 @@ U(SetScrollPos, 4) { UNUSED; return 0; }
 
 /* input */
 U(GetAsyncKeyState, 1) { static uint32_t seen[8]; if (!(seen[(a[0] & 255) >> 5] & (1u << (a[0] & 31)))) { seen[(a[0] & 255) >> 5] |= 1u << (a[0] & 31); ITRACE("GetAsyncKeyState(%02x) first use\n", a[0]); }
-    return rt_key_down((int)a[0]) ? 0x8000 : 0; }
+    extern int rt_key_polled(int vk); return rt_key_polled((int)a[0]) ? 0x8000 : 0; }
 U(GetKeyState, 1) { static uint32_t seen[8]; if (!(seen[(a[0] & 255) >> 5] & (1u << (a[0] & 31)))) { seen[(a[0] & 255) >> 5] |= 1u << (a[0] & 31); ITRACE("GetKeyState(%02x) first use\n", a[0]); }
-    return rt_key_down((int)a[0]) ? 0xff80 : 0; }
+    extern int rt_key_polled(int vk); return rt_key_polled((int)a[0]) ? 0xff80 : 0; }
 U(GetCursorPos, 1) { WR32(a[0], (uint32_t)mouse_x); WR32(a[0] + 4, (uint32_t)mouse_y); return 1; }
 U(SetCursorPos, 2)
 {
@@ -1219,6 +1250,7 @@ static uint32_t blit(uint32_t ddc, int dx, int dy, int dw, int dh, uint32_t sdc,
             }
         }
         screen_dirty = 1;
+        stat_blits++;
         rt_present_if_dirty(0);
         return 1;
     }

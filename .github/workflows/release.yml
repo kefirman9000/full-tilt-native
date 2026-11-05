@@ -55,6 +55,12 @@ jobs:
           Copy-Item epic/runtime/* "$out/epic/runtime"
           Copy-Item -Recurse Libs/SDL2/include "$out/epic/sdk/include"
           Copy-Item Libs/SDL2/lib/x64/SDL2.lib, Libs/SDL2/lib/x64/SDL2.dll "$out/epic/sdk/lib/x64"
+          # 3-D Ultra Pinball build tools (no game code): "Compile 3-D Ultra Pinball" runs them; they use epic/sdk too
+          New-Item -ItemType Directory -Force -Path "$out/sierra/tools", "$out/sierra/runtime" | Out-Null
+          Copy-Item sierra/README.md "$out/sierra"
+          Copy-Item sierra/tools/*.py "$out/sierra/tools"
+          if (Test-Path sierra/tools/seeds) { Copy-Item -Recurse sierra/tools/seeds "$out/sierra/tools/seeds" }
+          Copy-Item sierra/runtime/* "$out/sierra/runtime"
           New-Item -ItemType Directory -Force -Path "$out/Put game files here", "$out/tables" | Out-Null
           Copy-Item dist/DROP_README.txt "$out/Put game files here/README.txt"
           Set-Content "$out/tables/README.txt" "Tables are added here automatically from the 'Put game files here' folder. One folder per table."

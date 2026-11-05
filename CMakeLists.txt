@@ -299,6 +299,19 @@ if(EPIC_GAME_DIR)
         VERBATIM)
 endif()
 
+# 3-D Ultra Pinball (optional), recompiled from the user's own PINBALL.EXE like Epic Pinball (see sierra/README.md):
+# cmake -DSIERRA_GAME_DIR=<folder with PINBALL.EXE, RESOURCE.MAP, RESOURCE.001 and RESOURCE.002> ...
+set(SIERRA_GAME_DIR "" CACHE PATH "Your 3-D Ultra Pinball (UPINBALL) folder; builds UltraPinball from it")
+if(SIERRA_GAME_DIR)
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    add_custom_target(UltraPinball ALL
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_LIST_DIR}/sierra/tools/build_sierra.py
+                --game ${SIERRA_GAME_DIR} --out ${CMAKE_CURRENT_LIST_DIR}/bin
+        WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+        COMMENT "Recompiling 3-D Ultra Pinball from ${SIERRA_GAME_DIR}"
+        VERBATIM)
+endif()
+
 # On Windows, copy DLL to output
 if(WIN32)
     list(GET SDL2_LIBRARY -1 SDL2_DLL_PATH)

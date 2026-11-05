@@ -55,9 +55,11 @@ S(sosTIMERGetEventRate, 2) { if (a[0] < 16 && a[1]) WR32(a[1], TM[a[0]].rate); r
 S(sosTIMERPauseEvent, 1) { if (a[0] < 16) TM[a[0]].paused = 1; return 0; }
 S(sosTIMERResumeEvent, 1) { if (a[0] < 16) TM[a[0]].paused = 0; return 0; }
 
+static int trace_snd = -1;
 static void dump(const char *what, uint32_t p, int n)
 {
-    if (!p) return;
+    if (trace_snd < 0) trace_snd = getenv("SIERRA_TRACE_SOUND") != NULL;
+    if (!p || !trace_snd) return;
     rt_log("  %s @%08x:", what, p);
     for (int k = 0; k < n; k++) rt_log("%s%02x", k % 16 ? " " : "\n    ", RD8(p + k));
     rt_log("\n");
@@ -218,7 +220,6 @@ static void audio_open(void)
 static void lock(void) { if (audio_dev) SDL_LockAudioDevice(audio_dev); }
 static void unlock(void) { if (audio_dev) SDL_UnlockAudioDevice(audio_dev); }
 
-static int trace_snd = -1;
 static voice *voice_of(uint32_t h) { h &= 0xffff; return h < VOICES ? &V[h] : NULL; }
 
 #define ERR_NO_DRIVER 0x0e
