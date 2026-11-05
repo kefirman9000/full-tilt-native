@@ -10,6 +10,9 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <direct.h>
+/* windows.h has its own GPTR (a GlobalAlloc flag): use the runtime's guest-pointer macro */
+#undef GPTR
+#define GPTR(a) ((void *)(M + ((uint32_t)(a) & GUEST_MASK)))
 #define mkdir_(p) _mkdir(p)
 #else
 #include <dirent.h>
