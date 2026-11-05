@@ -36,7 +36,7 @@ jobs:
         # the same compiler and flags "Compile 3-D Ultra Pinball" uses (the recompiled game itself needs game files)
         shell: pwsh
         run: |
-          python -c "import sys, subprocess, glob; sys.path.insert(0, 'epic/tools'); import build_epic as be; env = be.vs_env(); assert env, 'no MSVC'; srcs = glob.glob('sierra/runtime/*.c'); rc = [subprocess.run(['cl', '/nologo', '/O2', '/W1', '/std:c11', '/c', '/Isierra/runtime', '/ILibs/SDL2/include', '/Fo' + s[:-2] + '.obj', s], env=env).returncode for s in srcs]; sys.exit(max(rc))"
+          python -c "import sys, subprocess, glob; sys.path.insert(0, 'epic/tools'); import build_epic as be; env = be.vs_env(); assert env, 'no MSVC'; srcs = glob.glob('sierra/runtime/*.c'); cl = be.msvc_tool(env, 'cl'); print('cl:', cl); rc = [subprocess.run([cl, '/nologo', '/O2', '/W1', '/std:c11', '/c', '/Isierra/runtime', '/ILibs/SDL2/include', '/Fo' + s[:-2] + '.obj', s], env=env).returncode for s in srcs]; sys.exit(max(rc))"
 
   linux:
     runs-on: ubuntu-latest

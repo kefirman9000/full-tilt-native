@@ -66,12 +66,13 @@ def build_msvc(env, gen, out_exe):
     inc = ['/I' + RUNTIME, '/I' + os.path.join(SDK, 'include')]
     srcs = sources(gen)
     say('Compiling %d files with MSVC (this takes a few minutes)...' % len(srcs))
-    be.compile_all(srcs, lambda src: ['cl', '/nologo', '/O2', '/W1', '/std:c11', '/c'] + inc +
+    cl = be.msvc_tool(env, 'cl')
+    be.compile_all(srcs, lambda src: [cl, '/nologo', '/O2', '/W1', '/std:c11', '/c'] + inc +
                    ['/Fo' + os.path.join(obj, os.path.splitext(os.path.basename(src))[0] + '.obj'), src], env)
     progress(0.99, 'Linking UltraPinball')
     objs = [os.path.join(obj, os.path.splitext(os.path.basename(s))[0] + '.obj') for s in srcs]
     lib = os.path.join(SDK, 'lib', 'x64', 'SDL2.lib')
-    r = subprocess.run(['link', '/nologo', '/SUBSYSTEM:WINDOWS', '/OUT:' + out_exe] + objs + [lib, 'user32.lib', 'shell32.lib'],
+    r = subprocess.run([be.msvc_tool(env, 'link'), '/nologo', '/SUBSYSTEM:WINDOWS', '/OUT:' + out_exe] + objs + [lib, 'user32.lib', 'shell32.lib'],
                        env=env)
     if r.returncode != 0:
         fail('linking failed')

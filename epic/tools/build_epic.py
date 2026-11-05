@@ -102,6 +102,12 @@ def vs_env():
             env[k] = v
     return env
 
+def msvc_tool(env, name):
+    """Full path of an MSVC tool (cl, link) in the Visual Studio environment. On Windows a program is looked up on
+    the PATH of this process, not on the PATH of the environment passed to it, so bare names are not found."""
+    path = env.get('PATH') or env.get('Path') or ''
+    return shutil.which(name, path=path) or name
+
 def compile_all(srcs, make_cmd, env=None):
     """Compile every source in parallel, reporting progress as each file finishes."""
     jobs = max(1, os.cpu_count() or 2)
@@ -129,12 +135,13 @@ def build_msvc(env, gen, out_exe):
     inc = ['/I' + RUNTIME, '/I' + os.path.join(SDK, 'include')]
     srcs = sources(gen)
     say('Compiling %d files with MSVC (this takes a few minutes)...' % len(srcs))
-    compile_all(srcs, lambda src: ['cl', '/nologo', '/O2', '/W1', '/c'] + inc +
+    cl = msvc_tool(env, 'cl')
+    compile_all(srcs, lambda src: [cl, '/nologo', '/O2', '/W1', '/c'] + inc +
                 ['/Fo' + os.path.join(obj, os.path.splitext(os.path.basename(src))[0] + '.obj'), src], env)
     progress(0.99, 'Linking EpicPinball')
     objs = glob.glob(os.path.join(obj, '*.obj'))
     lib = os.path.join(SDK, 'lib', 'x64', 'SDL2.lib')
-    r = subprocess.run(['link', '/nologo', '/SUBSYSTEM:WINDOWS', '/OUT:' + out_exe] + objs + [lib, 'user32.lib', 'shell32.lib'],
+    r = subprocess.run([msvc_tool(env, 'link'), '/nologo', '/SUBSYSTEM:WINDOWS', '/OUT:' + out_exe] + objs + [lib, 'user32.lib', 'shell32.lib'],
                        env=env)
     if r.returncode != 0:
         fail('linking failed')
