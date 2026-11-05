@@ -733,6 +733,7 @@ static uint32_t def_window_proc(uint32_t hwnd, uint32_t msg, uint32_t wp, uint32
 }
 U(DefWindowProcA, 4) { return def_window_proc(a[0], a[1], a[2], a[3]); }
 U(PostMessageA, 4) { q_post(a[0], a[1], a[2], a[3]); return 1; }
+void rt_post_message(uint32_t hwnd, uint32_t msg, uint32_t wp, uint32_t lp) { q_post(hwnd, msg, wp, lp); }
 U(SendMessageA, 4) { return send(a[0], a[1], a[2], a[3]); }
 U(PostQuitMessage, 1) { quit_posted = 1; quit_code = a[0]; return 0; }
 
