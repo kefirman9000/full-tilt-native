@@ -6,6 +6,18 @@
 
 **Game data is not included.** Copy your original game folders into `Put game files here` and start `FullTiltPinball.exe`: tables are found and sorted automatically.
 
+**Fixes in 0.9.1**
+- **Captain Hero: ramp shots no longer roll back into the plunger lane.** The downtown ramp is also the shooter
+  ramp; its return diverter stayed down, so a ball shot up the ramp from the playfield rode it all the way down to
+  the plunger. The diverter now drops for each launch and comes back up 3 seconds later, turning those balls away.
+- **Skulduggery: the ball no longer rolls off the upper playfield.** The blocker that closes off its bottom is
+  raised as in the original, so the ball comes down through the exit ramp.
+- **Safety net on every table:** if a ball ever gets outside the table, it is given back at the plunger ("BALL
+  RETURNED") instead of being lost, and the log says where it got out.
+- **Alien Daze's stun kickout** (and any pocket with no eject direction in its data) rolls the ball out toward the
+  flippers instead of holding it.
+- Self-test: Skulduggery's cannon lane counts as the plunger, so it no longer reports a false FAIL.
+
 **New in 0.8.4: Epic Pinball (1993), native, whole table on screen**
 Copy your Epic Pinball folder into `Put game files here`, click **Scan for new game files**, then **Compile Epic
 Pinball tables** (bottom of the launcher; needs Python 3 and a C compiler, takes a few minutes). The original DOS

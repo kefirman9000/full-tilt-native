@@ -168,8 +168,26 @@ void TKickout::TimerExpired(int timerId, void* caller)
 				       pb::time_ticks);
 			loader::play_sound(kick->HardHitSoundId, kick->Ball, "TKickout2");
 			kick->Ball->Position.Z = kick->OriginalBallZ;
-			kick->Ball->throw_ball(&kick->BallThrowDirection, kick->ThrowAngleMult, kick->ThrowSpeedMult1,
-			                  kick->ThrowSpeedMult2);
+			auto dir = kick->BallThrowDirection;
+			auto angleMult = kick->ThrowAngleMult;
+			auto speed = kick->ThrowSpeedMult1;
+			if (pb::FT2Table && std::fabs(dir.X) < 0.0001f && std::fabs(dir.Y) < 0.0001f)
+			{
+				// No eject direction in the data (Alien Daze's stun kickout: its 410 line starts and ends at the
+				// pocket, the original pops the ball straight up): roll it out downhill toward the flippers, with
+				// some spread, at a moderate speed, instead of holding it in the pocket
+				for (auto component : kick->PinballTable->ComponentList)
+					if (auto layer = dynamic_cast<TTableLayer*>(component))
+					{
+						auto len = std::sqrt(layer->GraityDirX * layer->GraityDirX + layer->GraityDirY * layer->GraityDirY);
+						if (len > 0)
+							dir = {layer->GraityDirX / len, layer->GraityDirY / len, 0.0f};
+						break;
+					}
+				angleMult = 0.7f;
+				speed = std::min(speed, kick->Ball->Radius * 40.0f);
+			}
+			kick->Ball->throw_ball(&dir, angleMult, speed, kick->ThrowSpeedMult2);
 			kick->ActiveFlag = 0;
 			kick->Ball = nullptr;
 		}

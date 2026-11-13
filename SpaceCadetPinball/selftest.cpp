@@ -117,6 +117,37 @@ void selftest::Frame(float dtMilliSec)
 		return;
 	}
 
+	// FT2_SHOT="x y dirX dirY speed mask delay" (development): once, after delay seconds of play, fire the ball from
+	// that spot, to test one shot (a ramp, an orbit) without waiting for the self-test player to make it
+	static bool shotDone = false;
+	if (!shotDone && getenv("FT2_SHOT"))
+	{
+		float x, y, dx, dy, speed, delay;
+		int mask;
+		if (sscanf(getenv("FT2_SHOT"), "%f %f %f %f %f %d %f", &x, &y, &dx, &dy, &speed, &mask, &delay) == 7 &&
+			Elapsed >= delay)
+			for (auto ball : table->BallList)
+				if (ball->ActiveFlag && !ball->CollisionComp)
+				{
+					shotDone = true;
+					auto len = std::sqrt(dx * dx + dy * dy);
+					ball->Position = {x, y, ball->Radius};
+					ball->Direction = {dx / len, dy / len, 0};
+					ball->Speed = speed;
+					ball->CollisionMask = mask;
+					ball->CollisionFlag = 0;
+					fprintf(stderr, "SHOT fired %.1f %.1f\n", x, y);
+					break;
+				}
+	}
+	if (getenv("FT2_SHOT") && shotDone)
+	{
+		static int traceFrame = 0;
+		for (auto ball : table->BallList)
+			if (ball->ActiveFlag && ++traceFrame % 6 == 0)
+				fprintf(stderr, "SHOT ball %.1f %.1f mask %d\n", ball->Position.X, ball->Position.Y, ball->CollisionMask);
+	}
+
 	bool anyActive = false;
 	TBall* moving = nullptr;
 	for (auto ball : table->BallList)
@@ -125,8 +156,12 @@ void selftest::Frame(float dtMilliSec)
 			anyActive = true;
 			moving = ball;
 		}
-	bool atPlunger = moving && distance(moving->Position, table->PlungerPosition) < moving->Radius * 4.0f &&
-		moving->Speed < moving->Radius;
+	// At the plunger: near its spot, or anywhere in the lane straight below/above it (Skulduggery's cannon ball rests
+	// a few ball widths down the lane from the plunger's own position)
+	bool atPlunger = moving && moving->Speed < moving->Radius &&
+		(distance(moving->Position, table->PlungerPosition) < moving->Radius * 4.0f ||
+		 (std::fabs(moving->Position.X - table->PlungerPosition.X) < moving->Radius * 2.0f &&
+		  std::fabs(moving->Position.Y - table->PlungerPosition.Y) < moving->Radius * 15.0f));
 
 	// Ball accounting: a ball is "in play" from its launch until no ball is left on the table
 	if (anyActive && !atPlunger && !BallInPlay)

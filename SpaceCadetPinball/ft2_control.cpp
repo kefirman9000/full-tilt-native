@@ -16,6 +16,9 @@
 #include "TDrain.h"
 #include "TFlagSpinner.h"
 #include "TGate.h"
+#include "TBlocker.h"
+#include "ft_log.h"
+#include "TTableLayer.h"
 #include "THole.h"
 #include "TKickback.h"
 #include "TKickout.h"
@@ -926,6 +929,40 @@ namespace
 TBall* ft2_control::CollidingBall = nullptr;
 bool ft2_control::PracticeGame = false;
 
+// Captain Hero's shooter ramp (the downtown ramp) is also a ramp you can shoot from the playfield. Its exit diverter
+// ("plunger_diverter_return") starts down so the launch can pass; left down, a ball shot up the ramp from the
+// playfield rode it all the way back down into the plunger lane. It now comes back up 3 seconds after each launch,
+// turning such balls away, and drops again for the next launch.
+static int ReturnGateTimer = 0;
+
+static void set_return_gates(bool up)
+{
+	if (!pb::MainTable)
+		return;
+	for (auto component : pb::MainTable->ComponentList)
+		if (component->GroupName && strstr(component->GroupName, "_return") && dynamic_cast<TGate*>(component))
+			component->Message(up ? MessageCode::TGateEnable : MessageCode::TGateDisable, 0.0);
+}
+
+static void raise_return_gates(int, void*)
+{
+	ReturnGateTimer = 0;
+	set_return_gates(true);
+}
+
+static bool ball_at_plunger()
+{
+	auto t = pb::MainTable;
+	for (auto ball : t->BallList)
+		if (ball->ActiveFlag)
+		{
+			auto dx = ball->Position.X - t->PlungerPosition.X, dy = ball->Position.Y - t->PlungerPosition.Y;
+			if (dx * dx + dy * dy < ball->Radius * ball->Radius * 36.0f)
+				return true;
+		}
+	return false;
+}
+
 void ft2_control::handler(MessageCode code, TPinballComponent* caller)
 {
 	auto t = table();
@@ -958,6 +995,13 @@ void ft2_control::handler(MessageCode code, TPinballComponent* caller)
 	{
 		play_component_sound(caller);
 		build_sets();
+		if (ball_at_plunger())
+		{
+			set_return_gates(false);
+			if (ReturnGateTimer)
+				timer::kill(ReturnGateTimer);
+			ReturnGateTimer = timer::set(3.0f, nullptr, raise_return_gates);
+		}
 		rs.LaunchTick = pb::time_ticks; // ball save counts from the launch
 		rs.SkillShotLive = true; // the first pass over Captain Hero's skill shot trigger after a launch decides it
 		rs.AwaitingLaunch = false;
@@ -1097,6 +1141,29 @@ std::vector<std::string> ft2_control::StatusLines()
 	return lines;
 }
 
+// Blockers the original rules keep raised because they close off part of the table. Skulduggery's a_blocf closes the
+// bottom of the upper playfield except for the gap onto its exit ramp; lowered, balls rolled off the table there.
+static void raise_blockers()
+{
+	static const struct { const char* Table; const char* Blocker; } raised[] =
+	{
+		{"PIRATES.DAT", "a_blocf"},
+	};
+	if (!pb::MainTable)
+		return;
+	std::string key = pb::DatFileName;
+	auto slash = key.find_last_of("/\\");
+	if (slash != std::string::npos)
+		key = key.substr(slash + 1);
+	std::transform(key.begin(), key.end(), key.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+	for (auto& entry : raised)
+		if (key == entry.Table)
+			for (auto component : pb::MainTable->ComponentList)
+				if (component->GroupName && strcmp(component->GroupName, entry.Blocker) == 0 &&
+					dynamic_cast<TBlocker*>(component))
+					component->Message(MessageCode::TBlockerEnable, 0.0);
+}
+
 void ft2_control::table_handler(MessageCode code)
 {
 	if (!table())
@@ -1105,6 +1172,7 @@ void ft2_control::table_handler(MessageCode code)
 	switch (code)
 	{
 	case MessageCode::Reset: // new game
+		raise_blockers();
 		stop_attract();
 		if (rs.PocketTimer)
 		{
@@ -1148,10 +1216,55 @@ void ft2_control::table_handler(MessageCode code)
 			rs.AttractTimer = timer::set(3.5f, nullptr, attract_tick); // lights play while waiting for a new game
 		break;
 	case MessageCode::SwitchToNextPlayer:
+		raise_blockers(); // blockers drop when the player changes
 		for (auto& set : rs.Sets)
 			set.Hit.clear();
 		break;
 	default:
 		break;
+	}
+}
+
+void ft2_control::check_escaped_balls()
+{
+	auto t = pb::MainTable;
+	if (!t)
+		return;
+	static TTableLayer* layer = nullptr;
+	static TPinballTable* layerTable = nullptr;
+	if (layerTable != t)
+	{
+		layerTable = t;
+		layer = nullptr;
+		for (auto component : t->ComponentList)
+			if ((layer = dynamic_cast<TTableLayer*>(component)) != nullptr)
+				break;
+	}
+	if (!layer)
+		return;
+	for (auto ball : t->BallList)
+	{
+		if (!ball->ActiveFlag || ball->CollisionComp)
+			continue;
+		auto margin = ball->Radius * 4.0f;
+		auto& p = ball->Position;
+		bool outside = p.X < layer->XMin - margin || p.X > layer->XMax + margin ||
+			p.Y < layer->YMin - margin || p.Y > layer->YMax + margin || p.X != p.X || p.Y != p.Y;
+		if (!outside)
+			continue;
+		ftlog::Line("Ball left the table at " + std::to_string(p.X) + ", " + std::to_string(p.Y) + " (layer mask " +
+			std::to_string(ball->CollisionMask) + "): given back at the plunger");
+		ball->Disable();
+		int active = 0;
+		for (auto other : t->BallList)
+			if (other->ActiveFlag)
+				active++;
+		if (active == 0 && t->Plunger)
+		{
+			show("BALL RETURNED", 2.0f);
+			t->Plunger->Message(MessageCode::PlungerStartFeedTimer, 0.0);
+		}
+		else if (t->MultiballCount > 0)
+			t->MultiballCount--;
 	}
 }

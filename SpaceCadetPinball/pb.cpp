@@ -438,6 +438,8 @@ void pb::render_frame(float alpha)
 
 void pb::timed_frame(float timeDelta)
 {
+	if (FT2Table && MainTable)
+		ft2_control::check_escaped_balls();
 	if (FT2Table && DevDebug)
 	{
 		static int dbgCount;
