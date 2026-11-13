@@ -341,6 +341,168 @@ static void ImportEpicPinball(const fs::path& installDir, const fs::path& tables
 	imported++;
 }
 
+// 3-D Ultra Pinball (Sierra, 1995): a Windows 95 game, played by UltraPinball, which is built on this computer from
+// the user's own PINBALL.EXE (see sierra/README.md). Its three levels (Colony, Mine, Command Post) are one card.
+// Found as an installed or copied UPINBALL folder, or inside the CD image (.iso) itself.
+static bool IsUltraPinballInstall(const fs::path& dir)
+{
+	return !FindFileCI(dir, "PINBALL.EXE").empty() && !FindFileCI(dir, "RESOURCE.MAP").empty() &&
+		!FindFileCI(dir, "RESOURCE.001").empty() && FindFileCI(dir, "EP1.EXE").empty();
+}
+
+static const char* UltraPinballFolder = "UltraPinball";
+
+static void WriteUltraPinballIni(const fs::path& target)
+{
+	std::ofstream ini(target / "table.ini");
+	ini << "[Table]\n"
+		"Name=3-D Ultra Pinball\n"
+		"Game=3-D Ultra Pinball (Sierra, 1995) - Colony, Mine, Command Post\n"
+		"Data=" << FindFileCI(target, "PINBALL.EXE").filename().string() << "\n"
+		"Args=--game .\n"
+		"Engine=sierra\n"
+		"Preview=preview.bmp\n"
+		"Status=Playable - sound effects, no music yet\n"
+		"Order=210\n";
+}
+
+static void ImportUltraPinball(const fs::path& installDir, const fs::path& tablesDir, std::string& report, int& imported)
+{
+	std::error_code ec;
+	auto target = tablesDir / UltraPinballFolder;
+	if (fs::exists(target / "table.ini", ec))
+		return;
+	fs::create_directories(target, ec);
+	// the game folder's own files (the SHELL folder only holds the intro videos, which are not played)
+	for (auto& entry : fs::directory_iterator(installDir, ec))
+		if (entry.is_regular_file(ec))
+			fs::copy_file(entry.path(), target / entry.path().filename(), fs::copy_options::skip_existing, ec);
+	WriteUltraPinballIni(target);
+	report += (report.empty() ? "" : ", ") + std::string("3-D Ultra Pinball");
+	imported++;
+}
+
+// Minimal ISO 9660 reader: finds the directory of the CD image that holds PINBALL.EXE and RESOURCE.MAP (UPINBALL on
+// the original CD) and copies its files out. Plain ISO 9660 names (8.3 with ";1") are all this CD uses.
+namespace iso
+{
+	struct Entry { std::string name; uint32_t lba = 0, size = 0; bool dir = false; };
+
+	static bool ReadAt(std::ifstream& f, uint64_t pos, void* buf, size_t n)
+	{
+		f.clear();
+		f.seekg(static_cast<std::streamoff>(pos));
+		f.read(static_cast<char*>(buf), static_cast<std::streamsize>(n));
+		return static_cast<size_t>(f.gcount()) == n;
+	}
+	static uint32_t U32(const unsigned char* p) { return p[0] | p[1] << 8 | p[2] << 16 | static_cast<uint32_t>(p[3]) << 24; }
+
+	static std::vector<Entry> List(std::ifstream& f, uint32_t lba, uint32_t size)
+	{
+		std::vector<Entry> out;
+		if (size > (16u << 20))
+			return out;
+		std::vector<unsigned char> d(size);
+		if (!ReadAt(f, static_cast<uint64_t>(lba) * 2048, d.data(), size))
+			return out;
+		for (uint32_t p = 0; p < size;)
+		{
+			unsigned len = d[p];
+			if (!len) { p = (p / 2048 + 1) * 2048; continue; }       // records never cross a sector
+			if (p + 33 > size || p + len > size)
+				break;
+			unsigned nlen = d[p + 32];
+			Entry e;
+			e.lba = U32(&d[p + 2]); e.size = U32(&d[p + 10]); e.dir = (d[p + 25] & 2) != 0;
+			if (p + 33 + nlen <= size)
+				e.name.assign(reinterpret_cast<const char*>(&d[p + 33]), nlen);
+			auto semi = e.name.find(';');
+			if (semi != std::string::npos) e.name.resize(semi);
+			if (!e.name.empty() && e.name.back() == '.') e.name.pop_back();
+			if (nlen == 1 && (d[p + 33] == 0 || d[p + 33] == 1)) e.name.clear();   // "." and ".."
+			if (!e.name.empty())
+				out.push_back(e);
+			p += len;
+		}
+		return out;
+	}
+
+	static bool HasFile(const std::vector<Entry>& v, const char* name)
+	{
+		for (auto& e : v)
+			if (!e.dir && Upper(e.name) == name)
+				return true;
+		return false;
+	}
+
+	// copies the game folder's files to target; returns false if the image holds no 3-D Ultra Pinball
+	static bool ExtractUltraPinball(const fs::path& image, const fs::path& target)
+	{
+		std::ifstream f(image, std::ios::binary);
+		unsigned char pvd[2048];
+		if (!f || !ReadAt(f, 16 * 2048, pvd, sizeof pvd) || pvd[0] != 1 || std::memcmp(pvd + 1, "CD001", 5) != 0)
+			return false;
+		auto root = List(f, U32(pvd + 156 + 2), U32(pvd + 156 + 10));
+		std::vector<Entry> game;
+		if (HasFile(root, "PINBALL.EXE") && HasFile(root, "RESOURCE.MAP"))
+			game = root;
+		for (auto& e : root)
+			if (game.empty() && e.dir)
+			{
+				auto sub = List(f, e.lba, e.size);
+				if (HasFile(sub, "PINBALL.EXE") && HasFile(sub, "RESOURCE.MAP") && !HasFile(sub, "EP1.EXE"))
+					game = sub;
+			}
+		if (game.empty())
+			return false;
+		std::error_code ec;
+		fs::create_directories(target, ec);
+		std::vector<char> buf(1 << 20);
+		for (auto& e : game)
+		{
+			if (e.dir)
+				continue;
+			std::ofstream out(target / e.name, std::ios::binary);
+			uint64_t pos = static_cast<uint64_t>(e.lba) * 2048;
+			for (uint32_t left = e.size; left;)
+			{
+				uint32_t n = left < buf.size() ? left : static_cast<uint32_t>(buf.size());
+				if (!ReadAt(f, pos, buf.data(), n))
+					return false;
+				out.write(buf.data(), n);
+				pos += n; left -= n;
+			}
+		}
+		return true;
+	}
+}
+
+static void ImportUltraPinballIso(const fs::path& image, const fs::path& tablesDir, std::string& report, int& imported)
+{
+	std::error_code ec;
+	auto target = tablesDir / UltraPinballFolder;
+	if (fs::exists(target / "table.ini", ec))
+		return;
+	if (fs::file_size(image, ec) < 1024 * 1024)
+		return;
+	auto tmp = tablesDir / "_ultra_pinball_iso";
+	fs::remove_all(tmp, ec);
+	if (!iso::ExtractUltraPinball(image, tmp) || !IsUltraPinballInstall(tmp))
+	{
+		fs::remove_all(tmp, ec);
+		return;
+	}
+	fs::rename(tmp, target, ec);
+	if (ec)
+	{
+		fs::remove_all(tmp, ec);
+		return;
+	}
+	WriteUltraPinballIni(target);
+	report += (report.empty() ? "" : ", ") + std::string("3-D Ultra Pinball (from ") + image.filename().string() + ")";
+	imported++;
+}
+
 static int ImportGameFiles(const fs::path& dropDir, const fs::path& tablesDir, std::string& report)
 {
 	std::error_code ec;
@@ -355,6 +517,16 @@ static int ImportGameFiles(const fs::path& dropDir, const fs::path& tablesDir, s
 		if (Upper(it->path().filename().string()) == "PINBALL.EXE" && IsEpicPinballInstall(it->path().parent_path()))
 		{
 			ImportEpicPinball(it->path().parent_path(), tablesDir, report, imported);
+			continue;
+		}
+		if (Upper(it->path().filename().string()) == "PINBALL.EXE" && IsUltraPinballInstall(it->path().parent_path()))
+		{
+			ImportUltraPinball(it->path().parent_path(), tablesDir, report, imported);
+			continue;
+		}
+		if (Upper(it->path().extension().string()) == ".ISO")
+		{
+			ImportUltraPinballIso(it->path(), tablesDir, report, imported);
 			continue;
 		}
 		if (Upper(it->path().extension().string()) != ".DAT")
@@ -527,11 +699,17 @@ static bool GameJustClosed()
 }
 
 
-// "Compile Epic Pinball tables": runs epic/tools/build_epic.py in the background. It recompiles the user's own
-// Epic Pinball programs to C and builds EpicPinball next to the launcher (Python 3 and a C compiler are needed).
-// Output goes to EpicBuild.log; the last line is shown under the button while it runs.
+// "Compile Epic Pinball tables" / "Compile 3-D Ultra Pinball": runs epic/tools/build_epic.py or
+// sierra/tools/build_sierra.py in the background. They recompile the user's own game programs to C and build
+// EpicPinball / UltraPinball next to the launcher (Python 3 and a C compiler are needed). Output goes to
+// EpicBuild.log / SierraBuild.log; the last line is shown under the button while it runs.
 namespace epicbuild
 {
+	struct Game { const char* folder; const char* script; const char* log; const char* name; const char* button; };
+	static const Game Epic{"epic", "build_epic.py", "EpicBuild.log", "Epic Pinball", "Compile Epic Pinball tables"};
+	static const Game Sierra{"sierra", "build_sierra.py", "SierraBuild.log", "3-D Ultra Pinball", "Compile 3-D Ultra Pinball"};
+	static const Game* game = &Epic;     // the one being (or last) built
+
 	static bool running = false;
 	static std::string status;
 	static float fraction = 0;       // progress bar: last "PROGRESS <0..1> <step>" line from build_epic.py
@@ -543,11 +721,11 @@ namespace epicbuild
 	static pid_t pid = 0;
 #endif
 
-	static fs::path ToolsDir(const fs::path& basePath)
+	static fs::path ToolsDir(const fs::path& basePath, const Game& g = Epic)
 	{
 		std::error_code ec;
-		for (auto dir : {basePath / "epic", basePath.parent_path() / "epic", basePath.parent_path().parent_path() / "epic"})
-			if (fs::exists(dir / "tools" / "build_epic.py", ec))
+		for (auto dir : {basePath / g.folder, basePath.parent_path() / g.folder, basePath.parent_path().parent_path() / g.folder})
+			if (fs::exists(dir / "tools" / g.script, ec))
 				return dir;
 		return {};
 	}
@@ -651,30 +829,35 @@ namespace epicbuild
 		step = "Starting...";
 	}
 
-	static std::string Start(const fs::path& basePath, const fs::path& gameDir)
+	static std::string Start(const fs::path& basePath, const fs::path& gameDir, const Game& g = Epic)
 	{
 		std::error_code ec;
 		if (running)
 			return "";
+		std::string name = g.name;
 		if (!fs::exists(gameDir / "table.ini", ec))
-			return "No Epic Pinball found: copy your Epic Pinball folder into \"Put game files here\" and click "
+			return "No " + name + " found: copy your " + name + " folder (or CD image) into \"Put game files here\" and click "
 				"\"Scan for new game files\" first.";
-		auto epic = ToolsDir(basePath);
-		if (epic.empty())
+		auto tools = ToolsDir(basePath, g);
+		if (tools.empty())
+			return std::string("The ") + g.folder + " folder (build tools) is missing next to the launcher.";
+		if (ToolsDir(basePath, Epic).empty())
 			return "The epic folder (build tools) is missing next to the launcher.";
-		auto script = (epic / "tools" / "build_epic.py").string();
-		logFile = basePath / "EpicBuild.log";
-		ftlog::Line("Compiling Epic Pinball: " + script);
+		auto script = (tools / "tools" / g.script).string();
+		logFile = basePath / g.log;
+		game = &g;
+		ftlog::Line("Compiling " + name + ": " + script);
 #ifdef _WIN32
 		RefreshPath();
 		auto py = FindPython();
 		if (py.empty())
-			return "Python 3 is needed to compile Epic Pinball: click \"Install build tools\" first.";
+			return "Python 3 is needed to compile " + name + ": click \"Install build tools\" first.";
 		auto err = RunLogged(py + " -u \"" + script + "\" --game \"" + gameDir.string() + "\" --out \"" + basePath.string() + "\"",
 		                     basePath);
 #else
+		auto missing = "Python 3 is needed to compile " + name;
 		auto err = RunLogged({"python3", "-u", script, "--game", gameDir.string(), "--out", basePath.string()}, basePath,
-		                     "Python 3 is needed to compile Epic Pinball");
+		                     missing.c_str());
 #endif
 		if (!err.empty())
 			return "Could not start the build: " + err;
@@ -761,15 +944,15 @@ namespace epicbuild
 		running = false;
 		if (last.rfind("DONE", 0) == 0)
 		{
-			status = job == Job::Install ? "Build tools are installed. Click \"Compile Epic Pinball tables\" next."
-			                             : "Epic Pinball is built. Click its card to play.";
-			ftlog::Line(job == Job::Install ? "Build tools installed" : "Epic Pinball build finished");
+			status = job == Job::Install ? "Build tools are installed. Click a \"Compile\" button next."
+			                             : std::string(game->name) + " is built. Click its card to play.";
+			ftlog::Line(job == Job::Install ? "Build tools installed" : std::string(game->name) + " build finished");
 			return job == Job::Build;
 		}
 		auto err = LastLine(true);
 		status = std::string(job == Job::Install ? "Install failed: " : "Build failed: ") + (err.empty() ? last : err) +
 			"  (details in " + logFile.filename().string() + ")";
-		ftlog::Line("Epic Pinball build failed: " + status);
+		ftlog::Line(std::string(game->name) + " build failed: " + status);
 		return false;
 	}
 }
@@ -819,8 +1002,10 @@ static std::string MakeProblemReport(const fs::path& basePath, const std::vector
 
 #ifdef _WIN32
 static const char* EpicExeName = "EpicPinball.exe";
+static const char* UltraExeName = "UltraPinball.exe";
 #else
 static const char* EpicExeName = "EpicPinball";
+static const char* UltraExeName = "UltraPinball";
 #endif
 
 static std::string Launch(const fs::path& engineExe, const Table& t, const std::string& windowSpot)
@@ -831,6 +1016,12 @@ static std::string Launch(const fs::path& engineExe, const Table& t, const std::
 		exe = engineExe.parent_path() / EpicExeName;
 		if (!fs::exists(exe))
 			return "Epic Pinball isn't built on this computer yet: click \"Compile Epic Pinball tables\" at the bottom.";
+	}
+	if (t.Engine == "sierra")
+	{
+		exe = engineExe.parent_path() / UltraExeName;
+		if (!fs::exists(exe))
+			return "3-D Ultra Pinball isn't built on this computer yet: click \"Compile 3-D Ultra Pinball\" at the bottom.";
 	}
 	ftlog::Line("Launching " + t.Name + " in " + t.Folder.string() + ": " + exe.string() + " " + t.Args);
 	if (t.Engine == "addiction")
@@ -955,7 +1146,8 @@ int main(int, char**)
 				t.Hidden = prefs.hidden.count(t.Folder.filename().string()) > 0;
 		}
 		for (auto& t : tables)
-			EnsureMusicFolder(t.Folder, t.Name);
+			if (t.Engine != "sierra")
+				EnsureMusicFolder(t.Folder, t.Name);
 		LoadHighScores(tables);
 		for (auto& t : tables)
 			for (auto picture : {t.Preview, std::string("icon.bmp")})
@@ -1241,7 +1433,8 @@ int main(int, char**)
 			bool busy = epicbuild::running;
 			if (busy)
 				ImGui::BeginDisabled();
-			if (ImGui::Button(busy && epicbuild::job == epicbuild::Job::Build ? "Compiling Epic Pinball..." : "Compile Epic Pinball tables"))
+			bool buildingEpic = busy && epicbuild::job == epicbuild::Job::Build && epicbuild::game == &epicbuild::Epic;
+			if (ImGui::Button(buildingEpic ? "Compiling Epic Pinball..." : "Compile Epic Pinball tables"))
 			{
 				auto err = epicbuild::Start(basePath, tablesDir / "EpicPinball");
 				if (!err.empty())
@@ -1252,6 +1445,27 @@ int main(int, char**)
 			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 				ImGui::SetTooltip("Builds EpicPinball from your own Epic Pinball files (needs Python 3 and a C compiler).\n"
 				                  "It takes a few minutes; nothing from the game is uploaded or shared.");
+			std::error_code uec;
+			if (fs::exists(tablesDir / UltraPinballFolder / "table.ini", uec))
+			{
+				// only once 3-D Ultra Pinball has been imported
+				SameLineIfFits(ButtonWidth("Compile 3-D Ultra Pinball"));
+				if (busy)
+					ImGui::BeginDisabled();
+				bool buildingUltra = busy && epicbuild::job == epicbuild::Job::Build && epicbuild::game == &epicbuild::Sierra;
+				if (ImGui::Button(buildingUltra ? "Compiling 3-D Ultra Pinball..." : "Compile 3-D Ultra Pinball"))
+				{
+					auto err = epicbuild::Start(basePath, tablesDir / UltraPinballFolder, epicbuild::Sierra);
+					if (!err.empty())
+						epicbuild::status = err;
+				}
+				if (busy)
+					ImGui::EndDisabled();
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+					ImGui::SetTooltip("Builds UltraPinball from your own 3-D Ultra Pinball files (needs Python 3 and a C\n"
+					                  "compiler; \"Install build tools\" sets them up). Takes a minute or two; nothing from\n"
+					                  "the game is uploaded or shared.");
+			}
 			SameLineIfFits(ButtonWidth("Install build tools"));
 			if (busy)
 				ImGui::BeginDisabled();
@@ -1264,7 +1478,7 @@ int main(int, char**)
 			if (busy)
 				ImGui::EndDisabled();
 			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-				ImGui::SetTooltip("Installs what compiling Epic Pinball needs, for your user only: Python 3, the GCC C\n"
+				ImGui::SetTooltip("Installs what compiling Epic Pinball and 3-D Ultra Pinball needs, for your user only: Python 3, the GCC C\n"
 				                  "compiler (WinLibs) and the capstone module. Uses winget; takes a few minutes.");
 		}
 		if (hiddenCount > 0 || showHidden)
@@ -1284,7 +1498,7 @@ int main(int, char**)
 		}
 		if (epicbuild::running)
 		{
-			// progress bar for recompiling and compiling the Epic Pinball tables
+			// progress bar for recompiling and compiling Epic Pinball or 3-D Ultra Pinball
 			char label[160];
 			std::snprintf(label, sizeof label, "%d%%  %s", static_cast<int>(epicbuild::fraction * 100 + 0.5f),
 			              epicbuild::step.c_str());
@@ -1295,7 +1509,8 @@ int main(int, char**)
 		else if (!epicbuild::status.empty())
 		{
 			bool bad = epicbuild::status.find("failed") != std::string::npos || epicbuild::status.find("needed") != std::string::npos ||
-				epicbuild::status.rfind("No Epic", 0) == 0 || epicbuild::status.rfind("Could not", 0) == 0;
+				epicbuild::status.rfind("No ", 0) == 0 || epicbuild::status.rfind("Could not", 0) == 0 ||
+				epicbuild::status.find("missing") != std::string::npos;
 			ImGui::PushTextWrapPos(0);
 			ImGui::TextColored(bad ? ImVec4(1, 0.45f, 0.4f, 1) : ImVec4(0.55f, 0.85f, 0.55f, 1), "%s", epicbuild::status.c_str());
 			ImGui::PopTextWrapPos();
@@ -1303,6 +1518,7 @@ int main(int, char**)
 		ImGui::Separator();
 		ImGui::TextDisabled("F2 new game  Space plunger  Z / or Shift flippers  F3 pause  F4 fullscreen  F12 back here");
 		ImGui::TextDisabled("Epic Pinball: F11 whole table or original scrolling view, Alt+Enter fullscreen, F12 back here");
+		ImGui::TextDisabled("3-D Ultra Pinball: the game's own keys and mouse menus, Alt+Enter fullscreen, F12 back here");
 		{
 			auto update = updater::Get();
 			ImGui::TextDisabled("Version %s", updater::CurrentVersion);

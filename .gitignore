@@ -309,6 +309,7 @@ bin/
 # Epic Pinball: code generated from the user's own game files never goes into the repository
 epic/gen/
 epic/gen-local/
+sierra/gen-local/
 epic/sdk/
 EpicPinball
 EpicPinball.exe

@@ -12,6 +12,9 @@ k4zmu2a and contributors (full history kept; their original README is in `README
 ## Status
 - Alien and Mad are playable with generic rules (launch, scoring, drain, next ball, game over). Hero partly.
 - Full Tilt 1's Dragon's Keep and Skulduggery load too (work in progress).
+- Sierra's **3-D Ultra Pinball** (1995) plays natively: its Windows 95 program is recompiled to C from your own copy
+  and runs on a small Win32 + SOS sound runtime. Import the CD folder or the `.iso`, then *Compile 3-D Ultra Pinball*
+  in the launcher. Sound effects yes, music not yet. Details: `sierra/README.md`.
 - No real table rules yet (missions, lights, modes). Notes: `ft2/PROGRESS.md`, plan: `ft2/ROADMAP.md`.
 
 ## Plan
