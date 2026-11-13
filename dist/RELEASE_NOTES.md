@@ -6,6 +6,15 @@
 
 **Game data is not included.** Copy your original game folders into `Put game files here` and start `FullTiltPinball.exe`: tables are found and sorted automatically.
 
+**New in 0.9.2**
+- **3-D Ultra Pinball (Sierra, 1995)** joins the library. Drop the `UPINBALL` folder from the CD, or the CD image
+  (`.iso`), into **Put game files here** and click **Scan for new game files**. Then click **Compile 3-D Ultra
+  Pinball** on its card (uses the same build tools as Epic Pinball; **Install build tools** covers both; takes a
+  minute or two) and play. Controls match the Full Tilt tables (Shift flips, Space launches, F12 back to the library).
+  The game's program is converted from your own copy on your computer; no game files are included.
+  Not yet: its music (silent for now) and the intro/ending videos. This is the first release with it on Windows, so
+  please report anything odd with **Report a problem**.
+
 **Fixes in 0.9.1**
 - **Captain Hero: ramp shots no longer roll back into the plunger lane.** The downtown ramp is also the shooter
   ramp; its return diverter stayed down, so a ball shot up the ramp from the playfield rode it all the way down to
