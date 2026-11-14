@@ -6,6 +6,32 @@
 
 **Game data is not included.** Copy your original game folders into `Put game files here` and start `FullTiltPinball.exe`: tables are found and sorted automatically.
 
+**New in 0.10.0: Alien Daze plays by its real rules**
+Alien Daze's own rules were recovered from Alien.exe and ported (ft2/alien_rules.md has the details):
+- **Five missions**: Make Crop Circles, Abduct Humans, Re-capture Bigfoot, Take a Joy Ride and Re-assemble
+  Abductee. The next one flashes; shoot the cornfield's center hole to start it (the landing ramp picks another).
+  Each has its own shots and texts: crop circles in the cornfield holes, 17 abductees to beam up, Bigfoot walking
+  between six spots leaving footprints, playing tag and buzzing landmarks, and putting an abductee back together
+  (watch out for the horse head), then releasing or keeping it. Missions are timed (30/25/35/25 s; the last has no
+  limit); the scoop on the right offers to extend (right flipper) or cancel (left flipper).
+- **Land the spacecraft**: the four gear targets lower the landing gear, the landing ramp lands it (from
+  "Emergency Landing -- Cow Crushed" to "Perfect Landing -- Cow Missed"), then the spacecraft lock opens: lock four
+  balls for multiball.
+- **Tractor beam**: 12 bumper hits switch it on and it lifts the ball up into the spacecraft.
+- **Stun magnet**: the three space alien targets make it ready; it grabs the ball, the aim lights go round, and a
+  flip fires the ball at the lit one.
+- **Reserve power** for the outlane kickback (up to three charges), a **score multiplier** up to 3x from the UFO
+  targets, **bonus hold** on the spiral ramp, an **extra ball** from the loop or the cornfield targets, **artifact
+  trading** (right flipper yes, left no), bumper stages and the **jackpot**.
+- **End-of-ball bonus** as on the original: missions, ship landed, abductees, artifacts traded, encasements.
+- The side panel shows the mission, its time left, the gear, the lock and the jackpot.
+
+**Fixes in 0.10.0**
+- A ball could get wedged after a weak launch on Alien Daze (between the ray gun and its one-way gate) and never
+  move again. Stuck balls on the Full Tilt 2 tables are now recognised (the check was set for Space Cadet's ten
+  times smaller scale) and freed; a ball waiting at the plunger is still left alone.
+- A kickout that the rules have switched off no longer pulls the ball to its center and holds it there.
+
 **New in 0.9.2**
 - **3-D Ultra Pinball (Sierra, 1995)** joins the library. Drop the `UPINBALL` folder from the CD, or the CD image
   (`.iso`), into **Put game files here** and click **Scan for new game files**. Then click **Compile 3-D Ultra

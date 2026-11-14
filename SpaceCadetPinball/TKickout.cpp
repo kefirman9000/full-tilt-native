@@ -142,7 +142,9 @@ int TKickout::FieldEffect(TBall* ball, vector2* dstVec)
 {
 	vector2 direction{};
 
-	if (BallCaputeredFlag)
+	// A switched-off kickout (FT2 rules close some until a mode lights them) lets the ball roll over it; its pull
+	// held the ball at its center for ever otherwise
+	if (BallCaputeredFlag || (pb::FT2Table && !ActiveFlag))
 		return 0;
 	direction.X = Circle.Center.X - ball->Position.X;
 	direction.Y = Circle.Center.Y - ball->Position.Y;

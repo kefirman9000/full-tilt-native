@@ -66,3 +66,12 @@
 - [x] Hero ball saver s_sink30 shut except ball save time / forcefields (was the "endless ball")
 - [ ] Hero jackpot (table field 0x141, raised by the skill shot), playfield/pop multiplier (0x405de8)
 - [x] Mad Scientist: rule table + scores (points in data variables; ft2rules.py reads their starting values)
+
+## Status 2026-11-13 (0.10.0: Alien Daze rules)
+- [x] Alien Daze's rules ported from Alien.exe (SpaceCadetPinball/ft2_alien.cpp, notes in ft2/alien_rules.md):
+      five missions, landing gear / landing / spacecraft lock and multiball, tractor beam, stun magnet (s_mag01,
+      type 1042, done as a pull circle around the stun kickout), reserve power, multiplier, bonus hold, extra
+      ball, artifact trading, jackpot, end-of-ball bonus. Texts come from the user's Alien.exe at run time.
+- [ ] Alien: skill shot, cornfield multiball, the levitation path animation, a_gate01 behind the ray gun, mission
+      music, loop diverter
+- [ ] Mad Scientist rules (same method: ft2/tools/annot.py + calls.py on mad.exe)

@@ -17,6 +17,10 @@ public:
 	static void table_handler(MessageCode code);
 	// Every frame: a ball that has left the table's area is given back at the plunger (an engine fault, not a lost ball)
 	static void check_escaped_balls();
+	// A ball was served to the plunger and has not been launched yet
+	static bool AwaitingLaunch();
+	// Where the ball rests in the shooter lane (set when the plunger is pulled with a ball waiting there)
+	static bool PlungerRest(float& x, float& y);
 	// The ball whose collision is being handled (set by the physics loop just before it), for rules that look at
 	// the ball itself, such as Captain Hero's skill shot (only a slow ball counts)
 	static TBall* CollidingBall;

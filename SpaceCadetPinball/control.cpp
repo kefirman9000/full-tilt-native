@@ -1134,17 +1134,40 @@ void control::UnstuckBall(TBall& ball, int dt)
 	{
 		// Generic version for other tables: Cadet's flip1/flip2/plunger links are not set up for them
 		for (TCollisionComponent* cmp : {static_cast<TCollisionComponent*>(TableG->FlipperL),
-		                                 static_cast<TCollisionComponent*>(TableG->FlipperR),
-		                                 static_cast<TCollisionComponent*>(TableG->Plunger)})
+		                                 static_cast<TCollisionComponent*>(TableG->FlipperR)})
 			if (cmp && CheckBallInControlBounds(ball, *cmp))
 				return;
+		// A ball waiting at the plunger is not stuck. Only its own spot counts: Alien Daze's angled ray gun has a
+		// big control area, and a weak launch could leave the ball wedged in it (against aim_wall and s_onew01)
+		// where nothing ever moved it again.
+		// Where a served ball comes to rest is remembered, so a weak launch that rolls back there is not "stuck" either
+		static vector2 plungerRest{};
+		static bool haveRest = false;
+		if (TableG->Plunger && CheckBallInControlBounds(ball, *TableG->Plunger))
+		{
+			if (ft2_control::AwaitingLaunch())
+			{
+				plungerRest = {ball.Position.X, ball.Position.Y};
+				haveRest = true;
+				return;
+			}
+			float restX, restY;
+			if (ft2_control::PlungerRest(restX, restY))
+			{
+				plungerRest = {restX, restY};
+				haveRest = true;
+			}
+			auto dx = ball.Position.X - plungerRest.X, dy = ball.Position.Y - plungerRest.Y;
+			if (haveRest && dx * dx + dy * dy < ball.Radius * ball.Radius * 2.25f)
+				return;
+		}
 		if (pb::DevDebug)
 			fprintf(stderr, "FT2DBG unstuck ball at %.2f %.2f counter %d\n", ball.Position.X, ball.Position.Y, ball.StuckCounter);
 		if (ball.StuckCounter <= 20 || !TableG->Plunger)
 		{
 			// "Up the table" is -Y in Space Cadet-style tables and +Y in FT2 full-screen tables
 			vector3 throwDir{0.0f, pb::FT2FullScreen ? 1.0f : -1.0f, 0.0f};
-			ball.throw_ball(&throwDir, 90.0f, 1.0f, 0.0f);
+			ball.throw_ball(&throwDir, 90.0f, pb::FT2FullScreen ? ball.Radius * 3.0f : 1.0f, 0.0f);
 		}
 		else
 		{

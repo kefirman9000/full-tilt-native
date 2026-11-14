@@ -3,6 +3,7 @@
 #include "ft2_scores.h"
 #include "ft2_sounds.h"
 #include "ft2_animation.h"
+#include "ft2_alien.h"
 
 #include "pb.h"
 #include "TBall.h"
@@ -859,7 +860,9 @@ namespace
 	// Called when a ball is lost for good: end-of-ball bonus, then the per-ball state starts over
 	void end_of_ball()
 	{
-		if (enhanced() && rs.BonusHits > 0 && !table()->TiltLockFlag)
+		if (ft2_alien::Active())
+			ft2_alien::EndOfBall(); // Alien Daze counts its own bonus
+		else if (enhanced() && rs.BonusHits > 0 && !table()->TiltLockFlag)
 		{
 			auto bonus = rs.BonusHits * 1000 * rs.Multiplier;
 			table()->AddScore(bonus);
@@ -981,6 +984,11 @@ void ft2_control::handler(MessageCode code, TPinballComponent* caller)
 	if ((code == MessageCode::PlungerInputPressed || code == MessageCode::PlungerInputReleased) &&
 		dynamic_cast<TPlunger*>(caller))
 	{
+		if (code == MessageCode::PlungerInputPressed)
+		{
+			void ft2_control_note_plunger_rest();
+			ft2_control_note_plunger_rest();
+		}
 		for (auto component : t->ComponentList)
 			if (auto animation = dynamic_cast<TFT2Animation*>(component))
 				if (animation->PlungerLinked)
@@ -997,6 +1005,8 @@ void ft2_control::handler(MessageCode code, TPinballComponent* caller)
 		build_sets();
 		if (ball_at_plunger())
 		{
+			if (ft2_alien::Active())
+				ft2_alien::Launch();
 			set_return_gates(false);
 			if (ReturnGateTimer)
 				timer::kill(ReturnGateTimer);
@@ -1013,6 +1023,18 @@ void ft2_control::handler(MessageCode code, TPinballComponent* caller)
 			rs.SaveSinkTimer = timer::set(static_cast<float>(options::Options.BallSave.V), nullptr, close_save_sink);
 		}
 		return;
+	}
+
+	// Alien Daze: its own rules (ft2_alien.cpp) take every part they know
+	if (ft2_alien::Active())
+	{
+		if (code == MessageCode::ControlCollision && !t->TiltLockFlag && ft2_alien::Collision(caller))
+		{
+			rs.BonusHits++;
+			return;
+		}
+		if (code != MessageCode::ControlCollision && ft2_alien::Message(code, caller))
+			return;
 	}
 
 	if (code == MessageCode::TFlipperExtend && is_hero() && hb.Choosing)
@@ -1121,6 +1143,12 @@ std::vector<std::string> ft2_control::StatusLines()
 		if (rs.SaveSink && rs.SaveSink->ActiveFlag)
 			lines.emplace_back("Forcefields on (ball saver open)");
 	}
+	if (ft2_alien::Active())
+	{
+		for (auto& line : ft2_alien::Status())
+			lines.push_back(line);
+		return lines;
+	}
 	if (enhanced() && rs.Multiplier > 1)
 		lines.push_back("Bonus x" + std::to_string(rs.Multiplier));
 	if (rs.PocketTimer)
@@ -1173,6 +1201,8 @@ void ft2_control::table_handler(MessageCode code)
 	{
 	case MessageCode::Reset: // new game
 		raise_blockers();
+		if (ft2_alien::Active())
+			ft2_alien::NewGame();
 		stop_attract();
 		if (rs.PocketTimer)
 		{
@@ -1217,6 +1247,8 @@ void ft2_control::table_handler(MessageCode code)
 		break;
 	case MessageCode::SwitchToNextPlayer:
 		raise_blockers(); // blockers drop when the player changes
+		if (ft2_alien::Active())
+			ft2_alien::PlayerChanged();
 		for (auto& set : rs.Sets)
 			set.Hit.clear();
 		break;
@@ -1230,6 +1262,8 @@ void ft2_control::check_escaped_balls()
 	auto t = pb::MainTable;
 	if (!t)
 		return;
+	if (ft2_alien::Active())
+		ft2_alien::Frame();
 	static TTableLayer* layer = nullptr;
 	static TPinballTable* layerTable = nullptr;
 	if (layerTable != t)
@@ -1267,4 +1301,38 @@ void ft2_control::check_escaped_balls()
 		else if (t->MultiballCount > 0)
 			t->MultiballCount--;
 	}
+}
+
+bool ft2_control::AwaitingLaunch()
+{
+	return rs.AwaitingLaunch;
+}
+
+static bool HavePlungerRest = false;
+static float PlungerRestX = 0, PlungerRestY = 0;
+
+bool ft2_control::PlungerRest(float& x, float& y)
+{
+	x = PlungerRestX;
+	y = PlungerRestY;
+	return HavePlungerRest;
+}
+
+void ft2_control_note_plunger_rest()
+{
+	auto t = pb::MainTable;
+	if (!t || !t->Plunger)
+		return;
+	for (auto ball : t->BallList)
+		if (ball->ActiveFlag && !ball->CollisionComp && ball->Speed < ball->Radius)
+		{
+			auto dx = ball->Position.X - t->PlungerPosition.X, dy = ball->Position.Y - t->PlungerPosition.Y;
+			if (dx * dx + dy * dy < ball->Radius * ball->Radius * 225.0f)
+			{
+				PlungerRestX = ball->Position.X;
+				PlungerRestY = ball->Position.Y;
+				HavePlungerRest = true;
+				return;
+			}
+		}
 }

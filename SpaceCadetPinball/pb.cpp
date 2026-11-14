@@ -451,7 +451,10 @@ void pb::timed_frame(float timeDelta)
 	}
 	for (auto ball : MainTable->BallList)
 	{
-		if (!ball->ActiveFlag || ball->HasGroupFlag || ball->CollisionComp || ball->Speed >= 0.8f)
+		// "Moving" in Space Cadet's scale is 0.8; Full Tilt 2 tables are ten times bigger, and a ball wedged there
+		// still jitters at 1-2 (Alien Daze's ray gun lane), so it never counted as stuck
+		auto movingSpeed = FT2FullScreen ? ball->Radius * 2.5f : 0.8f;
+		if (!ball->ActiveFlag || ball->HasGroupFlag || ball->CollisionComp || ball->Speed >= movingSpeed)
 		{
 			if (ball->StuckCounter > 0)
 			{
