@@ -6,6 +6,14 @@
 
 **Game data is not included.** Copy your original game folders into `Put game files here` and start `FullTiltPinball.exe`: tables are found and sorted automatically.
 
+**Fixes in 0.11.1 (Mad Scientist)**
+- The element B ramp was blocked halfway: both teleporter diverters stood up. Now one is up at a time, as on the
+  original: the ramp goes round to its hole, or to the teleporter when it is lit.
+- Ramps that end in a hole (element B, element C, flask ramp) now count when the ball drops through the hole, so
+  their elements, combos, brains and monster parts are given.
+- The teleporter sends the ball out at the top left onto the teleport exit ramp (its own exit was a dead end).
+- The Farm's brains and the plasma field's third shot are at the mercury sink, where the mercury ramp ends.
+
 **New in 0.11.0: Mad Scientist plays by its real rules**
 Mad Scientist's own rules were recovered from mad.exe and ported (ft2/mad_rules.md has the details):
 - **Five experiments**, started at Igor in single-ball play (Igor adds 10 seconds while one runs; 40 s each):

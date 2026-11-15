@@ -307,6 +307,42 @@ namespace
 		}
 	}
 
+	// 0x42cf84: the two teleporter diverters on the element B ramp, one up and one down. With the teleporter lit
+	// the ramp takes the ball to the teleporter, otherwise round to its hole
+	void update_diverters()
+	{
+		bool teleport = ms.TeleporterOn;
+		auto a = part("teleporter_diverter_a"), b = part("teleporter_diverter_b");
+		if (a)
+			a->Message(teleport ? MessageCode::TGateEnable : MessageCode::TGateDisable, 0.0f);
+		if (b)
+			b->Message(teleport ? MessageCode::TGateDisable : MessageCode::TGateEnable, 0.0f);
+	}
+
+	// The teleporter (0x42efc0): the ball that went into teleporter_sink comes out of teleporter_sink2 at the top
+	// left. The sink's own exit is a dead end, so the ball is served at the other one instead.
+	void teleport(int, void*)
+	{
+		auto exit = dynamic_cast<TSink*>(part("teleporter_sink2"));
+		if (!exit)
+			return;
+		if (auto ball = table()->AddBall(exit->BallPosition))
+		{
+			ball->throw_ball(&exit->BallThrowDirection, exit->ThrowAngleMult, exit->ThrowSpeedMult1,
+			                 exit->ThrowSpeedMult2);
+			// it comes out at the top of the teleport exit ramp, on the ramp's level (teleporter_sink2's group)
+			ball->CollisionMask = 2;
+		}
+	}
+
+	void teleport(TPinballComponent* sink)
+	{
+		if (part("teleporter_sink2"))
+			timer::set(0.5f, nullptr, teleport); // the ball in teleporter_sink stays there (disabled)
+		else
+			eject(sink);
+	}
+
 	// ---- lights that show the state ----
 	void update_flask()
 	{
@@ -611,6 +647,7 @@ namespace
 			break;
 		case 3:
 			ms.TeleporterOn = true;
+			update_diverters();
 			show(text(3023, "Teleporter Active!"));
 			break;
 		case 4:
@@ -793,6 +830,7 @@ void ft2_mad::NewGame()
 	update_flask();
 	update_body();
 	update_multiplier();
+	update_diverters();
 	choose_next();
 }
 
@@ -949,6 +987,7 @@ bool ft2_mad::Collision(TPinballComponent* caller)
 			award(MonsterBank[ms.MonsterBankStep]);
 			ms.MonsterBankStep = std::min(3, ms.MonsterBankStep + 1);
 			ms.TeleporterOn = true;
+			update_diverters();
 			show(text(3001, "Teleporter Active"), 2.5f);
 			kill(ms.ResetTimer);
 			ms.ResetTimer = timer::set(0.5f, nullptr, reset_monster_bank);
@@ -1070,16 +1109,15 @@ bool ft2_mad::Collision(TPinballComponent* caller)
 	// mercury ramp (0x42f52c): the Farm's brains; the mercury input sink behind it scores the combo (0x432774)
 	if (is(caller, "mercury_ramp"))
 	{
-		if (ms.Mode == StealBrain)
-			brain_shot(0);
-		else
-			award(10000);
-		plasma_step(3);
+		award(10000);
 		return true;
 	}
 	if (is(caller, "mercury_input_sink"))
 	{
-		if (now < ms.MercuryComboUntil)
+		plasma_step(3);
+		if (ms.Mode == StealBrain)
+			brain_shot(0);
+		else if (now < ms.MercuryComboUntil)
 		{
 			award(MercuryCombo[ms.MercuryCombo]);
 			ms.MercuryCombo = std::min(3, ms.MercuryCombo + 1);
@@ -1208,6 +1246,7 @@ bool ft2_mad::Collision(TPinballComponent* caller)
 		if (ms.TeleporterOn)
 		{
 			ms.TeleporterOn = false;
+			update_diverters();
 			award(150000);
 			show(text(3005, "Ball Teleported"), 2.5f);
 			if (!ms.CloningLit)
@@ -1218,7 +1257,7 @@ bool ft2_mad::Collision(TPinballComponent* caller)
 		}
 		else
 			award(25000);
-		eject(caller);
+		teleport(caller);
 		return true;
 	}
 

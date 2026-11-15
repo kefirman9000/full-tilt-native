@@ -998,6 +998,24 @@ void ft2_control::handler(MessageCode code, TPinballComponent* caller)
 		return;
 	}
 
+	// A ramp that ends in a hole ("element_b_ramp" drops the ball through "element_b_ramp_hole", Mad Scientist) has
+	// no end wall to report the shot; the ball falling into the hole is the ramp made
+	if (code == MessageCode::ControlBallCaptured && dynamic_cast<THole*>(caller) && caller->GroupName)
+	{
+		std::string name = caller->GroupName;
+		if (name.size() > 5 && name.compare(name.size() - 5, 5, "_hole") == 0)
+		{
+			name.resize(name.size() - 5);
+			for (auto component : t->ComponentList)
+				if (component->GroupName && name == component->GroupName && dynamic_cast<TRamp*>(component))
+				{
+					handler(MessageCode::ControlCollision, component);
+					break;
+				}
+		}
+		return;
+	}
+
 	if ((code == MessageCode::PlungerInputPressed || code == MessageCode::PlungerInputReleased) &&
 		dynamic_cast<TPlunger*>(caller))
 	{
