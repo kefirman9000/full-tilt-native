@@ -6,6 +6,12 @@
 
 **Game data is not included.** Copy your original game folders into `Put game files here` and start `FullTiltPinball.exe`: tables are found and sorted automatically.
 
+**Fixes in 0.11.2**
+- Ramp shots on the Full Tilt! 2 tables were never counted: their ramps have no end wall, which is what reported a
+  shot. A ramp now counts when the ball gets off it at another end than the one it came on by. On Alien Daze this
+  brings the landing ramp (landing the spacecraft, picking the next mission), the spiral ramp (bonus hold) and the
+  loop (extra ball) to life; Captain Hero's and Mad Scientist's ramps score too.
+
 **Fixes in 0.11.1 (Mad Scientist)**
 - The element B ramp was blocked halfway: both teleporter diverters stood up. Now one is up at a time, as on the
   original: the ramp goes round to its hole, or to the teleporter when it is lit.

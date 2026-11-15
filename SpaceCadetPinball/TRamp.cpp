@@ -155,6 +155,8 @@ void TRamp::Collision(TBall* ball, vector2* nextPosition, vector2* direction, fl
 	auto plane = static_cast<ramp_plane_type*>(edge->WallValue);
 	if (plane)
 	{
+		if (!Line1 && ball->CollisionMask != CollisionGroup)
+			EntryPosition[ball] = {ball->Position.X, ball->Position.Y}; // the ball comes onto the ramp here
 		ball->CollisionFlag = 1;
 		ball->CollisionOffset.X = plane->BallCollisionOffset.X;
 		ball->CollisionOffset.Y = plane->BallCollisionOffset.Y;
@@ -178,6 +180,23 @@ void TRamp::Collision(TBall* ball, vector2* nextPosition, vector2* direction, fl
 	else
 	{
 		ball->CollisionFlag = 0;
+		if (!Line1)
+		{
+			// leaving the ramp: made when it gets off at another end than the one it came on by (rolling back
+			// down leaves close to where it came on)
+			auto entry = EntryPosition.find(ball);
+			if (entry != EntryPosition.end())
+			{
+				auto dx = ball->Position.X - entry->second.X, dy = ball->Position.Y - entry->second.Y;
+				auto far = ball->Radius * 8.0f;
+				EntryPosition.erase(entry);
+				if (dx * dx + dy * dy > far * far && !PinballTable->TiltLockFlag)
+				{
+					loader::play_sound(SoftHitSoundId, ball, "TRamp");
+					control::handler(MessageCode::ControlCollision, this);
+				}
+			}
+		}
 		if (edge == Line2)
 		{
 			ball->CollisionMask = Wall1CollisionGroup;

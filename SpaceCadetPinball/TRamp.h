@@ -1,4 +1,5 @@
 #pragma once
+#include <map>
 
 #include "TCollisionComponent.h"
 #include "TEdgeManager.h"
@@ -28,4 +29,6 @@ public:
 	int Wall2CollisionGroup;
 	float Wall1BallOffset;
 	float Wall2BallOffset;
+	// FT2 ramps have no end wall (1303): a shot counts when the ball leaves the ramp well away from where it came on
+	std::map<TBall*, vector2> EntryPosition;
 };
