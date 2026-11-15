@@ -62,4 +62,14 @@ is SpecialAddScore, 0x0657 the rules' message handler (the mission system 0xc5d6
 dispatches to about fifteen quest handlers (0x7da7 ... 0xc5a9, the largest 0x9fae, 3,767 bytes). The translation is in
 `SpaceCadetPinball/ft1_dragon.cpp`, off unless FT2_DEBUG=1 and FT1_DRAGON_FULL=1.
 
-Translated so far: 0657, 06cf, 072c, 0778, 0824, 08a4, 0933, 09e5, 0bdf, 0db4, 0ef0, 0fdd, 107a, 1151, 1187.
+Translated so far (21 of 126): 0657, 06cf, 072c, 0778, 0824, 08a4, 0933, 09e5, 0bdf, 0db4, 0ef0, 0fdd, 107a, 1151,
+1187, 151e, 197e, 1c81, 1eda (partly: MessageField holds a sink pointer in the original), 1f2c, 21c5.
+
+Light codes: the original light handler (10:04cc) takes 0-26; 24-26 are the temporary overrides this engine already
+has for Full Tilt's Space Cadet (TLightFtTmpOverrideOn/Off/ResetOverride).
+
+Data tables: ds:3514 = the tags of lights 71-75 (indexed by a_rockb's MessageField); ds:21ce "!", ds:21d0 '"'
+are picture glyphs too.
+
+Reading the listings: translate from `ft1draft.py --all` (raw); the condensed view hides `les` loads that select
+which object a field belongs to (in 1c81 the index is a_rockb's MessageField, not a_kout2's).

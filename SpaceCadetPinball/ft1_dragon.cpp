@@ -44,16 +44,31 @@ namespace
 	                      tabc39wave{"tabc39wave"}, tabc40wave{"tabc40wave"}, tabc41wave{"tabc41wave"},
 	                      tabc42wave{"tabc42wave"};
 	component_tag<TTextBox> info_text_box{"info_text_box"};
+	component_tag<TLight> v_lite46{"v_lite46"}, v_lite48{"v_lite48"}, v_lite49{"v_lite49"}, v_lite50{"v_lite50"},
+	                      v_lite71{"v_lite71"}, v_lite72{"v_lite72"}, v_lite73{"v_lite73"}, v_lite74{"v_lite74"},
+	                      v_lite75{"v_lite75"};
+	component_tag<TSound> tabc43wave{"tabc43wave"};
 	component_tag<> a_kick1{"a_kick1"}, a_kout3{"a_kout3"}, a_blocf{"a_blocf"}, a_bloce{"a_bloce"},
-	                a_center_post{"a_center_post"};
+	                a_center_post{"a_center_post"}, a_kout2{"a_kout2"}, a_rockb{"a_rockb"}, a_sink17{"a_sink17"},
+	                a_sink18{"a_sink18"}, s_hole118{"s_hole118"};
+
+	// ds:0x3514: the tags of lights 71..75, indexed by a_rockb's MessageField
+	component_tag<TLight>* const QuestLights[5] = {&v_lite71, &v_lite72, &v_lite73, &v_lite74, &v_lite75};
 
 	component_tag_base* AllTags[] =
 	{
 		&v_lite28, &v_lite29, &v_lite30, &v_lite31, &v_lite32, &v_lite33, &v_lite34, &v_lite35, &v_lite36, &v_lite37,
 		&v_lite38, &v_lite39, &dragon_egg_light_group, &outlane_kicker_light_group, &tabc21wave, &tabc27wave,
 		&tabc35wave, &tabc39wave, &tabc40wave, &tabc41wave, &tabc42wave, &info_text_box, &a_kick1, &a_kout3,
-		&a_blocf, &a_bloce, &a_center_post,
+		&a_blocf, &a_bloce, &a_center_post, &v_lite46, &v_lite48, &v_lite49, &v_lite50, &v_lite71, &v_lite72,
+		&v_lite73, &v_lite74, &v_lite75, &tabc43wave, &a_kout2, &a_rockb, &a_sink17, &a_sink18, &s_hole118,
 	};
+
+	// Full Tilt 1 light codes 24-26 (the light handler 10:04cc takes 0-26): the temporary overrides this engine has
+	// for the Full Tilt edition of Space Cadet, which runs on the same engine
+	const MessageCode FT1LightOverrideOff = MessageCode::TLightFtTmpOverrideOff; // FT1 25
+	// Full Tilt 1 code 79: a rules-internal event for the mission system
+	const MessageCode FT1Event79 = static_cast<MessageCode>(2079);
 
 	// ---- data globals of the original ----
 	TPinballComponent* g_5fdc = nullptr; // the component that scored last
@@ -381,6 +396,108 @@ namespace
 	{
 		auto t = control::TableG;
 		t->JackpotScore = std::min(t->JackpotScore + points, 10000000);
+	}
+
+	int& Field(component_tag_base& tag) // ->MessageField (+4)
+	{
+		static int none = 0;
+		auto comp = tag.GetComponent();
+		return comp ? comp->MessageField : (none = 0);
+	}
+
+	void SetActive(component_tag_base& tag, bool active) // byte +3
+	{
+		if (auto comp = tag.GetComponent())
+			comp->ActiveFlag = active;
+	}
+
+	component_tag<TLight>& QuestLight() // ds:0x3514[a_rockb->MessageField]
+	{
+		return *QuestLights[std::max(0, std::min(4, Field(a_rockb)))];
+	}
+
+	// 23:151e - the three tower lock lights back to normal, sinks 17/18 inactive, counters cleared
+	void ResetTowerLocks()
+	{
+		Send(v_lite48, FT1LightOverrideOff, 0.0f);
+		Send(v_lite49, FT1LightOverrideOff, 0.0f);
+		Send(v_lite50, FT1LightOverrideOff, 0.0f);
+		SetActive(a_sink18, false);
+		SetActive(a_sink17, false);
+		Field(v_lite48) = 0;
+		Field(v_lite49) = 0;
+		Field(v_lite50) = 0;
+	}
+
+	// 23:197e - if a quest is running (a_kout2's MessageField), its light goes off and it ends
+	void ClearQuestLight()
+	{
+		if (!Field(a_kout2))
+			return;
+		Send(QuestLight(), MessageCode::TLightResetAndTurnOff, 0.0f);
+		Field(a_kout2) = 0;
+	}
+
+	void QuestStep19df(); // 23:19df, not translated yet
+
+	// 23:1c81 - a quest completed: jackpot +500,000, one more quest done (v_lite28's MessageField counts them), its
+	// light stays on
+	void CompleteQuest()
+	{
+		if (Field(a_kout2))
+		{
+			AddJackpot(500000);
+			Field(v_lite28)++;
+			Send(QuestLight(), MessageCode::TLightResetAndTurnOn, 0.0f);
+			Field(a_kout2) = 0;
+		}
+		QuestStep19df();
+	}
+
+	int g_2270 = 0;
+
+	// 23:1eda - release the ball from the sink a component keeps in its MessageField (a pointer in the original);
+	// with g_2270 set, the ball goes to s_hole118 instead (its MessageField 2, FT1 code 67)
+	// TODO(23:1eda): this engine's MessageField is an int and cannot hold the sink; the callers' sinks are passed in
+	void ReleaseTo(TPinballComponent* sink, float time)
+	{
+		if (g_2270)
+		{
+			Field(s_hole118) = 2;
+			Send(s_hole118, MessageCode::ControlBallCaptured, 0.0f); // FT1 67 to the hole: TODO check the hole's use
+			return;
+		}
+		if (sink)
+			sink->Message(MessageCode::TSinkResetTimer, time);
+	}
+
+	// 23:21c5 - collect the jackpot (picture ds:21d0 when `show`); returns `time`
+	float CollectJackpot(float time, bool show)
+	{
+		Play(tabc43wave);
+		ScorePoints(nullptr, control::TableG->JackpotScore);
+		if (show)
+			Display("\"", 2.0f, 1);
+		return time;
+	}
+
+	// 23:1f2c - a quest is running: the info box keeps its number, v_lite46 off, a_rockb raised in 2 s, the mission
+	// system hears event 79; returns whether a quest was running
+	bool QuestRunningStart()
+	{
+		if (!Field(a_kout2))
+			return false;
+		if (info_text_box.Component)
+			info_text_box.Component->MessageField = Field(a_kout2);
+		Send(v_lite46, MessageCode::TLightResetAndTurnOff, 0.0f);
+		Send(a_rockb, MessageCode::TBlockerEnable, 2.0f); // FT1 56 (animated blocker, see ft2/ft1_engine.md)
+		MissionEvent(FT1Event79, nullptr);
+		return true;
+	}
+
+	void QuestStep19df()
+	{
+		// TODO(23:19df)
 	}
 
 	// ---- not translated yet ----
