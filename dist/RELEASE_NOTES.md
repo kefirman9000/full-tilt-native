@@ -12,7 +12,7 @@ Captain Hero's rules were recovered from hero.exe (ft2/hero_rules.md has the det
   during a battle restarts the clock ("Extend Battle"). The side panel counts down.
 - **Evil Twin is the final battle**, offered once the other five villains are captured: blow up the five pieces of
   Krypton-@ (the dynamite targets and the kickout behind them, 200,000 each), then three downtown ramp shots for
-  the **Super Jackpot** and a four-ball multiball. Afterwards all the villains come back.
+  the **Super Jackpot** and a multiball. Afterwards all the villains come back.
 - **Jackpot and Super Jackpot** grow as you play (holes more than targets; the Super Jackpot only during battles,
   times its multiplier). A capture pays the Jackpot and adds 250,000 to the Super Jackpot.
 - **Super Jackpot multiplier** up to 5x and the **Mystery Award** (lit for 5 seconds after a battle starts) at the

@@ -9,6 +9,7 @@ and the Windows floating point emulator calls (INT 34h-3Dh) turned back into x87
 
 usage: python ft1lift.py GAME.EXE SEG:OFF   (dump one function)
 """
+import struct
 import os, re, struct, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ne import NE
@@ -97,6 +98,25 @@ def switch_table(code, insns_before):
     tgts = struct.unpack_from('<%dH' % n, code, tbl + 4 * n)
     return list(zip(vals, tgts))
 
+def index_table(code, before, jmp):
+    """The other switch form: `cmp bx, N / ja default / add bx, bx / jmp word ptr cs:[bx + TABLE]`, a table of N + 1
+    case addresses indexed by the switch value (minus a bias the code subtracts or adds first). Returns [(index,
+    target)], the index being the position in the table."""
+    import re as _re
+    m = _re.search(r'cs:\[bx \+ (0x[0-9a-f]+)\]', jmp.op_str)
+    if not m:
+        return None
+    table = int(m.group(1), 16)
+    count = None
+    for i in reversed(before[-6:]):
+        mm = _re.match(r'bx, (0x[0-9a-f]+|\d+)$', i.op_str)
+        if i.mnemonic == 'cmp' and mm:
+            count = int(mm.group(1), 0) + 1
+            break
+    if not count or count > 64 or table + 2 * count > len(code):
+        return None
+    return [(('index', k), struct.unpack_from('<H', code, table + 2 * k)[0]) for k in range(count)]
+
 def disasm_function(exe, seg, start, limit=0x2000, cases=None):
     """Instructions of the function at seg:start (follows branches and switch tables until every path returns).
     If `cases` is a dict it receives {target: [case values]} for switch statements."""
@@ -115,6 +135,8 @@ def disasm_function(exe, seg, start, limit=0x2000, cases=None):
             mn = i.mnemonic
             if mn == 'jmp' and i.op_str.startswith('word ptr cs:[bx'):
                 tab = switch_table(code, [seen[k] for k in sorted(seen) if k < a])
+                if not tab:
+                    tab = index_table(code, [seen[k] for k in sorted(seen) if k < a], i)
                 if tab:
                     for v, t in tab:
                         work.append(t)

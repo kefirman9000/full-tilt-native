@@ -754,7 +754,7 @@ namespace
 		if (hb.Battle == 3)
 			hb.HenchmanTimer = timer::set(4.0f, nullptr, henchman_arrives);
 		if (hb.Battle == 5)
-			set_pling(true);
+			set_pling(true); // APPROXIMATION: the original first sends a second ball up s_ramp02 into Mr. Pling
 	}
 
 	void show_choice()
@@ -962,6 +962,7 @@ namespace
 	{
 		auto kind = hb.ThrownBy;
 		hb.ThrownBy = 0;
+		// APPROXIMATION: the 4 s limit is not from the original, which clears the mark in engine code not read yet
 		if (!kind || pb::time_ticks - hb.ThrownTick > 4000 || index < 0 || index >= BuildingCount)
 			return;
 		auto& damage = hb.Damage[index];
@@ -1053,7 +1054,9 @@ namespace
 		show(upper_copy(hero_text(3065, "SUPER JACKPOT!!!")) + "  " + with_commas(award), 4.0f);
 		light_show(4.0f);
 		hb.SuperJackpot = SuperJackpotStart;
-		// the holes let their balls out and four more balls come into play
+		// APPROXIMATION: the original (0x408638) gives the s_kout01 award three times (0x4061f0, 75,000 each with
+		// its own text, not ported), sends "eject" (67) to s_sink03/05/04/01 and adds 4 to the balls-in-play count
+		// (table +0x161). Where the extra balls come from is not read yet; here three balls are added at the holes.
 		for (auto name : {"s_sink03", "s_sink05", "s_sink04"})
 			add_ball_at_sink(name);
 	}
@@ -1094,6 +1097,7 @@ namespace
 		// building per 1,000 of their value
 		if (named(caller, {"a_bump01", "a_bump02", "a_bump03"}))
 		{
+			// APPROXIMATION: "half the hits" is a reading of a condition the decompiler left unclear (0x4023c8)
 			if (any_damage() && (rand() % 2 == 0 || points >= rs.PopValue))
 				for (int i = 0; i < points / 1000; i++)
 					repair_one();

@@ -35,7 +35,9 @@ Modes: 1 Quake, 2 Mad Scientist, 3 Mystman, 4 Slime Man, 5 Mr. Pling (`MODE_ELAS
 6. Evil Twin ("Blow Up Krypton-@", 3079): five pieces of Krypton-@ (lights 73, 71, 93, 95, 94, text 3080). The
    dynamite drop targets a_drop18..21 (0x402e3c) and s_kout01 (0x406294) each blow up the next piece, 200,000
    (0x406c14). s_kout01 also lights the Super Jackpot (0x441a44 = 1, light_49). Three downtown ramp shots
-   (0x408638) collect it: "SUPER JACKPOT!!!" (3065), four balls in play, the Super Jackpot back to 1,000,000.
+   (0x408638) collect it: "SUPER JACKPOT!!!" (3065), the s_kout01 award three times (0x4061f0: 75,000 each and a
+   text, not ported yet), "eject" to s_sink03/05/04/01, balls-in-play +4 (table +0x161), the Super Jackpot back to
+   1,000,000. The port adds three balls at the holes: an approximation until the ball source is read.
    No timer: the battle ends with the ball, and either way all villains come back (0x406b08).
 
 ## Jackpots (0x40764c)
@@ -71,8 +73,17 @@ Modes: 1 Quake, 2 Mad Scientist, 3 Mystman, 4 Slime Man, 5 Mr. Pling (`MODE_ELAS
 50,000 per building not wrecked (0x408b08) + 100,000 per battle + 250,000 per capture this ball
 (text 3050). Drain rule 0x4070bc: extra ball, ball saver s_sink30, then the bonus.
 
+## Approximations in the port (marked APPROXIMATION in ft2_control.cpp)
+- Super Jackpot multiball: three balls added at the holes (see Evil Twin above).
+- Building mark: cleared after 4 s or the next hit (original: engine code not read).
+- Pop repairs on "half the hits": unclear condition in 0x4023c8.
+- Mr. Pling: walls switch on with the battle (original: a second ball goes up s_ramp02 first).
+- Texts: battle prompts, "RAMP COMBO", the side panel lines and the bonus line are this port's wording; the
+  original shows its own texts (ids in this file) in its own display boxes.
+
 ## Not ported yet
 - Mr. Pling's second ball travelling up s_ramp02 into him; the walls simply switch on with the battle.
+- The s_kout01 award (0x4061f0: three steps, 75,000 each) given at the Super Jackpot.
 - The countdown and capture texts in their own display boxes (the port uses the info text and side panel).
 - Playfield multiplier 0x405de8 (pops x3), table multiplier in the bonus (table +0x12d), Super Strength / Speed /
   Flight (3034-3036), Quake's light bars and Slime Man's slime patches (pictures only).

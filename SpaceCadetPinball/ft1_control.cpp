@@ -10,6 +10,7 @@
 
 #include "pch.h"
 #include "ft1_control.h"
+#include "ft1_dragon.h"
 
 #include "control.h"
 #include "ft1_strings.h"
@@ -149,6 +150,8 @@ bool ft1_control::Link(TPinballTable* table)
 		auto exe = pb::make_path_name("DRAGON.EXE");
 		if (!ft1_strings::Load(exe))
 			ftlog::Line("FT1 rules: DRAGON.EXE not found next to DRAGON.DAT; table messages will be missing");
+		if (ft1_dragon::Wanted())
+			return ft1_dragon::Link(table); // development: the full translation (ft1_dragon.h)
 		Active = LinkRules(dragon::rules, dragon::used);
 	}
 	if (Active)
@@ -158,6 +161,7 @@ bool ft1_control::Link(TPinballTable* table)
 
 void ft1_control::Clear()
 {
+	ft1_dragon::Clear();
 	Active = false;
 	Ported = 0;
 	LastHit = nullptr;
@@ -165,6 +169,8 @@ void ft1_control::Clear()
 
 bool ft1_control::Handle(MessageCode code, TPinballComponent* cmp)
 {
+	if (ft1_dragon::Handle(code, cmp))
+		return true;
 	if (!Active || !cmp || !cmp->Control)
 		return false;
 	if (pb::DevDebug)

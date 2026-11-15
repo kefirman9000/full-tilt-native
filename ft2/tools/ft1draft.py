@@ -11,6 +11,9 @@ The output is a porting aid for writing <table>_control.cpp by hand; it is deriv
 is written locally and not committed.
 
 usage: python ft1draft.py DRAGON.EXE > dragon_draft.txt
+       python ft1draft.py DRAGON.EXE --all [helpers.txt] > dragon_all.txt
+  --all also lists the rule helpers (every function of segment 23, found by its prologue), labels the table's fields
+  (learned from CADET's drain against control.cpp) and names helpers from helpers.txt ("c5d6 MissionEvent" lines).
 """
 import os, re, struct, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -59,6 +62,8 @@ def main():
         byfunc.setdefault(f, []).append(name)
 
     def code_name(v):
+        if isinstance(v, tuple):
+            return 'table index %d (the switch value minus the bias the code applied)' % v[1]
         return 'MessageCode::%s' % codes[v] if v in codes else 'MessageCode(%d) /* FT1 code, not seen in CADET */' % v
 
     def mem_name(op):
@@ -72,9 +77,27 @@ def main():
             return 'g_%04x' % a
         return None
 
+    helper_names = {}
+    if '--all' in sys.argv:
+        rest = sys.argv[sys.argv.index('--all') + 1:]
+        if rest:
+            for line in open(rest[0]):
+                parts = line.split(None, 1)
+                if len(parts) == 2 and not line.startswith('#'):
+                    helper_names[int(parts[0], 16)] = parts[1].strip()
+        seg23 = exe.n.seg(23)
+        for m in re.finditer(b'\x8c\xd0\x90\x45', seg23):
+            byfunc.setdefault((23, m.start()), [])
+    # the table object (data 2266 in DRAGON.EXE / PIRATES.EXE / CADET.EXE): fields named from CADET's drain
+    table_fields = {0x12c: 'BonusScore', 0x140: 'BallCount', 0x144: 'ExtraBalls', 0x146: 'MultiballCount',
+                    0x14c: 'UnknownP78 (shoot again)', 0x15a: 'TiltLockFlag', 0xd8: 'PlayerCount', 0xda: 'CurrentPlayer'}
     for (seg, off), names in sorted(byfunc.items()):
         print('=' * 100)
-        print('rule function %d:%04x  for components: %s' % (seg, off, ', '.join(sorted(names))))
+        if names:
+            print('rule function %d:%04x  for components: %s' % (seg, off, ', '.join(sorted(names))))
+        else:
+            print('helper %d:%04x  %s' % (seg, off, helper_names.get(off, '')))
+        table_in_es = False
         cases = {}
         insns = disasm_function(exe, seg, off, cases=cases)
         pending = []      # recent pushes, for recognising comp->Message(code, value)
@@ -104,6 +127,19 @@ def main():
             mn = mem_name(i.op_str)
             if mn:
                 notes.append(mn)
+            if i.mnemonic == 'les':
+                table_in_es = '[0x2266]' in i.op_str
+            elif i.mnemonic in ('mov', 'pop') and i.op_str.startswith('es'):
+                table_in_es = False
+            elif table_in_es:
+                m = re.search(r'es:\[bx \+ (0x[0-9a-f]+)\]', i.op_str)
+                if m and int(m.group(1), 16) in table_fields:
+                    notes.append('table->' + table_fields[int(m.group(1), 16)])
+                elif m:
+                    notes.append('table+' + m.group(1))
+            if i.mnemonic == 'call' and i.op_str.startswith('0x'):
+                tgt = int(i.op_str, 16) & 0xffff
+                notes.append('helper %04x %s' % (tgt, helper_names.get(tgt, '')))
             if re.search(r'es:\[bx \+ 4\]', i.op_str):
                 notes.append('->MessageField')
             m = re.match(r'push (0x[0-9a-f]+|\d+)$', i.mnemonic + ' ' + i.op_str)
