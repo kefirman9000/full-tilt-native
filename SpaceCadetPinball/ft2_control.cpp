@@ -18,6 +18,7 @@
 #include "TDrain.h"
 #include "TFlagSpinner.h"
 #include "TGate.h"
+#include "TFlipper.h"
 #include "TBlocker.h"
 #include "ft_log.h"
 #include "TTableLayer.h"
@@ -145,6 +146,8 @@ namespace
 
 	void show(const std::string& text, float seconds = 2.0f)
 	{
+		if (pb::DevDebug)
+			printf("FT2DBG show: %s\n", text.c_str());
 		if (pb::InfoTextBox)
 			pb::InfoTextBox->Display(text.c_str(), seconds);
 	}
@@ -501,31 +504,38 @@ namespace
 		return value;
 	}
 
-	// Captain Hero's skill shot (hero.exe 0x401da0): a launch that only just reaches the trigger at the top of the
-	// shooter lane. The original pays when the ball crosses slower than 80; this engine's ball can arrive a little
-	// faster for the softest launch that gets there, so the limit here is 100. Too soft and the ball rolls back to
-	// the plunger (try again), just right is the skill shot, harder is a normal launch. Award: 7 in 10 500,000,
-	// 2 in 10 1,000,000, 1 in 10 500,000 and an extra ball (once per game; after that 500,000).
-
-
-	// ---- Captain Hero's villain battles (hero.exe: battle number 0x43d088, start 0x40787c, end 0x407e08) ----
-	// Shoot the scoop (s_sink01, 0x406580) when no battle is on: it holds the ball and offers the villains not yet
-	// beaten (left flipper: next, right flipper: accept, 20 s: taken as it is). A battle pays 100,000 to start and is
-	// won by its own shots (from each villain's checks in the rules): 1 Quake the nine drop targets a_drop01..09,
-	// 2 Mad Scientist the scoop again, 3 Mystman a henchman out after 4 s, hit 5 times, 4 Slime Man 8 pop bumper hits,
-	// 5 Mr. Pling 8 hits on a_rebo04, 6 Evil Twin "Blow up Krypton-@": five shots at its targets (drop targets
-	// a_drop18..21, s_kout01, s_sink14 and the downtown ramp), 200,000 each. Winning pays the jackpot (starts at and
-	// goes back to 500,000; the skill shot raises it). Losing the ball loses the battle. Not ported yet: battle
-	// timers (the original counts down on the display), Mr. Pling's path through s_ramp02, the seventh stage.
+	// ---- Captain Hero (hero.exe, source hero\src\control.cpp; notes in ft2/hero_rules.md) ----
+	// Battles (current battle 0x43d088, start 0x40787c, end 0x407e08). Shoot the scoop (s_sink01, 0x406580) when no
+	// battle is on: it holds the ball and offers the villains not yet captured (left flipper: next, right flipper:
+	// accept, 20 s: taken as it is). Battles 1-5 pay 100,000 to start and last 60 seconds; the scoop during one
+	// restarts the 60 seconds ("Extend Battle"). Won by its own shots: 1 Quake the nine drop targets, 2 Mad Scientist
+	// the scoop again, 3 Mystman a henchman out after 4 s, hit 5 times, 4 Slime Man 8 pop bumper hits, 5 Mr. Pling 8
+	// hits on a_rebo04. A capture pays the Jackpot and adds 250,000 x the multiplier to the Super Jackpot. Evil Twin
+	// (6) is only offered once the other five are captured (0x406364) and has no time limit: knock out the five
+	// pieces of Krypton-@ (dynamite targets a_drop18..21 and s_kout01, 200,000 each, 0x406c14); s_kout01 lights the
+	// Super Jackpot (0x406294), and three downtown ramp shots collect it with a four-ball multiball (0x408638). The
+	// battle ends with the ball; afterwards every villain comes back.
 	const int VillainCount = 6;
+	const int EvilTwin = 5; // index
 	const char* const VillainNames[VillainCount] = {"Quake", "Mad Scientist", "Mystman", "Slime Man", "Mr. Pling",
 	                                                 "Evil Twin"};
 	const char* const VillainGoals[VillainCount] = {"knock down the 9 drop targets", "shoot the scoop again",
 	                                                 "hit the henchman 5 times", "hit the pop bumpers 8 times",
 	                                                 "hit Mr. Pling's target 8 times",
-	                                                 "blow up Krypton-@ (5 shots)"};
+	                                                 "blow up Krypton-@"};
 	const int VillainGoal[VillainCount] = {9, 1, 5, 8, 8, 5};
 	const int CaptureTexts[VillainCount] = {3069, 3071, 3073, 3075, 3077, 0};
+	const float BattleSeconds = 60.0f; // 0x42700000
+	const long long JackpotStart = 500000, JackpotMax = 5000000;           // table +0x141
+	const long long SuperJackpotStart = 1000000, SuperJackpotMax = 20000000; // table +0x149
+
+	// Ten buildings (btrig01..10, damage 0x449928: 0 standing, 1 damaged, 2 wrecked)
+	const int BuildingCount = 10;
+	// Mystery award at s_sink03 (0x404768, weights 0x4414b8 in percent)
+	const int MysteryWeight[6] = {50, 25, 15, 5, 3, 2};
+	const int MysteryText[6] = {3025, 3026, 3027, 3028, 3029, 3030};
+	const char* const MysteryFallback[6] = {"50,000", "100,000", "1 Million", "All Buildings Repaired!",
+	                                        "Max Bumpers!", "EXTRA BALL!!!"};
 
 	struct HeroBattles
 	{
@@ -538,8 +548,36 @@ namespace
 		int ChooseTimer = 0;
 		int HenchmanTimer = 0;
 		bool QuakeDown[9]{};
-		long long Jackpot = 500000;
+		long long Jackpot = JackpotStart;
+		long long SuperJackpot = SuperJackpotStart;
+		int SuperMultiplier = 1; // 0x44160c, raised at s_sink03 up to 5
 		long long Captured = 0;
+		int BattleTimer = 0;
+		int BattleEnds = 0; // pb::time_ticks
+		// mystery (light_74 flashes for 5 s after a battle starts, 0x40496c)
+		bool MysteryLit = false;
+		int MysteryTimer = 0;
+		// buildings
+		int Damage[BuildingCount]{};
+		int ThrownBy = 0; // the original's ball +0x140: the part that threw the ball (0 none, 6 = wrecks a building)
+		int ThrownTick = 0;
+		// Be A Hero (s_kout02, 0x4045a4)
+		int HeroValue = 30000;
+		int Deed = 0;
+		// extra ball (s_sink10 lights it, s_sink14 collects it; once per game: 0x43d080)
+		bool ExtraBallLit = false, ExtraBallGiven = false;
+		// bumper boost (s_sink04 + s_sink05, 0x404344 / 0x404470)
+		bool Boost04 = false, Boost05 = false;
+		// downtown ramp combo (0x405bf8): 30,000, 30,000 more each shot while light_49 is on (10 s)
+		long long RampValue = 30000;
+		int RampComboUntil = 0;
+		bool RampPassAfterLaunch = false; // the launch itself goes up the downtown ramp: not a shot
+		// Evil Twin
+		bool Krypton[5]{};
+		int SuperLit = 0; // 0x441a44: 1 lit, 2 collected
+		int SuperShots = 0;
+		// this ball's bonus (0x441224 battles, 0x441228 captures)
+		int BallBattles = 0, BallCaptures = 0;
 	} hb;
 
 	bool hero_mystman_battle()
@@ -562,6 +600,8 @@ namespace
 				out += ' ';
 			else if (c != '`' && c != '[')
 				out += c;
+			if (out.size() >= 2 && out.back() == ' ' && out[out.size() - 2] == ' ')
+				out.pop_back();
 		}
 		while (!out.empty() && out[0] == ' ')
 			out.erase(0, 1);
@@ -575,13 +615,66 @@ namespace
 		return hero_text(3042 + index, VillainNames[index]);
 	}
 
+	TPinballComponent* hero_part(const char* name)
+	{
+		static std::map<std::string, TPinballComponent*> cache;
+		static TPinballTable* cacheTable = nullptr;
+		if (cacheTable != table())
+		{
+			cache.clear();
+			cacheTable = table();
+		}
+		auto found = cache.find(name);
+		if (found != cache.end())
+			return found->second;
+		TPinballComponent* part = nullptr;
+		for (auto component : table()->ComponentList)
+			if (component->GroupName && strcmp(component->GroupName, name) == 0)
+			{
+				part = component;
+				break;
+			}
+		cache[name] = part;
+		return part;
+	}
+
+	void hero_light(const char* name, bool on)
+	{
+		if (auto light = hero_part(name))
+			light->Message(on ? MessageCode::TLightResetAndTurnOn : MessageCode::TLightResetAndTurnOff, 0.0f);
+	}
+
+	void hero_flash(const char* name)
+	{
+		if (auto light = hero_part(name))
+			light->Message(MessageCode::TLightFlasherStart, 0.0f);
+	}
+
+	void hero_kill(int& timerId)
+	{
+		if (timerId)
+			timer::kill(timerId);
+		timerId = 0;
+	}
+
+	bool battle_on()
+	{
+		return hb.Battle >= 1 && hb.Battle <= 6;
+	}
+
+	// The jackpots grow with play (0x40764c): targets 5,000 (0x4076d8), holes 10,000 (0x407738); during a battle
+	// the Super Jackpot grows too, by 30,000 / 40,000 times its multiplier
+	void grow_jackpots(bool hole)
+	{
+		hb.Jackpot = std::min(JackpotMax, hb.Jackpot + (hole ? 10000 : 5000));
+		if (battle_on())
+			hb.SuperJackpot = std::min(SuperJackpotMax,
+			                           hb.SuperJackpot + (hole ? 40000LL : 30000LL) * hb.SuperMultiplier);
+	}
+
 	void hide_henchmen()
 	{
-		if (hb.HenchmanTimer)
-		{
-			timer::kill(hb.HenchmanTimer);
-			hb.HenchmanTimer = 0;
-		}
+		hero_kill(hb.HenchmanTimer);
 		for (auto henchman : rs.Henchmen)
 			if (henchman->Shown)
 				henchman->SetShown(false);
@@ -595,6 +688,43 @@ namespace
 			bring_out_henchman();
 	}
 
+	void mystery_off(int, void*)
+	{
+		hb.MysteryTimer = 0;
+		hb.MysteryLit = false;
+		hero_light("light_74", false);
+	}
+
+	void battle_timeout(int, void*);
+
+	// Mr. Pling's three walls (a_rebo03/04/05) are only there during his battle (0x405944 / 0x405ac4 / 0x407e08 write
+	// their active flag). Left on, they knocked the ball from s_sink04's exit straight into s_sink05 over and over.
+	void set_pling(bool on)
+	{
+		for (auto name : {"a_rebo03", "a_rebo04", "a_rebo05"})
+			if (auto wall = hero_part(name))
+				wall->ActiveFlag = on;
+		hero_light("light_pl", on);
+	}
+
+	void start_battle_timer()
+	{
+		hero_kill(hb.BattleTimer);
+		hb.BattleTimer = timer::set(BattleSeconds, nullptr, battle_timeout);
+		hb.BattleEnds = pb::time_ticks + static_cast<int>(BattleSeconds * 1000);
+	}
+
+	void krypton_start()
+	{
+		for (auto& piece : hb.Krypton)
+			piece = true;
+		hb.SuperLit = 0;
+		hb.SuperShots = 0;
+		for (auto name : {"light_73", "light_71", "light_93", "light_95", "light_94"})
+			hero_light(name, true);
+		hero_flash("light_53");
+	}
+
 	void start_battle(int index)
 	{
 		if (pb::DevDebug)
@@ -603,11 +733,28 @@ namespace
 		hb.Progress = 0;
 		for (auto& down : hb.QuakeDown)
 			down = false;
+		hb.BallBattles++;
 		add_points(100000);
-		show("BATTLE " + upper_copy(villain(index)) + "  " + upper_copy(VillainGoals[index]), 3.5f);
+		// the mystery light flashes for 5 seconds (0x40496c)
+		hb.MysteryLit = true;
+		hero_flash("light_74");
+		hero_kill(hb.MysteryTimer);
+		hb.MysteryTimer = timer::set(5.0f, nullptr, mystery_off);
+		if (index == EvilTwin)
+		{
+			krypton_start();
+			show(upper_copy(hero_text(3079, "Blow Up Krypton-@")), 3.5f);
+		}
+		else
+		{
+			start_battle_timer();
+			show("BATTLE " + upper_copy(villain(index)) + "  " + upper_copy(VillainGoals[index]), 3.5f);
+		}
 		light_show(1.5f);
 		if (hb.Battle == 3)
 			hb.HenchmanTimer = timer::set(4.0f, nullptr, henchman_arrives);
+		if (hb.Battle == 5)
+			set_pling(true);
 	}
 
 	void show_choice()
@@ -629,11 +776,7 @@ namespace
 		if (!hb.Choosing)
 			return;
 		hb.Choosing = false;
-		if (hb.ChooseTimer)
-		{
-			timer::kill(hb.ChooseTimer);
-			hb.ChooseTimer = 0;
-		}
+		hero_kill(hb.ChooseTimer);
 		if (pb::InfoTextBox)
 			pb::InfoTextBox->Clear();
 		start_battle(hb.Choices[hb.ChoiceIndex]);
@@ -641,19 +784,15 @@ namespace
 			rs.Scoop->Message(MessageCode::TSinkResetTimer, 2.0f); // the ball comes back out
 	}
 
+	// 0x406364: the villains not yet captured; Evil Twin only once all five are
 	void offer_battle()
 	{
 		hb.Choices.clear();
-		for (int i = 0; i < VillainCount; i++)
+		for (int i = 0; i < EvilTwin; i++)
 			if (!hb.Defeated[i])
 				hb.Choices.push_back(i);
-		if (hb.Choices.empty()) // every villain beaten: they all come back
-		{
-			for (auto& defeated : hb.Defeated)
-				defeated = false;
-			for (int i = 0; i < VillainCount; i++)
-				hb.Choices.push_back(i);
-		}
+		if (hb.Choices.empty())
+			hb.Choices.push_back(EvilTwin);
 		hb.ChoiceIndex = 0;
 		hb.Choosing = true;
 		if (pb::DevDebug)
@@ -667,27 +806,42 @@ namespace
 		hb.ChooseTimer = timer::set(20.0f, nullptr, accept_battle);
 	}
 
+	void end_battle_common()
+	{
+		if (hb.Battle == 5)
+			set_pling(false);
+		hb.Battle = 0;
+		hb.Progress = 0;
+		hero_kill(hb.BattleTimer);
+		hb.BattleEnds = 0;
+		hide_henchmen();
+	}
+
 	void win_battle()
 	{
 		auto index = hb.Battle - 1;
+		if (index < 0 || index == EvilTwin)
+			return;
 		if (pb::DevDebug)
 			printf("FT2DBG battle won %d jackpot %lld\n", hb.Battle, hb.Jackpot);
 		hb.Defeated[index] = true;
 		hb.Captured++;
-		hb.Battle = 0;
-		hide_henchmen();
+		hb.BallCaptures++;
+		end_battle_common();
+		// a capture adds 250,000 x the multiplier to the Super Jackpot (0x4077c8), then pays the Jackpot
+		hb.SuperJackpot = std::min(SuperJackpotMax, hb.SuperJackpot + 250000LL * hb.SuperMultiplier);
 		auto award = hb.Jackpot;
 		add_points(static_cast<int>(std::min<long long>(award, 2000000000)));
 		auto fallback = std::string(VillainNames[index]) + " Captured, Jackpot Awarded!!!";
 		auto text = CaptureTexts[index] ? hero_text(CaptureTexts[index], fallback) : fallback;
 		show(upper_copy(text) + "  " + with_commas(award), 4.0f);
 		light_show(3.0f);
-		hb.Jackpot = 500000;
+		hb.Jackpot = JackpotStart;
 	}
 
 	void battle_progress(int step = 1)
 	{
-		if (!hb.Battle)
+		if (!hb.Battle || hb.Battle - 1 == EvilTwin)
 			return;
 		hb.Progress += step;
 		auto index = hb.Battle - 1;
@@ -701,22 +855,48 @@ namespace
 		show(upper_copy(villain(index)) + "  " + std::to_string(VillainGoal[index] - hb.Progress) + " TO GO", 1.5f);
 	}
 
+	// Evil Twin's battle ends with the ball (0x407e08 case 6); either way every villain comes back (0x406b08)
+	void end_evil_twin()
+	{
+		auto won = hb.SuperLit == 2;
+		end_battle_common();
+		for (auto name : {"light_73", "light_71", "light_93", "light_95", "light_94", "light_53", "light_49"})
+			hero_light(name, false);
+		for (auto& piece : hb.Krypton)
+			piece = false;
+		hb.SuperLit = 0;
+		hb.SuperShots = 0;
+		for (auto& defeated : hb.Defeated)
+			defeated = false;
+		show(won ? "EVIL TWIN DEFEATED  THE VILLAINS ARE BACK" : "EVIL TWIN GOT AWAY", 3.0f);
+	}
+
 	void lose_battle()
 	{
 		if (hb.Choosing)
 		{
 			hb.Choosing = false;
-			if (hb.ChooseTimer)
-				timer::kill(hb.ChooseTimer);
-			hb.ChooseTimer = 0;
+			hero_kill(hb.ChooseTimer);
 		}
 		if (!hb.Battle)
 			return;
 		if (pb::DevDebug)
-			printf("FT2DBG battle lost %d\n", hb.Battle);
+			printf("FT2DBG battle lost %d at %.1f s (started %.1f s)\n", hb.Battle, pb::time_ticks / 1000.0f,
+			       (hb.BattleEnds - BattleSeconds * 1000) / 1000.0f);
+		if (hb.Battle - 1 == EvilTwin)
+		{
+			end_evil_twin();
+			return;
+		}
 		show(upper_copy(villain(hb.Battle - 1)) + " GOT AWAY", 2.5f);
-		hb.Battle = 0;
-		hide_henchmen();
+		end_battle_common();
+	}
+
+	void battle_timeout(int, void*)
+	{
+		hb.BattleTimer = 0;
+		if (battle_on() && hb.Battle - 1 != EvilTwin)
+			lose_battle();
 	}
 
 	// Quake's drop targets: each target has two parts sharing one rule (hero.exe 0x403e00..0x403f10)
@@ -731,9 +911,203 @@ namespace
 		return -1;
 	}
 
-	// The battle rules for one hit; returns the points to score instead of the part's own, or -1 for its own
-	int hero_battle_hit(TPinballComponent* caller)
+	// ---- Buildings (0x40888c repair, 0x40895c / 0x408a1c damage, 0x408ac8 / 0x408b28 building triggers) ----
+	bool any_damage()
 	{
+		for (auto damage : hb.Damage)
+			if (damage)
+				return true;
+		return false;
+	}
+
+	// buildings not wrecked (0x408b08), for the end-of-ball bonus
+	int standing_buildings()
+	{
+		int count = 0;
+		for (auto damage : hb.Damage)
+			if (damage != 2)
+				count++;
+		return count;
+	}
+
+	// One damaged building, picked at random, is fully repaired
+	void repair_one()
+	{
+		std::vector<int> damaged;
+		for (int i = 0; i < BuildingCount; i++)
+			if (hb.Damage[i])
+				damaged.push_back(i);
+		if (damaged.empty())
+			return;
+		hb.Damage[damaged[rand() % damaged.size()]] = 0;
+		if (!any_damage())
+			show(upper_copy(hero_text(3028, "All Buildings Repaired!")), 2.0f);
+	}
+
+	void repair_all()
+	{
+		for (auto& damage : hb.Damage)
+			damage = 0;
+	}
+
+	// A ball thrown by one of the parts below that then crosses a building's trigger damages that building; one
+	// thrown by a magnet pocket (6) wrecks it
+	void ball_thrown(int kind)
+	{
+		hb.ThrownBy = kind;
+		hb.ThrownTick = pb::time_ticks;
+	}
+
+	void building_hit(int index)
+	{
+		auto kind = hb.ThrownBy;
+		hb.ThrownBy = 0;
+		if (!kind || pb::time_ticks - hb.ThrownTick > 4000 || index < 0 || index >= BuildingCount)
+			return;
+		auto& damage = hb.Damage[index];
+		if (damage >= 2)
+			return;
+		damage = kind == 6 ? 2 : damage + 1;
+		if (pb::DevDebug)
+			printf("FT2DBG building %d damage %d\n", index + 1, damage);
+		show(upper_copy(hero_text(3001, "Hit Bumpers to Repair Buildings")), 2.5f);
+	}
+
+	// ---- Mystery award (0x404768) and the s_sink03 hole (0x404840) ----
+	void mystery_award()
+	{
+		mystery_off(0, nullptr);
+		hero_kill(hb.MysteryTimer);
+		auto roll = rand() % 100;
+		int pick = 0;
+		for (; pick < 5; pick++)
+		{
+			if (roll < MysteryWeight[pick])
+				break;
+			roll -= MysteryWeight[pick];
+		}
+		if (pick == 5 && (hb.ExtraBallGiven || table()->ExtraBalls > 1))
+			pick = 0; // the extra ball only when none is waiting
+		show(upper_copy(hero_text(3032, "Mystery Award!")) + "  " + upper_copy(hero_text(MysteryText[pick],
+		     MysteryFallback[pick])), 3.0f);
+		switch (pick)
+		{
+		case 0: add_points(50000); break;
+		case 1: add_points(100000); break;
+		case 2: add_points(1000000); break;
+		case 3: repair_all(); break;
+		case 4: rs.PopValue = 5000; rs.PopHits = 0; break; // max bumpers (0x4022e0)
+		default:
+			table()->ExtraBalls++;
+			hb.ExtraBallGiven = true;
+			break;
+		}
+	}
+
+	// ---- Evil Twin: Krypton-@ (0x406954, 0x406c14) and the Super Jackpot (0x408638) ----
+	bool krypton_piece()
+	{
+		for (int i = 0; i < 5; i++)
+			if (hb.Krypton[i])
+			{
+				hb.Krypton[i] = false;
+				const char* lights[5] = {"light_73", "light_71", "light_93", "light_95", "light_94"};
+				hero_light(lights[i], false);
+				add_points(200000);
+				int left = 0;
+				for (auto piece : hb.Krypton)
+					left += piece;
+				show("KRYPTON-@  200,000" + (left ? "  " + std::to_string(left) + " LEFT" : std::string()), 1.5f);
+				return true;
+			}
+		return false;
+	}
+
+	void add_ball_at_sink(const char* name)
+	{
+		auto sink = dynamic_cast<TSink*>(hero_part(name));
+		auto t = table();
+		if (!sink)
+			return;
+		if (auto ball = t->AddBall(sink->BallPosition))
+		{
+			ball->throw_ball(&sink->BallThrowDirection, sink->ThrowAngleMult, sink->ThrowSpeedMult1,
+			                 sink->ThrowSpeedMult2);
+			t->MultiballCount++;
+		}
+	}
+
+	void super_jackpot_shot()
+	{
+		if (hb.SuperLit != 1)
+			return;
+		if (++hb.SuperShots < 3)
+		{
+			show("SUPER JACKPOT  " + std::to_string(3 - hb.SuperShots) + " MORE", 1.5f);
+			return;
+		}
+		hb.SuperLit = 2;
+		hero_light("light_49", false);
+		auto award = hb.SuperJackpot;
+		add_points(static_cast<int>(std::min<long long>(award, 2000000000)));
+		show(upper_copy(hero_text(3065, "SUPER JACKPOT!!!")) + "  " + with_commas(award), 4.0f);
+		light_show(4.0f);
+		hb.SuperJackpot = SuperJackpotStart;
+		// the holes let their balls out and four more balls come into play
+		for (auto name : {"s_sink03", "s_sink05", "s_sink04"})
+			add_ball_at_sink(name);
+	}
+
+	// The rules for one Captain Hero hit (rule table in ft2/hero_controls.txt): returns the points to score.
+	// `points` is the part's own value from the rule table.
+	int hero_hit(TPinballComponent* caller, int points)
+	{
+		auto now = pb::time_ticks;
+
+		// buildings first: the trigger is not a hit of its own
+		const char* triggers[BuildingCount] = {"btrig01", "btrig02", "btrig03", "btrig04", "btrig05",
+		                                       "btrig06", "btrig07", "btrig08", "btrig09", "btrig10"};
+		for (int i = 0; i < BuildingCount; i++)
+			if (named(caller, {triggers[i]}))
+			{
+				building_hit(i);
+				return 0;
+			}
+
+		// parts that throw the ball where it can land on a building (writes of the ball's +0x140)
+		if (named(caller, {"a_spot09", "a_spot10", "a_spot11", "a_spot12", "a_spot13", "a_spot14", "a_spot15",
+		                   "a_spot16"}))
+			ball_thrown(1);
+		else if (caller->GroupName && strncmp(caller->GroupName, "a_drop", 6) == 0 &&
+		         atoi(caller->GroupName + 6) >= 29 && atoi(caller->GroupName + 6) <= 46)
+			ball_thrown(2);
+		else if (named(caller, {"a_rebo03", "a_rebo04", "a_rebo05"}))
+			ball_thrown(5);
+		else if (named(caller, {"s_kout03", "s_kout04", "s_kout05"}))
+			ball_thrown(4);
+		else if (named(caller, {"s_kout06", "s_kout07", "s_kout08", "s_kout09", "s_kout10"}))
+			ball_thrown(6);
+		else
+			hb.ThrownBy = 0;
+
+		// pop bumpers repair the city (0x4023c8): on half their hits, and always when their value goes up, one
+		// building per 1,000 of their value
+		if (named(caller, {"a_bump01", "a_bump02", "a_bump03"}))
+		{
+			if (any_damage() && (rand() % 2 == 0 || points >= rs.PopValue))
+				for (int i = 0; i < points / 1000; i++)
+					repair_one();
+		}
+
+		// targets grow the jackpots by 5,000, holes by 10,000
+		if (caller->GroupName && (strncmp(caller->GroupName, "a_drop", 6) == 0 ||
+		                          strncmp(caller->GroupName, "a_spot", 6) == 0))
+			grow_jackpots(false);
+		else if (named(caller, {"s_sink03", "s_sink04", "s_sink05", "s_sink08", "s_sink09", "s_sink13", "s_sink14",
+		                        "s_sink15", "s_sink20"}))
+			grow_jackpots(true);
+
+		// the battles
 		switch (hb.Battle)
 		{
 		case 1:
@@ -756,19 +1130,143 @@ namespace
 			break;
 		case 5:
 			if (named(caller, {"a_rebo04"}))
+			{
 				battle_progress();
+				return 50000; // 0x405944
+			}
 			break;
 		case 6:
-			if (named(caller, {"a_drop18", "a_drop19", "a_drop20", "a_drop21", "s_kout01", "s_sink14", "downtown_ramp"}))
+			if (named(caller, {"a_drop18", "a_drop19", "a_drop20", "a_drop21"}) && hb.SuperLit == 0)
+				krypton_piece(); // the dynamite targets (0x402e3c)
+			else if (named(caller, {"s_kout01"}) && hb.SuperLit == 0)
 			{
-				add_points(200000); // a piece of Krypton-@ (0x406c14)
-				battle_progress();
+				krypton_piece();
+				hb.SuperLit = 1; // 0x406294: the Super Jackpot is lit
+				hb.SuperShots = 0;
+				hero_light("light_53", false);
+				hero_flash("light_49");
+				show("SUPER JACKPOT LIT  SHOOT THE DOWNTOWN RAMP 3 TIMES", 3.0f);
 			}
 			break;
 		default:
 			break;
 		}
-		return -1;
+
+		// Be A Hero (s_kout02, 0x4045a4): 30,000, 10,000 more each time up to 150,000, and a good deed
+		if (named(caller, {"s_kout02"}))
+		{
+			auto value = hb.HeroValue;
+			if (hb.HeroValue < 150000)
+				hb.HeroValue += 10000;
+			auto deed = hero_text(3007 + hb.Deed, "Be A Hero!");
+			hb.Deed = (hb.Deed + 1) % 18;
+			show(upper_copy(deed) + "  " + with_commas(value), 3.0f);
+			return value;
+		}
+
+		// s_sink03 (0x404840): the mystery award while its light flashes, else the Super Jackpot multiplier goes up
+		if (named(caller, {"s_sink03"}))
+		{
+			if (hb.MysteryLit)
+				mystery_award();
+			else if (hb.SuperMultiplier < 5)
+			{
+				hb.SuperMultiplier++;
+				show(upper_copy(hero_text(3031, "Super Jackpot Multiplier Increased")) + "  X" +
+				     std::to_string(hb.SuperMultiplier), 2.0f);
+			}
+			return 0;
+		}
+
+		// s_sink10 (0x404b28) 25,000 and lights the extra ball; s_sink14 (0x404258) 50,000 and collects it
+		if (named(caller, {"s_sink10"}))
+		{
+			if (!hb.ExtraBallGiven && !hb.ExtraBallLit)
+			{
+				hb.ExtraBallLit = true;
+				hero_light("light_59", true);
+				show(upper_copy(hero_text(3055, "Extra Ball Available")), 2.5f);
+			}
+			return 25000;
+		}
+		if (named(caller, {"s_sink14"}))
+		{
+			if (hb.ExtraBallLit)
+			{
+				hb.ExtraBallLit = false;
+				hb.ExtraBallGiven = true;
+				hero_light("light_59", false);
+				table()->ExtraBalls++;
+				show(upper_copy(hero_text(3004, "EXTRA BALL!!!")), 3.0f);
+				light_show(2.0f);
+			}
+			return 50000;
+		}
+
+		// s_sink04 / s_sink05 (0x404470 / 0x404344): 60,000 each; both lit boosts the pop bumpers (125,000)
+		if (named(caller, {"s_sink04", "s_sink05"}))
+		{
+			(named(caller, {"s_sink04"}) ? hb.Boost04 : hb.Boost05) = true;
+			hero_light(named(caller, {"s_sink04"}) ? "light_47" : "light_46", true);
+			if (hb.Boost04 && hb.Boost05)
+			{
+				hb.Boost04 = hb.Boost05 = false;
+				hero_light("light_46", false);
+				hero_light("light_47", false);
+				rs.PopValue = std::min(5000, std::max(1000, rs.PopValue) + 1000); // 0x4022bc
+				rs.PopHits = 0;
+				show(upper_copy(hero_text(3005, "Bumpers Boosted!")), 2.0f);
+				return 125000;
+			}
+			return 60000;
+		}
+
+		// the downtown ramp (0x405bf8)
+		if (named(caller, {"downtown_ramp"}))
+		{
+			if (hb.RampPassAfterLaunch)
+			{
+				hb.RampPassAfterLaunch = false;
+				return 0;
+			}
+			if (hb.Battle - 1 == EvilTwin && hb.SuperLit == 1)
+			{
+				super_jackpot_shot();
+				return 0;
+			}
+			hb.RampValue = now < hb.RampComboUntil ? hb.RampValue + 30000 : 30000;
+			hb.RampComboUntil = now + 10000;
+			hero_flash("light_49");
+			if (hb.RampValue > 30000)
+				show("RAMP COMBO  " + with_commas(hb.RampValue), 1.5f);
+			return static_cast<int>(hb.RampValue);
+		}
+
+		return points;
+	}
+
+	// End of ball (0x406f58): 50,000 per standing building, 100,000 per battle, 250,000 per capture this ball
+	void hero_end_of_ball()
+	{
+		auto t = table();
+		auto buildings = standing_buildings();
+		long long bonus = buildings * 50000LL + hb.BallBattles * 100000LL + hb.BallCaptures * 250000LL;
+		if (!t->TiltLockFlag && bonus > 0)
+		{
+			t->AddScore(static_cast<int>(bonus));
+			show("BONUS  BATTLES " + std::to_string(hb.BallBattles) + "  CAPTURES " + std::to_string(hb.BallCaptures) +
+			     "  BUILDINGS " + std::to_string(buildings) + "  TOTAL " + with_commas(bonus), 3.5f);
+		}
+		hb.BallBattles = 0;
+		hb.BallCaptures = 0;
+		hb.SuperMultiplier = 1; // reset with the ball (0x404840, 1017)
+		hb.HeroValue = 30000;
+		hb.RampValue = 30000;
+		hb.RampComboUntil = 0;
+		hb.Boost04 = hb.Boost05 = false;
+		hero_light("light_46", false);
+		hero_light("light_47", false);
+		hb.ThrownBy = 0;
 	}
 
 	// Captain Hero's skill shot (hero.exe 0x401da0): a launch that only just reaches the trigger at the top of the
@@ -795,7 +1293,7 @@ namespace
 		if (roll <= 5)
 		{
 			add_points(500000);
-			hb.Jackpot = std::min<long long>(5000000, hb.Jackpot + 500000);
+			hb.Jackpot = std::min(JackpotMax, hb.Jackpot + 500000);
 			text = hero_text(3051, "500,000! JACKPOT INCREASE!");
 		}
 		else if (roll >= 8 && roll <= 9)
@@ -876,6 +1374,8 @@ namespace
 			ft2_alien::EndOfBall(); // Alien Daze counts its own bonus
 		if (ft2_mad::Active())
 			ft2_mad::EndOfBall(); // and so does Mad Scientist
+		else if (is_hero())
+			hero_end_of_ball(); // and Captain Hero
 		else if (enhanced() && rs.BonusHits > 0 && !table()->TiltLockFlag)
 		{
 			auto bonus = rs.BonusHits * 1000 * rs.Multiplier;
@@ -944,6 +1444,43 @@ namespace
 			rs.AwaitingLaunch = true;
 		}
 	}
+}
+
+// Development (FT2_DEBUG): FT2_HITS="part,part,..." sends one hit to the rules every 0.6 s after New Game, so each
+// rule can be checked without aiming a ball. "wait" skips a beat, "flpr01"/"flpr02" press a flipper, "drain" loses
+// the ball (the rules' end of ball, then a new ball).
+static void scripted_hit(int, void*)
+{
+	static size_t next = 0;
+	static std::vector<std::string> hits;
+	if (hits.empty())
+	{
+		std::string list = getenv("FT2_HITS");
+		size_t start = 0;
+		while (start <= list.size())
+		{
+			auto comma = list.find(',', start);
+			hits.push_back(list.substr(start, comma == std::string::npos ? std::string::npos : comma - start));
+			if (comma == std::string::npos)
+				break;
+			start = comma + 1;
+		}
+	}
+	if (next >= hits.size() || !pb::MainTable)
+		return;
+	auto name = hits[next++];
+	printf("FT2DBG scripted %s\n", name.c_str());
+	if (name == "drain")
+		end_of_ball();
+	else if (name != "wait")
+		for (auto component : pb::MainTable->ComponentList)
+			if (component->GroupName && name == component->GroupName)
+			{
+				auto code = dynamic_cast<TFlipper*>(component) ? MessageCode::TFlipperExtend : MessageCode::ControlCollision;
+				ft2_control::handler(code, component);
+				break;
+			}
+	timer::set(0.6f, nullptr, scripted_hit);
 }
 
 TBall* ft2_control::CollidingBall = nullptr;
@@ -1044,6 +1581,8 @@ void ft2_control::handler(MessageCode code, TPinballComponent* caller)
 				ft2_alien::Launch();
 			if (ft2_mad::Active())
 				ft2_mad::Launch();
+			if (is_hero())
+				hb.RampPassAfterLaunch = true; // the launch goes up the downtown ramp
 			set_return_gates(false);
 			if (ReturnGateTimer)
 				timer::kill(ReturnGateTimer);
@@ -1112,6 +1651,13 @@ void ft2_control::handler(MessageCode code, TPinballComponent* caller)
 			caller->Message(MessageCode::TSinkResetTimer, 2.0f);
 			return;
 		}
+		if (hb.Battle && hb.BattleTimer) // during a timed battle the scoop restarts its 60 seconds (0x406580)
+		{
+			start_battle_timer();
+			show(upper_copy(hero_text(3033, "Extend Battle")), 2.0f);
+			caller->Message(MessageCode::TSinkResetTimer, 1.0f);
+			return;
+		}
 		if (!hb.Battle && !hb.Choosing && t->MultiballCount < 2)
 		{
 			add_points(points_for(caller));
@@ -1132,9 +1678,7 @@ void ft2_control::handler(MessageCode code, TPinballComponent* caller)
 			points = pop_points(*pops);
 		if (is_hero())
 		{
-			auto battlePoints = hero_battle_hit(caller);
-			if (battlePoints >= 0)
-				points = battlePoints;
+			points = hero_hit(caller, points);
 			if (named(caller, {"ss_trigger"}))
 				hero_skill_shot();
 			else if (rs.SkillShotLive && !named(caller, {"downtown_ramp"}))
@@ -1179,17 +1723,46 @@ std::vector<std::string> ft2_control::StatusLines()
 	{
 		if (hb.Choosing)
 			lines.emplace_back("Pick a villain: left flipper next, right flipper fight");
+		else if (hb.Battle - 1 == EvilTwin)
+		{
+			int left = 0;
+			for (auto piece : hb.Krypton)
+				left += piece;
+			if (hb.SuperLit == 1)
+				lines.push_back("Evil Twin: downtown ramp " + std::to_string(3 - hb.SuperShots) +
+				                " more for the Super Jackpot");
+			else if (hb.SuperLit == 2)
+				lines.emplace_back("Evil Twin: Super Jackpot collected");
+			else
+				lines.push_back("Evil Twin: blow up Krypton-@ (" + std::to_string(left) + " left)");
+		}
 		else if (hb.Battle)
 		{
 			auto index = hb.Battle - 1;
+			auto seconds = std::max(0, (hb.BattleEnds - pb::time_ticks + 999) / 1000);
 			lines.push_back("Battle " + villain(index) + ": " + VillainGoals[index] + " (" +
-			                std::to_string(VillainGoal[index] - hb.Progress) + " to go)");
+			                std::to_string(VillainGoal[index] - hb.Progress) + " to go, " +
+			                std::to_string(seconds) + " s)");
 		}
 		else
-			lines.emplace_back("Shoot the scoop to battle a villain");
+		{
+			int left = 0;
+			for (int i = 0; i < EvilTwin; i++)
+				left += !hb.Defeated[i];
+			lines.push_back(left ? "Shoot the scoop to battle a villain (" + std::to_string(left) + " at large)"
+			                     : std::string("Shoot the scoop to battle Evil Twin"));
+		}
 		lines.push_back("Jackpot " + with_commas(hb.Jackpot));
+		lines.push_back("Super Jackpot " + with_commas(hb.SuperJackpot) +
+		                (hb.SuperMultiplier > 1 ? " x" + std::to_string(hb.SuperMultiplier) : std::string()));
 		if (hb.Captured)
 			lines.push_back("Villains captured: " + std::to_string(hb.Captured));
+		if (any_damage())
+			lines.push_back("Buildings standing: " + std::to_string(standing_buildings()) + " of 10 (pops repair)");
+		if (hb.MysteryLit)
+			lines.emplace_back("Mystery lit: shoot the hole by the pops");
+		if (hb.ExtraBallLit)
+			lines.emplace_back("Extra ball lit");
 		if (rs.SaveSink && rs.SaveSink->ActiveFlag)
 			lines.emplace_back("Forcefields on (ball saver open)");
 	}
@@ -1290,6 +1863,8 @@ void ft2_control::table_handler(MessageCode code)
 		set_save_sink(false);
 		lose_battle();
 		hb = HeroBattles{};
+		if (is_hero())
+			set_pling(false);
 		if (pb::DevDebug && getenv("FT2_BATTLE") && is_hero()) // development: start a battle at once
 		{
 			start_battle(std::max(0, std::min(VillainCount - 1, atoi(getenv("FT2_BATTLE")) - 1)));
@@ -1298,6 +1873,8 @@ void ft2_control::table_handler(MessageCode code)
 		}
 		if (pb::DevDebug && getenv("FT2_OFFER") && is_hero()) // development: the villain choice at once
 			offer_battle();
+		if (pb::DevDebug && getenv("FT2_HITS")) // development: scripted hits, see scripted_hit
+			timer::set(3.0f, nullptr, scripted_hit);
 		break;
 	case MessageCode::GameOver:
 		if (enhanced() && !rs.AttractTimer)

@@ -1,0 +1,8 @@
+# hero.exe helpers for annc.py
+401a38 score
+40a2fc show_text
+40787c start_battle
+407e08 end_battle
+43164c set_timer
+431844 kill_timer
+40f41c assert

@@ -6,6 +6,28 @@
 
 **Game data is not included.** Copy your original game folders into `Put game files here` and start `FullTiltPinball.exe`: tables are found and sorted automatically.
 
+**New in 0.12.0: Captain Hero plays by its real rules**
+Captain Hero's rules were recovered from hero.exe (ft2/hero_rules.md has the details):
+- **Battles are timed**: 60 seconds for Quake, Mad Scientist, Mystman, Slime Man and Mr. Pling; shooting the scoop
+  during a battle restarts the clock ("Extend Battle"). The side panel counts down.
+- **Evil Twin is the final battle**, offered once the other five villains are captured: blow up the five pieces of
+  Krypton-@ (the dynamite targets and the kickout behind them, 200,000 each), then three downtown ramp shots for
+  the **Super Jackpot** and a four-ball multiball. Afterwards all the villains come back.
+- **Jackpot and Super Jackpot** grow as you play (holes more than targets; the Super Jackpot only during battles,
+  times its multiplier). A capture pays the Jackpot and adds 250,000 to the Super Jackpot.
+- **Super Jackpot multiplier** up to 5x and the **Mystery Award** (lit for 5 seconds after a battle starts) at the
+  hole by the pop bumpers: 50,000, 100,000, 1 million, all buildings repaired, max bumpers or an extra ball.
+- **The city**: balls thrown by targets, kickouts and the magnet pockets damage the buildings they land on; the pop
+  bumpers repair them. Standing buildings count in the bonus.
+- **Be A Hero!** (30,000 rising to 150,000, with a good deed each time), **extra ball** (light it, then collect it),
+  **bumper boost** (both upper holes), the **downtown ramp combo**, and the original **end-of-ball bonus**:
+  battles, captures and buildings.
+
+**Fixes in 0.12.0**
+- Captain Hero: Mr. Pling's walls are only up during his battle, as on the original. Left up, they knocked the ball
+  from one upper hole straight into the other, over and over.
+- Captain Hero no longer adds the generic bonus on top of its own.
+
 **Fixes in 0.11.2**
 - Ramp shots on the Full Tilt! 2 tables were never counted: their ramps have no end wall, which is what reported a
   shot. A ramp now counts when the ball gets off it at another end than the one it came on by. On Alien Daze this

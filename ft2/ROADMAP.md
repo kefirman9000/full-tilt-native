@@ -7,7 +7,7 @@
 - [x] `--table NAME.DAT` command line option; Windows 64-bit build (llvm-mingw, UCRT, SDL2)
 - [x] Hero: plunger shot goes up the wire ramp and comes back down: only a too-soft launch does that now (it rolls
       back to the plunger, as on the original); a short pull is the skill shot, a harder one plays normally
-- [ ] Dragon's Keep: ball not launching yet; Skulduggery: hangs on load (no plunger, unknown object types 1034-1038, 1042)
+- [x] Dragon's Keep launches; Skulduggery loads and plays (launcher 1034 as plunger, blocker a_blocf raised)
 - [ ] Unknown FT engine object types: 1034-1038, 1042-1045 (skipped today)
 - [ ] Table picker in the game (menu), instead of launch scripts
 - [x] GitHub Actions release build (MSVC) + in-app updater (asks before updating) + log files
@@ -61,10 +61,11 @@
 - [x] Hero battles (0x43d088 1-6 = Quake, Mad Scientist, Mystman, Slime Man, Mr. Pling, Evil Twin; 7 = "Battle
       Villain"): offered at s_sink01 (0x406580, flippers choose: 0x406500/0x406528), started by 0x40787c,
       won via 0x407e08(1) (jackpot, reset to 500,000), lost on drain. Table texts from hero.exe's string table.
-- [ ] Hero: battle timers (countdown texts 3068...), Mr. Pling's s_ramp02 path (ball layer 5), stage 7, Evil Twin's
-      exact Krypton-@ rule (0x406c14/0x406954), mystery award, building repair (3001/3028), Super Jackpot
+- [x] Hero: battle timers, Evil Twin's Krypton-@ rule and Super Jackpot, mystery award, buildings (0.12.0)
+- [ ] Hero: Mr. Pling's second ball up s_ramp02 (ball +0x140 = 5); stage 7 is only a debug mode
 - [x] Hero ball saver s_sink30 shut except ball save time / forcefields (was the "endless ball")
-- [ ] Hero jackpot (table field 0x141, raised by the skill shot), playfield/pop multiplier (0x405de8)
+- [x] Hero Jackpot (+0x141) and Super Jackpot (+0x149) growth and multiplier
+- [ ] Hero playfield/pop multiplier (0x405de8), Super Strength/Speed/Flight texts 3034-3036
 - [x] Mad Scientist: rule table + scores (points in data variables; ft2rules.py reads their starting values)
 
 ## Status 2026-11-13 (0.10.0: Alien Daze rules)
@@ -75,3 +76,12 @@
 - [ ] Alien: skill shot, cornfield multiball, the levitation path animation, a_gate01 behind the ray gun, mission
       music, loop diverter
 - [x] Mad Scientist rules (ft2/mad_rules.md, SpaceCadetPinball/ft2_mad.cpp)
+
+## Status 2026-11-15 (0.12.0: Captain Hero rules)
+- [x] Captain Hero's rules from hero.exe (ft2/hero_rules.md): timed battles, Evil Twin + Super Jackpot, jackpots,
+      mystery award, buildings, Be A Hero, extra ball, bumper boost, ramp combo, end-of-ball bonus.
+- Decompiling without Ghidra: angr's decompiler (pip install angr) on the control code range gives C with the
+  original asserts; label it with part names, texts and helpers (see hero_rules.md).
+- Testing rules without aiming: FT2_DEBUG=1 FT2_HITS="part,part,..." sends one hit every 0.6 s after New Game
+  ("wait", "drain", flippers allowed); every message the rules show is logged as "FT2DBG show:".
+- [ ] Next: Dragon's Keep and Skulduggery rule ports (ft1lift/ft1draft), per-table self-test scenarios in CI.
