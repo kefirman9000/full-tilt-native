@@ -74,4 +74,4 @@
       ball, artifact trading, jackpot, end-of-ball bonus. Texts come from the user's Alien.exe at run time.
 - [ ] Alien: skill shot, cornfield multiball, the levitation path animation, a_gate01 behind the ray gun, mission
       music, loop diverter
-- [ ] Mad Scientist rules (same method: ft2/tools/annot.py + calls.py on mad.exe)
+- [x] Mad Scientist rules (ft2/mad_rules.md, SpaceCadetPinball/ft2_mad.cpp)

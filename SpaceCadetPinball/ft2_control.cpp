@@ -4,6 +4,7 @@
 #include "ft2_sounds.h"
 #include "ft2_animation.h"
 #include "ft2_alien.h"
+#include "ft2_mad.h"
 
 #include "pb.h"
 #include "TBall.h"
@@ -221,6 +222,8 @@ namespace
 
 	void set_pockets(bool open)
 	{
+		if (ft2_mad::Active())
+			open = true; // Mad Scientist's kickouts are always in play; its rules decide what they do
 		for (auto pocket : rs.ModePockets)
 		{
 			pocket->NotSomeFlag = open ? 0 : 1; // with the flag set a kickout stays off after it ejects
@@ -470,6 +473,15 @@ namespace
 		auto key = table_key();
 		for (auto& rule : PopRules)
 			if (key == rule.Table && named(caller, {rule.Names[0], rule.Names[1], rule.Names[2]}))
+				return &rule;
+		return nullptr;
+	}
+
+	const PopRule* table_pop_rule()
+	{
+		auto key = table_key();
+		for (auto& rule : PopRules)
+			if (key == rule.Table)
 				return &rule;
 		return nullptr;
 	}
@@ -862,6 +874,8 @@ namespace
 	{
 		if (ft2_alien::Active())
 			ft2_alien::EndOfBall(); // Alien Daze counts its own bonus
+		if (ft2_mad::Active())
+			ft2_mad::EndOfBall(); // and so does Mad Scientist
 		else if (enhanced() && rs.BonusHits > 0 && !table()->TiltLockFlag)
 		{
 			auto bonus = rs.BonusHits * 1000 * rs.Multiplier;
@@ -899,6 +913,9 @@ namespace
 			show("BALL SAVED", 2.5f);
 			return; // same ball again: the drain timer serves it
 		}
+		if (ft2_mad::Active() && ft2_mad::SaveBall())
+			return; // Mad Scientist's shoot again light or ball recapture
+
 		end_of_ball();
 		if (t->ExtraBalls)
 		{
@@ -1007,6 +1024,8 @@ void ft2_control::handler(MessageCode code, TPinballComponent* caller)
 		{
 			if (ft2_alien::Active())
 				ft2_alien::Launch();
+			if (ft2_mad::Active())
+				ft2_mad::Launch();
 			set_return_gates(false);
 			if (ReturnGateTimer)
 				timer::kill(ReturnGateTimer);
@@ -1034,6 +1053,19 @@ void ft2_control::handler(MessageCode code, TPinballComponent* caller)
 			return;
 		}
 		if (code != MessageCode::ControlCollision && ft2_alien::Message(code, caller))
+			return;
+	}
+
+	// Mad Scientist: its own rules (ft2_mad.cpp)
+	if (ft2_mad::Active())
+	{
+		if (code == MessageCode::ControlCollision && !t->TiltLockFlag && ft2_mad::Collision(caller))
+		{
+			play_component_sound(caller);
+			rs.BonusHits++;
+			return;
+		}
+		if (code != MessageCode::ControlCollision && ft2_mad::Message(code, caller))
 			return;
 	}
 
@@ -1149,6 +1181,12 @@ std::vector<std::string> ft2_control::StatusLines()
 			lines.push_back(line);
 		return lines;
 	}
+	if (ft2_mad::Active())
+	{
+		for (auto& line : ft2_mad::Status())
+			lines.push_back(line);
+		return lines;
+	}
 	if (enhanced() && rs.Multiplier > 1)
 		lines.push_back("Bonus x" + std::to_string(rs.Multiplier));
 	if (rs.PocketTimer)
@@ -1203,6 +1241,8 @@ void ft2_control::table_handler(MessageCode code)
 		raise_blockers();
 		if (ft2_alien::Active())
 			ft2_alien::NewGame();
+		if (ft2_mad::Active())
+			ft2_mad::NewGame();
 		stop_attract();
 		if (rs.PocketTimer)
 		{
@@ -1249,6 +1289,8 @@ void ft2_control::table_handler(MessageCode code)
 		raise_blockers(); // blockers drop when the player changes
 		if (ft2_alien::Active())
 			ft2_alien::PlayerChanged();
+		if (ft2_mad::Active())
+			ft2_mad::PlayerChanged();
 		for (auto& set : rs.Sets)
 			set.Hit.clear();
 		break;
@@ -1301,6 +1343,15 @@ void ft2_control::check_escaped_balls()
 		else if (t->MultiballCount > 0)
 			t->MultiballCount--;
 	}
+}
+
+void ft2_control::RaisePopValue(bool toMax)
+{
+	auto rule = table_pop_rule();
+	if (!rule)
+		return;
+	rs.PopValue = toMax ? rule->Max : std::min(rule->Max, std::max(rs.PopValue, rule->Start) + rule->Step);
+	rs.PopHits = 0;
 }
 
 bool ft2_control::AwaitingLaunch()

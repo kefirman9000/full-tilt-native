@@ -6,6 +6,22 @@
 
 **Game data is not included.** Copy your original game folders into `Put game files here` and start `FullTiltPinball.exe`: tables are found and sorted automatically.
 
+**New in 0.11.0: Mad Scientist plays by its real rules**
+Mad Scientist's own rules were recovered from mad.exe and ported (ft2/mad_rules.md has the details):
+- **Five experiments**, started at Igor in single-ball play (Igor adds 10 seconds while one runs; 40 s each):
+  Raid Graveyard for Parts (six body parts from the element D kickout and the element C ramp), Fight Angry Mob!
+  (the mob's nine targets come up), Steal Brain for Monster (four places, sixteen brains from a Chicken to
+  Einstein), Make Elixir of Life, and finally Bring Monster to Life: charge the seven monster targets, then the
+  tower sink brings it to life for the jackpot.
+- **The flask**: Einsteinium, Lecithin, Yttrium and Bat Tongue from the four element shots. At the flask, left
+  flipper mixes (the ball goes into the flask, a new one is served) and right flipper empties it. Fifteen potions:
+  points, jackpot, teleporter, bumpers, shoot again, clone ball, plasma field, table multiplier up to 5X, extra
+  ball light, a million, multi-ball, extra ball.
+- **Teleporter** (all seven monster targets), **clone ball** at the mercury sink, **plasma field** (both plasma
+  targets, then three ramps at 250,000), **lightning rod**, ramp **combos**, **ball recapture** from the return
+  lanes, the **skill shot** and the end-of-ball bonus (potions, experiments, monster parts, bonus hold).
+- The side panel shows the experiment, time left, the flask, the monster parts, the brain and the jackpot.
+
 **New in 0.10.0: Alien Daze plays by its real rules**
 Alien Daze's own rules were recovered from Alien.exe and ported (ft2/alien_rules.md has the details):
 - **Five missions**: Make Crop Circles, Abduct Humans, Re-capture Bigfoot, Take a Joy Ride and Re-assemble
