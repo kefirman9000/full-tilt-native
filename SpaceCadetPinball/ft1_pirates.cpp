@@ -1604,12 +1604,469 @@ namespace
 			break;
 		}
 	}
-	void State9(MessageCode, TPinballComponent*) {}  // TODO(23:c5cc)
-	void State10(MessageCode, TPinballComponent*) {} // TODO(23:c84b)
-	void State11(MessageCode, TPinballComponent*) {} // TODO(23:cd08)
-	void State12(MessageCode, TPinballComponent*) {} // TODO(23:d2b8)
-	void State13(MessageCode, TPinballComponent*) {} // TODO(23:d414)
-	void State16(MessageCode, TPinballComponent*) {} // TODO(23:b27e)
+	// The end and countdown shared by states 9 and 10 (and the like): the mission ends, the plunger blocker back,
+	// lights 504/505 as in normal play; the countdown text; with the light sweep done, sink 8 lets go and the mode
+	// timer runs
+	void PlainMissionEnd()
+	{
+		MissionEnd();
+		Field(v_lite606)++;
+		Send(a_bloce, MessageCode::Ft1BlockerSetPosition, 0.0f);
+		Send(v_lite504, MessageCode::TLightResetAndTurnOff, 0.0f);
+		Send(v_lite505, MessageCode::TLightResetAndTurnOn, 0.0f);
+	}
+
+	void PlainMissionCommon(MessageCode code, TPinballComponent* cmp, int countdownText, float time)
+	{
+		switch (code)
+		{
+		case FT1Event83:
+			Send(mode_timer, MessageCode::Ft1BlockerTimer, -1.0f);
+			MissionEvent(FT1Event82, nullptr);
+			break;
+		case FT1Event82:
+			PlainMissionEnd();
+			break;
+		case FT1Event80:
+		{
+			auto left = Send(mode_timer, MessageCode::Ft1TimerTimeLeft, 0.0f);
+			if (left)
+				Display(Format(countdownText, left / 1000).c_str(), 0.5f, 0);
+			break;
+		}
+		case MessageCode::ControlTimerExpired:
+			if (dynamic_cast<TTimer*>(cmp))
+			{
+				if (cmp == mode_timer.GetComponent())
+					MissionEvent(FT1Event82, nullptr);
+			}
+			else if (dynamic_cast<TLightSweeps*>(cmp))
+			{
+				if (!g_6520)
+					ReleaseSink8(0.0f);
+				Send(mode_timer, MessageCode::Ft1BlockerTimer, time);
+				MissionEvent(FT1Event80, nullptr);
+			}
+			break;
+		default:
+			break;
+		}
+	}
+
+	// 23:c5cc - state 9 (text 3064, tabb6, tabb73): 100,000, the light sweep 10, blockers c, f and g at 0;
+	// 48.28 s (countdown text 3051)
+	void State9(MessageCode code, TPinballComponent* cmp)
+	{
+		if (code != FT1Event79)
+		{
+			PlainMissionCommon(code, cmp, 3051, 48.28f);
+			return;
+		}
+		MissionStart();
+		ScorePoints(nullptr, 100000);
+		Send(light_sweeps, MessageCode::Ft1LightSweepStart, 10.0f);
+		PlayMusic(6); // g_22e2
+		Play(tabb73wave);
+		for (auto blocker : {&a_blocc, &a_blocf, &a_blocg})
+			Send(*blocker, MessageCode::Ft1BlockerSetPosition, 0.0f);
+		Display(ft1_strings::Get(3064), -1.0f, 0);
+	}
+
+	// 23:c84b - state 10 (text 3065, tabb2, tabb75): 250,000, the light sweep 11, lights 9-11 and 548-551 flash,
+	// drops 10-12 up; 29.38 s (countdown text 3052)
+	void State10(MessageCode code, TPinballComponent* cmp)
+	{
+		if (code != FT1Event79)
+		{
+			PlainMissionCommon(code, cmp, 3052, 29.38f);
+			return;
+		}
+		MissionStart();
+		ScorePoints(nullptr, 250000);
+		Send(light_sweeps, MessageCode::Ft1LightSweepStart, 11.0f);
+		Lights({&v_lite9, &v_lite10, &v_lite11, &v_lite551, &v_lite550, &v_lite549, &v_lite548},
+		       MessageCode::TLightFlasherStartTimed, -1.0f);
+		Drops10Up();
+		PlayMusic(2); // g_22d2
+		Play(tabb75wave);
+		Display(ft1_strings::Get(3065), -1.0f, 0);
+	}
+	// 23:cb43 - the treasure mission's table: the multiball lights out, sinks 9 and 12 on, tripwires 3 and 8 off,
+	// v_lite568's MessageField keeps whether it was lit, the orbit lights' overrides off, lights 4-8, 51, 567 and
+	// 568 flash, the light sweep 4, lights 520/521 off
+	void TreasureSetup()
+	{
+		Helper211c();
+		for (auto sink : {&a_sink9, &a_sink12})
+			if (auto comp = sink->GetComponent())
+				comp->ActiveFlag = 1;
+		for (auto trip : {&s_trip3, &s_trip8})
+			if (auto comp = trip->GetComponent())
+				comp->ActiveFlag = 0;
+		Field(v_lite568) = LightOn(v_lite568) ? 1 : 0;
+		Send(left_orbit_light_group, FT1LightOverrideOff, 0.0f);
+		Send(right_orbit_light_group, FT1LightOverrideOff, 0.0f);
+		Lights({&v_mlite51, &v_lite4, &v_lite5, &v_lite6, &v_lite7, &v_lite8, &v_lite568, &v_lite567},
+		       MessageCode::TLightFlasherStartTimed, -1.0f);
+		Send(light_sweeps, MessageCode::Ft1LightSweepStart, 4.0f);
+		Send(v_lite520, MessageCode::TLightResetAndTurnOff, 0.0f);
+		Send(v_lite521, MessageCode::TLightResetAndTurnOff, 0.0f);
+	}
+
+	// 23:0d35 - on to state 12 (the multiball) with the skill light lit
+	void StartMultiball()
+	{
+		SkillLightOn();
+		SetInfoField(12);
+		MissionEvent(FT1Event79, nullptr);
+	}
+
+	// 23:cd08 - state 11, the treasure (text 3066, tabb3, tabb99): 1,000,000, the treasure table; light rollovers add
+	// 50,000 to the jackpot; 30.68 s (countdown text 3054). When a rule moves g_651c on: the timer stops, tabb28,
+	// the pictures "L" to "S" a quarter second each, then the tally (coins and special treasures 500,000 each, map
+	// pieces and v_lite606's count 1,000,000 each, the fathoms, bumpers and jackpot; text 3003 4 s), then the
+	// mission ends, sink 8 lets go and the multiball starts. Its end: the table as it was, g_22f6 set
+	void State11(MessageCode code, TPinballComponent* cmp)
+	{
+		switch (code)
+		{
+		case FT1Event79:
+			MissionStart();
+			ScorePoints(nullptr, 1000000);
+			TreasureSetup();
+			PlayMusic(3); // g_22d6
+			Play(tabb99wave);
+			Display(ft1_strings::Get(3066), -1.0f, 0);
+			break;
+		case FT1Event83:
+			Send(mode_timer, MessageCode::Ft1BlockerTimer, -1.0f);
+			MissionEvent(FT1Event82, nullptr);
+			break;
+		case FT1Event82:
+			Helper211c();
+			Helper21be();
+			PlainMissionEnd();
+			for (auto trip : {&s_trip3, &s_trip8})
+				if (auto comp = trip->GetComponent())
+					comp->ActiveFlag = 1;
+			Send(left_orbit_light_group, FT1LightResetOverride, 0.0f);
+			Send(right_orbit_light_group, FT1LightResetOverride, 0.0f);
+			Send(left_orbit_combo_light_group, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(right_orbit_combo_light_group, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(v_lite568, Field(v_lite568) ? MessageCode::TLightResetAndTurnOn : MessageCode::TLightResetAndTurnOff,
+			     0.0f);
+			Send(v_lite567, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(map_piece_light_group, MessageCode::TLightTurnOff, 0.0f);
+			Send(map_piece_light_group, MessageCode::TLightFlasherStartTimedThenStayOff, 1.0f);
+			Lights({&v_lite552, &v_lite553, &v_lite554, &v_lite555, &v_lite556, &v_lite557},
+			       MessageCode::TLightResetAndTurnOff, 0.0f);
+			g_22f6 = 1;
+			break;
+		case FT1Event80:
+			switch (g_651c)
+			{
+			case 0:
+			{
+				auto left = Send(mode_timer, MessageCode::Ft1TimerTimeLeft, 0.0f);
+				if (left)
+					Display(Format(3054, left / 1000).c_str(), 0.5f, 0);
+				break;
+			}
+			case 1:
+				Send(mode_timer, MessageCode::Ft1BlockerTimer, -1.0f);
+				Play(tabb28wave);
+				[[fallthrough]];
+			case 2:
+			case 3:
+			case 4:
+			case 5:
+			case 6:
+			case 7:
+			case 8:
+			{
+				static const char* letters[8] = {"L", "M", "N", "O", "P", "Q", "R", "S"}; // ds:0x226a + n * 2
+				Display(letters[g_651c - 1], 0.25f, 1);
+				g_651c++;
+				break;
+			}
+			case 9:
+			{
+				int total = Send(coin_light_group, MessageCode::TLightGroupGetOnCount, 0.0f) * 500000;
+				total += Send(special_treasure_light_group, MessageCode::TLightGroupGetOnCount, 0.0f) * 500000;
+				total += Send(map_piece_light_group, MessageCode::TLightGroupGetOnCount, 0.0f) * 1000000;
+				total += Field(v_lite606) * 1000000;
+				FathomAward(-1.0f);
+				BumperAward(-1.0f);
+				CollectJackpot(0.0f);
+				auto scored = ScorePoints(nullptr, total);
+				Display(Format(3003, scored).c_str(), 4.0f, 0);
+				g_651c++;
+				break;
+			}
+			default:
+				MissionEvent(FT1Event82, nullptr);
+				ReleaseSink8(0.0f);
+				StartMultiball();
+				break;
+			}
+			break;
+		case MessageCode::ControlCollision:
+			if (dynamic_cast<TLightRollover*>(cmp)) // 1020
+				AddJackpot(50000);
+			break;
+		case MessageCode::ControlTimerExpired:
+			if (dynamic_cast<TTimer*>(cmp))
+			{
+				if (cmp == mode_timer.GetComponent())
+					MissionEvent(FT1Event82, nullptr);
+			}
+			else if (dynamic_cast<TLightSweeps*>(cmp))
+			{
+				if (!g_6520)
+					ReleaseSink8(0.0f);
+				Send(mode_timer, MessageCode::Ft1BlockerTimer, 30.68f);
+				MissionEvent(FT1Event80, nullptr);
+			}
+			break;
+		default:
+			break;
+		}
+	}
+
+	// 23:d2b8 - state 12, the multiball (tabb32, text 3055): kicker 1 on, oneway 12 off, sink 8 lets the balls kept
+	// there go (two more balls in play); when only one is left: the mission ends, kicker 1 off, lights 548-551
+	// flash out, back to normal play
+	void State12(MessageCode code, TPinballComponent*)
+	{
+		auto t = control::TableG;
+		switch (code)
+		{
+		case FT1Event79:
+			MissionStart();
+			Send(a_kick1, MessageCode::Ft1Activate, 0.0f); // FT1 75
+			if (auto oneway = s_oneway12.GetComponent())
+				oneway->ActiveFlag = 0;
+			switch (g_6526)
+			{
+			case 0:
+				ReleaseSink8(2.0f);
+				[[fallthrough]];
+			case 1:
+				ReleaseSink8(1.0f);
+				break;
+			default:
+				break;
+			}
+			t->MultiballCount += 2; // +0x146
+			g_6526 = 0;
+			InfoClear();
+			Play(tabb32wave);
+			[[fallthrough]];
+		case FT1Event80:
+			Display(ft1_strings::Get(3055), -1.0f, 0);
+			break;
+		case FT1Event83:
+			if (t->MultiballCount != 1)
+				break;
+			MissionEnd();
+			InfoClear();
+			Send(a_kick1, MessageCode::Ft1Deactivate, 0.0f); // FT1 76
+			SetInfoField(2);
+			Lights548(1);
+			MissionEvent(FT1Event79, nullptr);
+			break;
+		default:
+			break;
+		}
+	}
+	// 23:d414 - state 13, the kept balls' multiball (tabb95, text 3056): with no balls kept (g_6526) lights 530-532
+	// flash out and back to normal play; else they go back in play, lights 530-532 flash out, kicker 1 on, oneway
+	// 12 off, 100,000; when only one ball is left: the mission ends, kicker 1 off, back to normal play
+	void State13(MessageCode code, TPinballComponent*)
+	{
+		auto t = control::TableG;
+		switch (code)
+		{
+		case FT1Event79:
+			if (!g_6526)
+			{
+				Lights530(true);
+				SetInfoField(2);
+				MissionEvent(FT1Event79, nullptr);
+				return;
+			}
+			MissionStart();
+			Field(v_lite551) = 0xf; // as the original has it (Bits548 reads a_spot11's)
+			Bits548();
+			t->MultiballCount += g_6526; // +0x146
+			g_6526 = 0;
+			Lights({&v_lite530, &v_lite531, &v_lite532}, MessageCode::TLightTurnOn, 0.0f);
+			Lights({&v_lite530, &v_lite531, &v_lite532}, MessageCode::TLightFlasherStartTimedThenStayOff, 1.0f);
+			Send(a_kick1, MessageCode::Ft1Activate, 0.0f); // FT1 75
+			if (auto oneway = s_oneway12.GetComponent())
+				oneway->ActiveFlag = 0;
+			ScorePoints(nullptr, 100000);
+			InfoClear();
+			Play(tabb95wave);
+			[[fallthrough]];
+		case FT1Event80:
+			Display(ft1_strings::Get(3056), -1.0f, 0);
+			break;
+		case FT1Event83:
+			if (t->MultiballCount != 1)
+				break;
+			MissionEnd();
+			InfoClear();
+			Send(a_kick1, MessageCode::Ft1Deactivate, 0.0f); // FT1 76
+			SetInfoField(2);
+			MissionEvent(FT1Event79, nullptr);
+			Lights530(false);
+			Lights548(1);
+			break;
+		default:
+			break;
+		}
+	}
+
+	int g_6540 = 0; // the bonus count is hurried (a flipper)
+	int g_6542 = 0; // the bonus count's step
+	int g_6544 = 0; // the bonus so far
+
+	// 23:b27e - state 16, the end of the ball: the bonus is counted, one line per award time (a flipper hurries it;
+	// nothing when tilted): popup targets x10,000 (3028), v_lite606's count x200,000 (3029), v_lite607's x250,000
+	// (3030), special treasures x100,000 (3031), the held bonus (3032); the total is scored (3033, tabb74) and kept
+	// when v_lite570 (bonus hold) is lit. Then an extra ball, the next player (on to the skill shot, state 3), or the
+	// game is over (state 1). mode_timer (30 s) ends it if it hangs.
+	void State16(MessageCode code, TPinballComponent* cmp)
+	{
+		auto t = control::TableG;
+		switch (code)
+		{
+		case MessageCode::TFlipperExtend: // FT1 1
+			g_6540 = 1;
+			InfoClear();
+			State16(FT1Event80, cmp);
+			return;
+		case FT1Event83:
+			if (g_6542 >= 6)
+				break;
+			return;
+		case MessageCode::ControlTimerExpired: // FT1 70
+			if (cmp != mode_timer.GetComponent())
+				return;
+			g_22f2 = 0;
+			g_6542 = 8;
+			State16(FT1Event80, nullptr);
+			return;
+		case FT1Event79:
+			g_6540 = 0;
+			g_6542 = 0;
+			g_6544 = 0;
+			Send(mode_timer, MessageCode::Ft1BlockerTimer, 30.0f);
+			if (t->TiltLockFlag && g_22f2 != 1) // +0x15a
+				g_6542 = 6;
+			InfoClear();
+			Play(tabb42wave);
+			break;
+		case FT1Event80:
+			break;
+		default:
+			return;
+		}
+		// event 80: the next step
+		for (;;)
+		{
+			auto step = g_6542++;
+			int value = 0, text = 0;
+			switch (step)
+			{
+			case 0:
+				value = g_6524 * 10000;
+				text = 3028;
+				break;
+			case 1:
+				value = Field(v_lite606) * 200000;
+				text = 3029;
+				break;
+			case 2:
+				value = Field(v_lite607) * 250000;
+				text = 3030;
+				break;
+			case 3:
+				value = Field(special_treasure_light_group) * 100000;
+				text = 3031;
+				break;
+			case 4:
+				value = Field(drain); // the held bonus
+				text = 3032;
+				break;
+			case 5:
+				if (LightOn(v_lite570))
+				{
+					Send(v_lite570, MessageCode::TLightResetAndTurnOff, 0.0f);
+					Field(drain) = g_6544;
+				}
+				else
+					Field(drain) = 0;
+				if (!g_6544)
+					continue;
+				{
+					auto added = SpecialAddScore(cmp, g_6544);
+					if (g_6540)
+						continue;
+					Play(tabb74wave);
+					Display(Format(3033, added).c_str(), Step() + Step() / 2.0f, 0);
+				}
+				return;
+			default:
+			{
+				// the ball is over
+				if (g_22f2 && t->MultiballCount)
+					return;
+				g_22f2 = 0;
+				Send(mode_timer, MessageCode::Ft1BlockerTimer, -1.0f);
+				if (t->ExtraBalls) // +0x144
+				{
+					t->ExtraBalls--;
+					auto player = t->CurrentPlayer;
+					Display(ft1_strings::Get(player >= 0 && player <= 2 ? 2011 + player : 2014), -1.0f, 0);
+					t->Message(MessageCode::ClearTiltLock, 0.0f); // FT1 1012
+				}
+				else
+				{
+					t->ChangeBallCount(t->BallCount - 1); // 15:b9c6
+					if (t->CurrentPlayer + 1 == t->PlayerCount && t->BallCount == 0)
+					{
+						if (t->LightGroup)
+							t->LightGroup->Message(MessageCode::TLightResetAndTurnOff, 0.0f);
+						SetInfoField(1);
+						MissionEvent(FT1Event79, nullptr);
+						if (t->LightGroup)
+							t->LightGroup->Message(FT1LightResetOverride, 0.0f);
+						return;
+					}
+					t->Message(MessageCode::ClearTiltLock, 0.0f);    // FT1 1012
+					Send(drain, MessageCode::Reset, 0.0f);             // FT1 1011 to the drain
+					t->Message(MessageCode::SwitchToNextPlayer, 0.0f); // FT1 1023
+				}
+				Send(s_launcher1, MessageCode::PlungerStartFeedTimer, 0.96f); // FT1 1017
+				SetInfoField(3);
+				MissionEvent(FT1Event79, nullptr);
+				if (t->LightGroup)
+					t->LightGroup->Message(FT1LightResetOverride, 0.0f);
+				return;
+			}
+			}
+			if (!value)
+				continue;
+			g_6544 += value;
+			if (g_6540)
+				continue;
+			Play(tabb84wave);
+			Display(Format(text, value).c_str(), Step(), 0);
+			return;
+		}
+	}
 	int g_22ee = 0;
 
 	// 23:d63c - state 17, tilt: kicker 2 and wall 610 off, kicker 1 on, oneway 12 off, the magnets and kickouts off,
