@@ -2172,10 +2172,214 @@ namespace
 
 	// ---- rule functions not translated yet ----
 	void Rule_98d7(MessageCode, TPinballComponent*) {} // TODO(23:98d7): s_oneway3
-	void Rule_472d(MessageCode, TPinballComponent*) {} // TODO(23:472d): a_bump1, a_bump2, a_bump3
-	void Rule_4448(MessageCode, TPinballComponent*) {} // TODO(23:4448): drain
-	void Rule_4152(MessageCode, TPinballComponent*) {} // TODO(23:4152): s_launcher1
-	void Rule_43b9(MessageCode, TPinballComponent*) {} // TODO(23:43b9): v_lite569
+	// 23:472d - the bumpers: in state 9 each hit 25,000 (tabb74) and every tenth the jackpot; in normal play every
+	// twelfth hit (a_bump1's MessageField) raises the bumpers' level (a_bump2's, up to 6; text 3001 with the new
+	// worth, tabb17); the hit scores the level's worth (tabb16)
+	void Rule_472d(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		switch (InfoField())
+		{
+		case 9:
+			if (++g_651c == 10)
+			{
+				g_651c = 0;
+				CollectJackpot(0.0f);
+				return;
+			}
+			ScorePoints(caller, 25000);
+			Play(tabb74wave);
+			return;
+		case 2:
+		{
+			auto count = Field(a_bump1) + 1;
+			if (count == 12)
+			{
+				Field(a_bump1) = 0;
+				auto level = Field(a_bump2);
+				if (level < 6)
+				{
+					Field(a_bump2) = ++level;
+					Display(Format(3001, caller ? caller->get_scoring(level) : 0).c_str(), 2.0f, 0);
+				}
+				Play(tabb17wave);
+			}
+			else
+			{
+				Play(tabb16wave);
+				Field(a_bump1) = count;
+			}
+			break;
+		}
+		default:
+			Play(tabb16wave);
+			break;
+		}
+		if (caller)
+			ScoreHit(caller, Field(a_bump2));
+	}
+
+	int g_653e = 0; // the drained ball: 1 lost, 3 saved (relaunched), 2 served again
+
+	// 23:4448 - the drain. A ball while the ball saver (v_lite569) is on comes back (text 3026); otherwise the
+	// mission system hears event 83; on the last ball of the last player (once, g_22f2) the game is tilted to let the
+	// kept balls go (state 17); in a multiball nothing more; a treasure just ended clears the coins and special
+	// treasures; then the end of the ball (state 16)
+	void Rule_4448(MessageCode code, TPinballComponent* caller)
+	{
+		auto t = control::TableG;
+		if (code == MessageCode::ControlCollision)
+		{
+			g_653e = 1;
+			if (t->TiltLockFlag)
+			{
+				Send(v_lite569, MessageCode::TLightResetAndTurnOff, 0.0f);
+				g_6522 = 0;
+			}
+			if (LightOn(v_lite569))
+			{
+				Display(ft1_strings::Get(3026), 2.0f, 0);
+				g_653e = 3;
+				// FT1 sends 1026 to the drain and sets table +0x5a: the ball is not lost. Here: the drain's timer stops
+				Send(drain, MessageCode::Reset, 0.0f);
+				Rule_4448(MessageCode::ControlTimerExpired, caller);
+				return;
+			}
+			MissionEvent(FT1Event83, caller);
+			if (!t->MultiballCount && !t->ExtraBalls && t->BallCount == 1 && t->CurrentPlayer + 1 == t->PlayerCount &&
+				!g_22f2)
+			{
+				g_22f2 = 1;
+				t->TiltLockFlag = 1;
+				for (auto flipper : {&a_flip1, &a_flip3, &a_flip2, &a_flip4})
+					Send(*flipper, MessageCode::SetTiltLock, 0.0f); // FT1 1011
+				SetInfoField(17);
+				MissionEvent(FT1Event79, nullptr);
+			}
+			if (t->MultiballCount && !g_22f2)
+			{
+				g_653e = 0;
+				Send(drain, MessageCode::Reset, 0.0f); // FT1 1026
+				return;
+			}
+			if (g_22f6)
+			{
+				g_22f6 = 0;
+				Send(coin_light_group, MessageCode::TLightResetAndTurnOff, 0.0f);
+				Send(special_treasure_light_group, MessageCode::TLightResetAndTurnOff, 0.0f);
+			}
+			if (InfoField() != 16 && InfoField() != 1)
+			{
+				SetInfoField(16);
+				MissionEvent(FT1Event79, nullptr);
+			}
+		}
+		else if (code == MessageCode::ControlTimerExpired)
+		{
+			if (g_22f2)
+				return;
+			if (g_653e == 3)
+				Send(s_launcher1, MessageCode::PlungerRelaunchBall, 0.96f); // FT1 1019
+			else if (g_653e == 2)
+				Send(s_launcher1, MessageCode::PlungerStartFeedTimer, 0.96f); // FT1 1017
+		}
+	}
+
+	// 23:4152 - s_launcher1: a new ball is served (FT1 1017) - from normal play (g_6522 0) back to the skill shot
+	// (state 3), the magnets off; the ball saver (v_lite569) on, v_lite544 lit, kicker 2 and wall 610 on, the fathoms
+	// out (multiplier 1), kicker 1 off, the plunger blocker back. The feed (FT1 1016): event 80, the ball saver's
+	// light as its stage has it. The plunger let go (FT1 1005, not tilted): the cannon fires
+	void Rule_4152(MessageCode code, TPinballComponent*)
+	{
+		auto t = control::TableG;
+		switch (code)
+		{
+		case MessageCode::PlungerStartFeedTimer:
+			g_22ee = 0;
+			if (!g_6522)
+			{
+				g_6518 = 0;
+				SetInfoField(3);
+				MissionEvent(FT1Event79, nullptr);
+				MagnetsOff();
+				Send(a_bloce, MessageCode::Ft1BlockerSetPosition, 0.0f);
+				Send(v_lite504, MessageCode::TLightResetAndTurnOff, 0.0f);
+				Send(v_lite505, MessageCode::TLightResetAndTurnOn, 0.0f);
+			}
+			Send(v_lite569, MessageCode::TLightResetAndTurnOn, 0.0f);
+			g_6522 = 3;
+			Send(v_lite544, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			for (auto part : {&a_kick2, &s_bwal610})
+				if (auto comp = part->GetComponent())
+					comp->ActiveFlag = 1;
+			Send(fathom_light_group, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Multiplier = 1; // table +0x122
+			Send(a_kick1, MessageCode::Ft1Deactivate, 0.0f); // FT1 76
+			Send(a_bloce, MessageCode::Ft1BlockerSetPosition, 0.0f);
+			Send(v_lite504, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(v_lite505, MessageCode::TLightResetAndTurnOn, 0.0f);
+			break;
+		case MessageCode::PlungerFeedBall:
+		{
+			MissionEvent(FT1Event80, nullptr);
+			auto light = v_lite569.Component;
+			if (g_6522 > 3 || g_6522 < 0)
+				g_6522 = 3;
+			switch (g_6522)
+			{
+			case 3:
+				if (light && !light->LightOnFlag) // +0x3a
+					Send(v_lite569, MessageCode::TLightResetAndTurnOn, 0.0f);
+				break;
+			case 2:
+				if (light && !light->ToggledOnFlag) // +0x40
+					Send(v_lite569, MessageCode::TLightTurnOnTimed, 10.0f);
+				break;
+			case 1:
+				if (light && !light->FlasherOnFlag) // +0x3c
+					Send(v_lite569, MessageCode::TLightFlasherStartTimed, 5.0f);
+				break;
+			default:
+				Send(v_lite569, MessageCode::TLightResetAndTurnOff, 0.0f);
+				break;
+			}
+			break;
+		}
+		case MessageCode::PlungerInputReleased: // FT1 1005
+			if (t->TiltLockFlag)
+				break;
+			Send(a_cannon, MessageCode::Ft1BlockerSetPosition, 3.0f);
+			Send(a_cannon, MessageCode::Ft1BlockerMoveTo, 0.0f);
+			break;
+		default:
+			break;
+		}
+	}
+
+	// 23:43b9 - v_lite569, the ball saver: on 10 s after the launch, flashing 5 s, then off (g_6522 3 -> 2 -> 1 -> 0)
+	void Rule_43b9(MessageCode code, TPinballComponent*)
+	{
+		if (code != MessageCode::ControlTimerExpired)
+			return;
+		switch (g_6522)
+		{
+		case 3:
+			g_6522 = 2;
+			Send(v_lite569, MessageCode::TLightTurnOnTimed, 10.0f);
+			break;
+		case 2:
+			g_6522 = 1;
+			Send(v_lite569, MessageCode::TLightFlasherStartTimed, 5.0f);
+			break;
+		case 1:
+			g_6522 = 0;
+			Send(v_lite569, MessageCode::TLightResetAndTurnOff, 0.0f);
+			break;
+		default:
+			break;
+		}
+	}
 	void Rule_5650(MessageCode, TPinballComponent*) {} // TODO(23:5650): a_rebo1
 	void Rule_56af(MessageCode, TPinballComponent*) {} // TODO(23:56af): a_rebo2
 	void Rule_4b23(MessageCode, TPinballComponent*) {} // TODO(23:4b23): a_drop5
