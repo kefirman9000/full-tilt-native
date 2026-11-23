@@ -3534,9 +3534,141 @@ namespace
 		}
 		Display(Format(3010, ScoreHit(caller, index)).c_str(), 2.0f + time, 0);
 	}
-	void Rule_8b78(MessageCode, TPinballComponent*) {} // TODO(23:8b78): a_roll9
-	void Rule_8d6c(MessageCode, TPinballComponent*) {} // TODO(23:8d6c): a_roll8
-	void Rule_8f60(MessageCode, TPinballComponent*) {} // TODO(23:8f60): a_roll6
+	// 23:0fa7 - a coin to pay later (text 3040)
+	float PendingCoin(float time)
+	{
+		time += 2.0f;
+		Display(ft1_strings::Get(3040), time, 0);
+		return time;
+	}
+
+	// 23:2657 - a treasure to pay later: the special treasures lit so far pick it (texts 3034-3039, lights 571-576
+	// blink 1 s), tabb84
+	float PendingTreasure(float time, int& slot)
+	{
+		static component_tag<TLight>* lights[6] = {&v_lite571, &v_lite572, &v_lite573, &v_lite574, &v_lite575, &v_lite576};
+		auto n = Send(special_treasure_light_group, MessageCode::TLightGroupGetOnCount, 0.0f);
+		slot = n;
+		auto k = n >= 0 && n <= 4 ? n : 5;
+		Send(*lights[k], MessageCode::TLightFlasherStartTimed, 1.0f);
+		time += 2.0f;
+		Display(ft1_strings::Get(3034 + k), time, 0);
+		Play(tabb84wave);
+		return time;
+	}
+
+	// 23:2801 - the bonus so far: popups x10,000, v_lite606's count x200,000, v_lite607's x250,000, special treasures
+	// x500,000, all times the fathoms lit
+	int BonusSoFar()
+	{
+		int total = g_6524 * 10000 + Field(v_lite606) * 200000 + Field(v_lite607) * 250000 +
+			Field(special_treasure_light_group) * 500000;
+		return total * Send(fathom_light_group, MessageCode::TLightGroupGetOnCount, 0.0f);
+	}
+
+	// 23:289e - state 8's wind rollovers: the next award to pay later (g_6528): three coins, two treasures, the bonus
+	// so far (3041), the table's bonus (3042), an extra ball (3043), then coins again
+	float PendingAward(float time)
+	{
+		switch (g_6528++)
+		{
+		case 3:
+			time = PendingTreasure(time, g_652c);
+			break;
+		case 4:
+			time = PendingTreasure(time, g_652e);
+			break;
+		case 5:
+			time += 2.0f;
+			Display(ft1_strings::Get(3041), time, 0);
+			g_6530 = BonusSoFar();
+			break;
+		case 6:
+			time += 2.0f;
+			Display(ft1_strings::Get(3042), time, 0);
+			g_6534 = control::TableG->BonusScore; // +0x132
+			break;
+		case 7:
+			time += 2.0f;
+			Display(ft1_strings::Get(3043), time, 0);
+			g_6538 = 1;
+			break;
+		default:
+			time = PendingCoin(time);
+			g_652a++;
+			break;
+		}
+		return time;
+	}
+
+	// 23:8b78 / 8d6c / 8f60 - the wind rollovers (a_roll9: east wind 1, lights 616/615, text 3011; a_roll8: east wind
+	// 2, 619/618, 3011; a_roll6: west wind, 623/624, 3012). State 5: the first light blinking is a Bermuda shot, else
+	// 50,000 (tabb12). State 8 (the east winds): an award to pay later. Else tabb12, the wind lights (0, 1, more lit:
+	// the first, both, all flash on in normal play) give the score 0 / 1 / 2 with its text
+	void WindRollover(MessageCode code, TPinballComponent* caller, component_tag<TLight>& light1,
+	                  component_tag<TLight>& light2, component_tag<TLightGroup>& group, int text, bool pending)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		auto state = InfoField();
+		if (state == 5)
+		{
+			if (light1.Component && light1.Component->FlasherOnFlag)
+			{
+				BermudaShot();
+				return;
+			}
+			SpecialAddScore(caller, 50000);
+			Play(tabb12wave);
+			return;
+		}
+		if (state == 8 && pending)
+		{
+			PendingAward(0.0f);
+			return;
+		}
+		Play(tabb12wave);
+		bool normal = state == 2;
+		auto flash = [](component_tag_base& part) {
+			Send(part, MessageCode::TLightFlasherStartTimedThenStayOn, 2.0f);
+		};
+		int index;
+		switch (Send(group, MessageCode::TLightGroupGetOnCount, 0.0f))
+		{
+		case 0:
+			if (normal)
+				flash(light1);
+			index = 0;
+			break;
+		case 1:
+			if (normal)
+			{
+				flash(light1);
+				flash(light2);
+			}
+			index = 1;
+			break;
+		default:
+			if (normal)
+				flash(group);
+			index = 2;
+			break;
+		}
+		Display(Format(text, ScoreHit(caller, index)).c_str(), 2.0f, 0);
+	}
+
+	void Rule_8b78(MessageCode c, TPinballComponent* p)
+	{
+		WindRollover(c, p, v_lite616, v_lite615, east_wind_1_light_group, 3011, true);
+	}
+	void Rule_8d6c(MessageCode c, TPinballComponent* p)
+	{
+		WindRollover(c, p, v_lite619, v_lite618, east_wind_2_light_group, 3011, true);
+	}
+	void Rule_8f60(MessageCode c, TPinballComponent* p)
+	{
+		WindRollover(c, p, v_lite623, v_lite624, west_wind_light_group, 3012, false);
+	}
 	void Rule_9218(MessageCode, TPinballComponent*) {} // TODO(23:9218): a_roll12
 	void Rule_9347(MessageCode, TPinballComponent*) {} // TODO(23:9347): a_roll11
 	void Rule_9476(MessageCode, TPinballComponent*) {} // TODO(23:9476): a_roll10
