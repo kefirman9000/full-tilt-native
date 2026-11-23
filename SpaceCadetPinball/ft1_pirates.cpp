@@ -2975,15 +2975,18 @@ namespace
 	// its text. Another shot scored (FT1 77): the combo lights out
 	void IslandRamp(MessageCode code, TPinballComponent* caller, component_tag<TLightGroup>& combo,
 	                component_tag<TLight>& combo1, component_tag<TLight>& combo2, component_tag<TLightGroup>& island,
-	                component_tag<TLight>& island1, component_tag<TLight>& island2, int text)
+	                component_tag<TLight>& island1, component_tag<TLight>& island2, int text,
+	                MessageCode made = MessageCode::Ft1RampExit3, void (*normalPlay)() = nullptr)
 	{
 		if (code == LastHitMovedOn)
 		{
 			Send(combo, MessageCode::TLightResetAndTurnOff, 2.0f);
 			return;
 		}
-		if (code != MessageCode::Ft1RampExit3)
+		if (code != made)
 			return;
+		if (normalPlay && InfoField() == 2)
+			normalPlay();
 		if (InfoField() == 5)
 		{
 			if (island1.Component && island1.Component->FlasherOnFlag)
@@ -3366,9 +3369,54 @@ namespace
 		Display(Format(3003, ScoreHit(caller, 0)).c_str(), 2.0f, 0);
 		Play(tabb40wave);
 	}
-	void Rule_7fb9(MessageCode, TPinballComponent*) {} // TODO(23:7fb9): s_trip3
-	void Rule_8287(MessageCode, TPinballComponent*) {} // TODO(23:8287): s_trip8
-	void Rule_858e(MessageCode, TPinballComponent*) {} // TODO(23:858e): s_trip11
+	// 23:7fb9 / 8287 - the orbits (s_trip3: combo lights 631/632, orbit lights 600/601; s_trip8: 634/635, 608/609),
+	// as the island ramps but on the tripwire (text 3008). s_trip8 in normal play also lights v_lite527, the lane
+	// sinks' fourth bit, maybe a coin
+	void Rule_7fb9(MessageCode code, TPinballComponent* caller)
+	{
+		IslandRamp(code, caller, left_orbit_combo_light_group, v_lite631, v_lite632, left_orbit_light_group, v_lite600,
+		           v_lite601, 3008, MessageCode::ControlCollision);
+	}
+
+	void Rule_8287(MessageCode code, TPinballComponent* caller)
+	{
+		IslandRamp(code, caller, right_orbit_combo_light_group, v_lite634, v_lite635, right_orbit_light_group,
+		           v_lite608, v_lite609, 3008, MessageCode::ControlCollision, [] {
+			           Send(v_lite527, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			           Field(v_lite524) |= 8;
+			           LaneSinks(0.0f);
+		           });
+	}
+
+	// 23:1d66 - the five wind lane lights (533-537) all lit: they flash out, a map piece
+	float LaneWinds(float time)
+	{
+		for (auto light : {&v_lite533, &v_lite534, &v_lite535, &v_lite536, &v_lite537})
+			if (!LightOn(*light))
+				return time;
+		Send(lane_winds_light_group, MessageCode::TLightTurnOff, 0.0f);
+		Send(lane_winds_light_group, MessageCode::TLightFlasherStartTimedThenStayOff, 1.0f);
+		return MapPieceAward(time);
+	}
+
+	// 23:858e - s_trip11: in normal play its wind light (533) and the five checked (a map piece and nothing else when
+	// all lit, else the score and the picture "5"); otherwise the score; tabb43
+	void Rule_858e(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		if (InfoField() == 2)
+		{
+			Send(v_lite533, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			if (LaneWinds(0.0f) != 0.0f)
+				return;
+			ScoreHit(caller, 0);
+			Display("5", 2.0f, 1); // ds:0x2236
+		}
+		else
+			ScoreHit(caller, 0);
+		Play(tabb43wave);
+	}
 	void Rule_865a(MessageCode, TPinballComponent*) {} // TODO(23:865a): a_roll3
 	void Rule_8751(MessageCode, TPinballComponent*) {} // TODO(23:8751): a_roll5
 	void Rule_883b(MessageCode, TPinballComponent*) {} // TODO(23:883b): a_roll1
