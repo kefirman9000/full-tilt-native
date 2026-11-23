@@ -171,6 +171,8 @@ DK_TAG(TSound, tabc55wave)
 DK_TAG(TLight, v_lite14)
 DK_TAG(TLightGroup, well_light_group)
 DK_TAG(TSink, a_sink19)
+DK_TAG(TSink, a_sink9)
+DK_TAG(TSound, tabc16wave)
 DK_TAG(TLight, v_lite11)
 DK_TAG(TLight, v_lite12)
 DK_TAG(TLight, v_lite13)
@@ -3016,10 +3018,208 @@ DK_TAG(TSound, tabc58wave)
 		ScoreHit(caller, 0);
 	}
 
+	int SinkTime() // a_sink9's hold time (+0x70), whole seconds
+	{
+		auto sink = a_sink9.Component;
+		return sink ? static_cast<int>(sink->TimerTime) : 0;
+	}
+
+	// 23:4634 - after sink 1 or 2 has the ball. Normal play: v_lite63's MessageField counts; every second time gem
+	// v_lite22 lights and a quest may start (the ball stays), otherwise sink 1 lets a ball go; tabc16 and the other
+	// sink lets one go. Quest 5: tabc16, the other sink lets one go (its light flashes), v_lite91 counts (to 10) and
+	// a_sink2's MessageField steps: x100,000 (text 3029) twice, then the jackpot (lit 3rd time: v_lite91 flashes)
+	void SinkPair(TPinballComponent* caller)
+	{
+		auto other = [&]()
+		{
+			Play(tabc16wave);
+			if (caller == a_sink1.GetComponent())
+			{
+				Send(a_sink2, MessageCode::TSinkResetTimer, -1.0f);
+				Send(v_lite65, MessageCode::TLightFlasherStartTimed, 1.0f);
+			}
+			else
+			{
+				Send(a_sink1, MessageCode::TSinkResetTimer, -1.0f);
+				Send(v_lite66, MessageCode::TLightFlasherStartTimed, 1.0f);
+			}
+		};
+		switch (InfoField())
+		{
+		case 2:
+		{
+			auto& count = Field(v_lite63);
+			if (++count >= 2)
+			{
+				count = 0;
+				Send(v_lite22, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+				g_2270 = 1;
+				if (AllGems())
+					return;
+				g_2270 = 0;
+				if (QuestRunningStart())
+					return;
+				Send(a_sink1, MessageCode::TSinkResetTimer, -1.0f);
+				return;
+			}
+			Play(tabc16wave);
+			Send(caller == a_sink1.GetComponent() ? a_sink2 : a_sink1, MessageCode::TSinkResetTimer, -1.0f);
+			return;
+		}
+		case 5:
+		{
+			other();
+			if (Field(v_lite91) < 10)
+				Field(v_lite91)++;
+			int step = Field(a_sink2);
+			if (step == 0 || step == 1 || step == 2)
+			{
+				if (step == 2)
+					Send(v_lite91, MessageCode::TLightFlasherStartTimed, -1.0f);
+				step++;
+				auto score = ScorePoints(caller, Field(v_lite91) * 100000);
+				Display(Format(3029, score).c_str(), 2.0f, 0);
+			}
+			else
+			{
+				CollectJackpot(0.0f, true);
+				Send(v_lite91, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+				step = 0;
+			}
+			Field(a_sink2) = step;
+			return;
+		}
+		default:
+			other();
+			return;
+		}
+	}
+
+	// 23:4931 / 23:4afc - sinks 1 and 2. In the hurry-up (state 3) the lights 63/64 go out, the quest resumes (event
+	// 81) and the ball goes at once. Otherwise their lights flash for a_sink9's time (sink 1: 63 on, 63 and 66;
+	// sink 2: 64 on, 64 and 65; quest 5 only 66 / 65), the sink's score, then SinkPair
+	void HurryUpSink(TPinballComponent* caller)
+	{
+		Send(v_lite63, MessageCode::TLightResetAndTurnOff, 0.0f);
+		Send(v_lite64, MessageCode::TLightResetAndTurnOff, 0.0f);
+		SetInfoField(Field(mode_timer));
+		MissionEvent(FT1Event81, nullptr);
+		Field(mode_timer) = -1;
+		caller->Message(MessageCode::TSinkResetTimer, -1.0f);
+	}
+
+	void Sink1Rule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		auto time = static_cast<float>(SinkTime());
+		switch (InfoField())
+		{
+		case 3:
+			HurryUpSink(caller);
+			return;
+		case 5:
+			break;
+		default:
+			Send(v_lite63, MessageCode::TLightTurnOn, 0.0f);
+			Send(v_lite63, MessageCode::TLightFlasherStartTimed, time);
+			break;
+		}
+		Send(v_lite66, MessageCode::TLightFlasherStartTimed, time);
+		ScoreHit(caller, 0);
+		SinkPair(caller);
+	}
+
+	void Sink2Rule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		auto time = static_cast<float>(SinkTime());
+		switch (InfoField())
+		{
+		case 3:
+			HurryUpSink(caller);
+			return;
+		case 5:
+			break;
+		default:
+			Send(v_lite64, MessageCode::TLightTurnOn, 0.0f);
+			Send(v_lite64, MessageCode::TLightFlasherStartTimed, time);
+			break;
+		}
+		Send(v_lite65, MessageCode::TLightFlasherStartTimed, time);
+		ScoreHit(caller, 0);
+		SinkPair(caller);
+	}
+
+	// 23:4c97 - sink 4, the well. In the well and spell quest (state 8) the spell chosen at the spots (a_sink4's
+	// MessageField) is cast: 0 extra ball, 1 multiplier x5 (3045), 2 the weapons (3044), 3 the jackpot, 4 1,000,000
+	// (3046); then another spell is picked at random among the other four and named 4 s (3039-3043) and the ball goes.
+	// Normal play: one time in four a quest starts (the ball stays), otherwise an armor piece. Then the ball goes and
+	// the well and spell lights flash
+	void Sink4Rule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		auto random4 = []() { return Rand15() * 4 / 0x8000; }; // 1:21cd
+		if (InfoField() == 8)
+		{
+			int spell = Field(a_sink4);
+			switch (spell)
+			{
+			case 0:
+				AddExtraBall(2.0f);
+				break;
+			case 1:
+				for (auto light : {&v_lite33, &v_lite34, &v_lite35, &v_lite36})
+					Send(*light, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+				Multiplier = 5;
+				Display(ft1_strings::Get(3045), 2.0f, 0);
+				break;
+			case 2:
+				EnableKickback(false);
+				Play(tabc24wave);
+				CenterPostRule(MessageCode::TBlockerEnable, a_center_post.GetComponent());
+				BloceRule(MessageCode::TBlockerEnable, a_bloce.GetComponent());
+				Display(ft1_strings::Get(3044), 2.0f, 0);
+				break;
+			case 3:
+				CollectJackpot(0.0f, true);
+				break;
+			default:
+				ScorePoints(caller, 1000000);
+				Display(ft1_strings::Get(3046), 2.0f, 0);
+				spell = 4;
+				break;
+			}
+			int next = random4(); // one of the four others, in order
+			if (next >= 3)
+				next = 3;
+			next = next >= spell ? next + 1 : next;
+			Field(a_sink4) = next;
+			Display(ft1_strings::Get(3039 + next), 4.0f, 0);
+			Send(a_sink4, MessageCode::TSinkResetTimer, -1.0f);
+			return;
+		}
+		bool armor = true;
+		if (InfoField() == 2 && random4() == 1)
+		{
+			armor = false;
+			g_2270 = 1;
+			if (!QuestRunningStart())
+			{
+				g_2270 = 0;
+				Send(a_sink4, MessageCode::TSinkResetTimer, -1.0f);
+			}
+		}
+		if (armor)
+			AwardRandomArmor();
+		Send(a_sink4, MessageCode::TSinkResetTimer, -1.0f);
+		Send(well_light_group, MessageCode::TLightFlasherStartTimed, 1.0f);
+		Send(spell_spot_light_group, MessageCode::TLightFlasherStartTimed, 1.0f);
+	}
+
 	// ---- rule functions not translated yet (their components do nothing yet) ----
-	void Rule_4931(MessageCode, TPinballComponent*) {} // TODO(23:4931): a_sink1
-	void Rule_4afc(MessageCode, TPinballComponent*) {} // TODO(23:4afc): a_sink2
-	void Rule_4c97(MessageCode, TPinballComponent*) {} // TODO(23:4c97): a_sink4
 	void Rule_53e7(MessageCode, TPinballComponent*) {} // TODO(23:53e7): a_ramp103
 	void Rule_55ee(MessageCode, TPinballComponent*) {} // TODO(23:55ee): a_ramp6
 	void Rule_5701(MessageCode, TPinballComponent*) {} // TODO(23:5701): s_oneway5
@@ -3136,9 +3336,9 @@ DK_TAG(TSound, tabc58wave)
 		{RuleTags[26], {Spot30Rule, 1, Scores26}},
 		{RuleTags[27], {Spot31Rule, 1, Scores27}},
 		{RuleTags[28], {CenterPostRule, 0, nullptr}},
-		{RuleTags[29], {Rule_4931, 1, Scores29}},
-		{RuleTags[30], {Rule_4afc, 1, Scores30}},
-		{RuleTags[31], {Rule_4c97, 0, nullptr}},
+		{RuleTags[29], {Sink1Rule, 1, Scores29}},
+		{RuleTags[30], {Sink2Rule, 1, Scores30}},
+		{RuleTags[31], {Sink4Rule, 0, nullptr}},
 		{RuleTags[32], {Rule_53e7, 0, nullptr}},
 		{RuleTags[33], {Rule_55ee, 0, nullptr}},
 		{RuleTags[34], {Rule_5701, 5, Scores34}},
