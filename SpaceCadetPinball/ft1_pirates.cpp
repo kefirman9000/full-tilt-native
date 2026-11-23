@@ -3669,11 +3669,80 @@ namespace
 	{
 		WindRollover(c, p, v_lite623, v_lite624, west_wind_light_group, 3012, false);
 	}
-	void Rule_9218(MessageCode, TPinballComponent*) {} // TODO(23:9218): a_roll12
-	void Rule_9347(MessageCode, TPinballComponent*) {} // TODO(23:9347): a_roll11
-	void Rule_9476(MessageCode, TPinballComponent*) {} // TODO(23:9476): a_roll10
-	void Rule_95a5(MessageCode, TPinballComponent*) {} // TODO(23:95a5): a_flip1
-	void Rule_9624(MessageCode, TPinballComponent*) {} // TODO(23:9624): a_flip2
+	// 23:1f56 - the next fathom lit (FT1 45), its picture 2 s later, the multiplier follows
+	float NextFathom(float time)
+	{
+		static const char* pictures[] = {":", ":=<", ":><", ":?<", ":@<", ":A<", ":B<"}; // ds:0x2240
+		Send(fathom_light_group, MessageCode::TLightGroupResetAndTurnOn, 1.0f);
+		auto n = Send(fathom_light_group, MessageCode::TLightGroupGetOnCount, 0.0f);
+		time += 2.0f;
+		Display(pictures[std::max(0, std::min(6, n))], time, 1);
+		Multiplier = n + 1; // +0x122
+		return time;
+	}
+
+	// 23:9138 - the island lanes: all three top and all three bottom lights lit: they flash out, the next fathom,
+	// tabb88 and the second score; else tabb44 and the first
+	void IslandLanes(TPinballComponent* caller)
+	{
+		if (Send(island_lane_top_light_group, MessageCode::TLightGroupGetOnCount, 0.0f) == 3 &&
+			Send(island_lane_bottom_light_group, MessageCode::TLightGroupGetOnCount, 0.0f) == 3)
+		{
+			Send(island_lane_top_light_group, MessageCode::TLightFlasherStartTimedThenStayOff, 1.0f);
+			Send(island_lane_bottom_light_group, MessageCode::TLightFlasherStartTimedThenStayOff, 1.0f);
+			NextFathom(0.0f);
+			Play(tabb88wave);
+			ScoreHit(caller, 1);
+		}
+		else
+		{
+			Play(tabb44wave);
+			ScoreHit(caller, 0);
+		}
+	}
+
+	// 23:9218 / 9347 / 9476 - the island lane rollovers (top lights 538-540, bottom 541-543): the top light first
+	// (tabb44, the score), then the bottom one and the lanes checked; both lit: they blink 2 s, tabb44, the score
+	void IslandLaneRule(MessageCode code, TPinballComponent* caller, component_tag<TLight>& top,
+	                    component_tag<TLight>& bottom)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		if (!LightOn(top))
+		{
+			Play(tabb44wave);
+			ScoreHit(caller, 0);
+			Send(top, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			return;
+		}
+		if (!LightOn(bottom))
+		{
+			Send(bottom, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			IslandLanes(caller);
+			return;
+		}
+		Send(top, MessageCode::TLightFlasherStartTimed, 2.0f);
+		Send(bottom, MessageCode::TLightFlasherStartTimed, 2.0f);
+		Play(tabb44wave);
+		ScoreHit(caller, 0);
+	}
+
+	void Rule_9218(MessageCode c, TPinballComponent* p) { IslandLaneRule(c, p, v_lite538, v_lite541); }
+	void Rule_9347(MessageCode c, TPinballComponent* p) { IslandLaneRule(c, p, v_lite539, v_lite542); }
+	void Rule_9476(MessageCode c, TPinballComponent* p) { IslandLaneRule(c, p, v_lite540, v_lite543); }
+
+	// 23:95a5 / 9624 - a flipper pressed (FT1 1): the wind lane and island lane lights move one place (FT1 28)
+	void FlipperRule(MessageCode code, TPinballComponent*)
+	{
+		if (code != MessageCode::TFlipperExtend)
+			return;
+		Send(lane_winds_light_group, MessageCode::TLightGroupStepBackward, 0.0f);
+		Send(island_lane_top_light_group, MessageCode::TLightGroupStepBackward, 0.0f);
+		Send(island_lane_bottom_light_group, MessageCode::TLightGroupStepBackward, 0.0f);
+	}
+
+	void Rule_95a5(MessageCode c, TPinballComponent* p) { FlipperRule(c, p); }
+	void Rule_9624(MessageCode c, TPinballComponent* p) { FlipperRule(c, p); }
 	void Rule_971d(MessageCode, TPinballComponent*) {} // TODO(23:971d): a_kick2
 	void Rule_96a3(MessageCode, TPinballComponent*) {} // TODO(23:96a3): v_lite544
 	void Rule_9813(MessageCode, TPinballComponent*) {} // TODO(23:9813): s_oneway7
