@@ -75,8 +75,15 @@ the disassembly was annotated with part names, text ids and helper names and the
 - End of ball (0x432110): missions x 200,000, ship landed 100,000, abductees x 20,000, artifacts x 10,000,
   encasements x 100,000, plus a held bonus; "Total Bonus". The multiplier goes back to 1.
 
+## Skill shot and shoot again
+- 0x4309a4 on a new ball (1017): the cornfield holes are labelled 75,000 / Multiball / 250,000 (Extra Ball at the
+  center on the last ball when no extra ball was had). 0x430368 pays it: corn_sink_2's multiball adds a ball out of
+  s_sink02 (500,000). 0x42c5d4: any other part but the shooter lane, the cornfield and the drain ends it.
+- v_lite81 is the shoot again light (0x42cbdc(seconds): steady, flashing for the last 5 s; 0x42ccb4 time left).
+  a_gate01 (0x42d784) closing behind the ray gun starts 15 s, once a ball (0x448b1c); the 600,000 landing step
+  30 s; each multiball ball at least 4 s. The drain (0x43289c) serves the same ball again while it is lit.
+
 ## Not ported yet
-- The skill shot (plunger rule 0x4300ac, 1004-1019; skill shot light v_lite81), cornfield multiball (0x4309a4 on
-  reset: "[ Multiball" / "[ 250,000" / "[ 75,000" at the cornfield holes), the levitation path animation
+- The levitation path animation
   (0x4435d8), the gate behind the ray gun (s_onew01 raises a_gate01 for 2 s), music changes per mission
   (tabe1-8 MIDI), the loop diverter (0x431608).

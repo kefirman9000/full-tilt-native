@@ -23,6 +23,13 @@ Captain Hero's rules were recovered from hero.exe (ft2/hero_rules.md has the det
   **bumper boost** (both upper holes), the **downtown ramp combo**, and the original **end-of-ball bonus**:
   battles, captures and buildings.
 
+**Alien Daze in 0.12.0**
+- The cornfield skill shot: until the launched ball hits anything else, the three cornfield holes pay 75,000,
+  Multiball (a second ball, 500,000) or 250,000. On the last ball without an extra ball, the center hole gives an
+  extra ball instead.
+- The shoot again light (v_lite81): 15 seconds once each ball after it leaves the ray gun, 30 seconds with the
+  600,000 landing, and at least 4 seconds with every multiball ball. A drain while it is lit serves the ball again.
+
 **Fixes in 0.12.0**
 - Captain Hero: Mr. Pling's walls are only up during his battle, as on the original. Left up, they knocked the ball
   from one upper hole straight into the other, over and over.

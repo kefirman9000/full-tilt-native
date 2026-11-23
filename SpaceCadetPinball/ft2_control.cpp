@@ -1417,6 +1417,8 @@ namespace
 			show("BALL SAVED", 2.5f);
 			return; // same ball again: the drain timer serves it
 		}
+		if (ft2_alien::Active() && ft2_alien::SaveBall())
+			return; // Alien Daze's shoot again light
 		if (ft2_mad::Active() && ft2_mad::SaveBall())
 			return; // Mad Scientist's shoot again light or ball recapture
 

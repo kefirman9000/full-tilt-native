@@ -103,6 +103,10 @@ namespace
 		bool BonusHold = false;
 		long long HeldBonus = 0;
 		bool ExtraBallLit = false, ExtraBallGiven = false;
+		int SkillShot = 0;
+		bool SkillShotPending = true; // a new ball: the skill shot starts when it leaves the ray gun          // 0x448a6c: 1 cornfield skill shot live, 2 the center hole gives an extra ball
+		int SaveOnTimer = 0, SaveFlashTimer = 0; // 0x448aa4 / 0x448aa8: the shoot again light v_lite81
+		bool SaveUsed = false;      // 0x448b1c: the launch save was given this ball
 		bool CornLeft = false, CornRight = false;
 		bool StunReady = false, StunHolding = false;
 		int StunTimer = 0, StunAimIndex = 0, StunAimTimer = 0;
@@ -179,6 +183,50 @@ namespace
 			timer::kill(timerId);
 		timerId = 0;
 	}
+
+	// ---- Shoot again (v_lite81, 0x42cbdc): a drain while it is lit gives the ball back ----
+	void save_off(int, void*)
+	{
+		as.SaveFlashTimer = 0;
+		light("v_lite81", false);
+	}
+
+	void save_flash(int, void*)
+	{
+		as.SaveOnTimer = 0;
+		flash("v_lite81");
+		as.SaveFlashTimer = timer::set(5.0f, nullptr, save_off);
+	}
+
+	float save_left()
+	{
+		if (as.SaveOnTimer)
+			return 5.0f + 1.0f; // still steady: at least the 5 s flashing to come
+		return as.SaveFlashTimer ? 1.0f : 0.0f;
+	}
+
+	// steady for all but the last 5 seconds, which flash
+	void ball_save(float seconds)
+	{
+		kill(as.SaveOnTimer);
+		kill(as.SaveFlashTimer);
+		if (seconds <= 0 || table()->TiltLockFlag)
+		{
+			light("v_lite81", false);
+			return;
+		}
+		if (seconds > 5.0f)
+		{
+			light("v_lite81", true);
+			as.SaveOnTimer = timer::set(seconds - 5.0f, nullptr, save_flash);
+		}
+		else
+		{
+			flash("v_lite81");
+			as.SaveFlashTimer = timer::set(seconds, nullptr, save_off);
+		}
+	}
+
 
 	// A text of Alien.exe, cleaned for display: '>' is an apostrophe, '`' and '[' are padding and icons, '@' an X
 	std::string text(int id, const std::string& fallback)
@@ -718,6 +766,8 @@ namespace
 		static const int steps[4] = {75000, 150000, 300000, 600000};
 		wave(as.LandingStep >= 3 ? "wave32" : "wave31");
 		award(steps[std::min(as.LandingStep, 3)]);
+		if (as.LandingStep >= 3)
+			ball_save(30.0f); // 0x431185: the 600,000 landing lights the shoot again for 30 s
 		if (as.LandingStep < 3)
 			as.LandingStep++;
 		light("v_lite72", as.LandingStep >= 1);
@@ -740,6 +790,8 @@ namespace
 			                 exit->ThrowSpeedMult2);
 			t->MultiballCount++;
 		}
+		if (save_left() < 4.0f) // 0x4317e3: each released ball comes with at least 4 s of shoot again
+			ball_save(4.0f);
 		as.ToRelease--;
 		if (as.ToRelease > 0)
 			as.ReleaseTimer = timer::set(1.0f, nullptr, release_next);
@@ -1033,9 +1085,84 @@ namespace
 			choose(as.Choice == 2); // no answer: keep the mission going / decline the trade
 	}
 
+	// ---- Cornfield skill shot (0x4309a4 on a new ball, 0x430368 award, 0x42c5d4 off) ----
+	void skill_shot_off()
+	{
+		as.SkillShot = 0;
+		light("v_lite66", false);
+		light("v_lite65", as.ExtraBallLit);
+	}
+
+	void skill_shot(TPinballComponent* caller)
+	{
+		auto t = table();
+		if (is(caller, "corn_sink_1"))
+		{
+			wave("wave17");
+			award(75000);
+			show(text(3263, "75,000"), 2.5f);
+		}
+		else if (is(caller, "corn_sink_2"))
+		{
+			if (as.SkillShot == 2) // the last ball: an extra ball instead
+			{
+				wave("wave27");
+				t->ExtraBalls++;
+				as.ExtraBallGiven = true;
+				show(text(3109, "Extra Ball"), 3.0f);
+			}
+			else // a second ball comes out of s_sink02
+			{
+				wave("wave28");
+				show(text(3006, "Multiball"), 3.0f);
+				if (auto sink = dynamic_cast<TSink*>(part("s_sink02")))
+					if (auto ball = t->AddBall(sink->BallPosition))
+					{
+						ball->throw_ball(&sink->BallThrowDirection, sink->ThrowAngleMult, sink->ThrowSpeedMult1,
+						                 sink->ThrowSpeedMult2);
+						t->MultiballCount++;
+					}
+				if (save_left() < 4.0f)
+					ball_save(4.0f);
+			}
+			award(500000);
+		}
+		else
+		{
+			wave("wave17");
+			award(250000);
+			show(text(3264, "250,000"), 2.5f);
+		}
+		skill_shot_off();
+	}
+
+	// 0x4309a4 (a new ball): until the ball hits something else, the cornfield holes are a skill shot: 75,000,
+	// Multiball (Extra Ball on the last ball without one) and 250,000
+	void arm_skill_shot()
+	{
+		auto t = table();
+		if (!as.SkillShotPending)
+			return;
+		as.SkillShotPending = false;
+		if (t->MultiballCount > 1 || as.MissionOn)
+			return;
+		as.SkillShot = (t->BallCount <= 1 && t->ExtraBalls == 0 && !as.ExtraBallGiven) ? 2 : 1;
+		flash("v_lite66");
+		if (as.SkillShot == 2)
+			flash("v_lite65");
+		show("Skill Shot: Cornfield  " + text(3263, "75,000") + " / " +
+			(as.SkillShot == 2 ? text(3109, "Extra Ball") : text(3006, "Multiball")) + " / " + text(3264, "250,000"),
+			4.0f);
+	}
+
 	// ---- Cornfield (corn_sink_1-3, 0x4309a4) ----
 	bool cornfield(TPinballComponent* caller)
 	{
+		if (as.SkillShot)
+		{
+			skill_shot(caller);
+			return true;
+		}
 		bool sink2 = is(caller, "corn_sink_2"), sink3 = is(caller, "corn_sink_3");
 		if (as.MissionOn && as.NextMission == CropCircles) // 0x430510
 		{
@@ -1105,6 +1232,13 @@ namespace
 	{
 		as.MissionsThisBall = as.Abductees = as.Artifacts = as.Encasements = 0;
 		as.LandedThisBall = false;
+		as.SaveUsed = false;
+		as.SkillShot = 0;
+		as.SkillShotPending = true;
+		kill(as.SaveOnTimer);
+		kill(as.SaveFlashTimer);
+		light("v_lite81", false);
+		light("v_lite66", false);
 	}
 }
 
@@ -1130,6 +1264,8 @@ bool ft2_alien::Active()
 void ft2_alien::NewGame()
 {
 	auto t = as.Table;
+	kill(as.SaveOnTimer);
+	kill(as.SaveFlashTimer);
 	as = AlienState{};
 	as.Table = t;
 	set_beam(false);
@@ -1137,7 +1273,7 @@ void ft2_alien::NewGame()
 	update_gear_lights();
 	update_sockets();
 	stop_bigfoot();
-	for (auto name : {"v_lite84", "v_lite85", "v_lite65", "v_lite69", "v_lite68", "v_lite67", "v_lite79",
+	for (auto name : {"v_lite81", "v_lite66", "v_lite84", "v_lite85", "v_lite65", "v_lite69", "v_lite68", "v_lite67", "v_lite79",
 	                  "v_lite78", "v_lite77", "v_lite72", "v_lite71", "v_lite70"})
 		light(name, false);
 	if (auto stun = dynamic_cast<TKickout*>(part("stun_kickout")))
@@ -1163,6 +1299,18 @@ void ft2_alien::PlayerChanged()
 void ft2_alien::Launch()
 {
 	set_beam(as.BeamOn);
+	arm_skill_shot();
+}
+
+// 0x43289c: the last ball drains while the shoot again light is on: the same ball is served again
+bool ft2_alien::SaveBall()
+{
+	if (!Active() || save_left() <= 0)
+		return false;
+	as.SaveUsed = true;
+	ball_save(0);
+	show("SHOOT AGAIN", 2.5f);
+	return true;
 }
 
 // 0x432110: missions x 200,000, ship landed 100,000, abductees x 20,000, artifacts x 10,000, encasements x 100,000
@@ -1259,6 +1407,20 @@ bool ft2_alien::Collision(TPinballComponent* caller)
 	if (pb::DevDebug)
 		printf("FT2DBG alien hit %s\n", caller->GroupName ? caller->GroupName : "?");
 	auto mission = as.MissionOn ? as.NextMission : -1;
+
+	// 0x42c5d4: anything but the cornfield, the shooter lane and the drain ends the skill shot
+	if (as.SkillShot && !is(caller, "corn_sink_1") && !is(caller, "corn_sink_2") && !is(caller, "corn_sink_3") &&
+		!is(caller, "plunger") && !is(caller, "s_onew01") && !is(caller, "drain"))
+		skill_shot_off();
+	// 0x42d7e0 / 0x42d784: the ball leaving the ray gun shuts the gate behind it, and the first time each ball
+	// that lights the shoot again for 15 seconds
+	if (is(caller, "s_onew01"))
+		arm_skill_shot();
+	if (is(caller, "s_onew01") && !as.SaveUsed)
+	{
+		as.SaveUsed = true;
+		ball_save(17.0f); // the gate stays up 2 s before it starts the 15 s
+	}
 
 	// bumpers a_bmpr01-04 (0x42dd74)
 	if (is(caller, "a_bmpr01") || is(caller, "a_bmpr02") || is(caller, "a_bmpr03") || is(caller, "a_bmpr04"))

@@ -21,6 +21,8 @@ public:
 	static void NewGame();
 	static void PlayerChanged();
 	static void EndOfBall(); // before the next ball: bonus count
+	// The last ball drained: true when the shoot again light gives it back
+	static bool SaveBall();
 	static void Frame();     // every frame: the stun magnet's pull
 	static std::vector<std::string> Status();
 };
