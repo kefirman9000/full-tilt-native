@@ -46,11 +46,11 @@ flags off; new game and player switch keep the jackpots per player. (This engine
 500,000 for all Full Tilt tables; the original does not.)
 
 ## Text box (18:1270 Display)
-`Display(text, seconds, font)`: font 0 the message font (`pbmsg_ft`), 1 the picture font (`font1` in DRAGON.DAT:
-dragon, Jackpot, gems, weapons). Many Dragon's Keep messages are single glyphs of the picture font stored in the data
-segment (ds:2223 "$" ... ds:2241 "3"; dragon eggs ds:21d2 + n*9 = n "#"). Not supported by this engine yet: it has
-one message font. The picture font's glyphs do not map from character 32 at the `font1` group; how the original loads
-it still has to be read.
+`Display(text, seconds, font)`: font 0 the message font (`pbmsg_ft`), 1 the picture font: `font2`, glyphs from
+character 32 like the message font (DRAGON.DAT 20 glyphs, ' '..'3': dragon, Jackpot, gems, weapons; PIRATES.DAT 52,
+' '..'S': the skill wheel, cannon doors, treasure chest, fathom gauge, map). Pictures are single characters or short
+strings of them in the data segment (Dragon ds:2223 "$" ... ds:2241 "3", eggs ds:21d2 + n*9; Pirates ds:2210..227a).
+This engine: score::picture_fontp, a TTextBoxMessage carries its own font; the side panel's dot display skips them.
 
 ## Blockers (15:3da3)
 Not the on/off blocker of this engine: an animated, multi-position part (Dragon's Keep's sword, rocks, the dragon's

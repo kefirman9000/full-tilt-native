@@ -21,7 +21,7 @@ public:
 	~TTextBox() override;
 	int Message(MessageCode code, float value) override;
 	void Clear(bool lowPriorityOnly = false);
-	void Display(const char* text, float time, bool lowPriority = false);
+	void Display(const char* text, float time, bool lowPriority = false, score_msg_font_type* font = nullptr);
 	void DrawImGui();
 
 private:
@@ -34,5 +34,5 @@ private:
 	static void TimerExpired(int timerId, void* caller);
 
 	void Draw();
-	LayoutResult LayoutTextLine(char* textStart) const;
+	LayoutResult LayoutTextLine(char* textStart, score_msg_font_type* font) const;
 };

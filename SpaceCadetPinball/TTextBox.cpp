@@ -104,12 +104,12 @@ void TTextBox::Clear(bool lowPriorityOnly)
 		Draw();
 }
 
-void TTextBox::Display(const char* text, float time, bool lowPriority)
+void TTextBox::Display(const char* text, float time, bool lowPriority, score_msg_font_type* font)
 {
 	if (!text)
 		return;
 
-	if (CurrentMessage && !strcmp(text, PreviousMessage->Text))
+	if (CurrentMessage && !strcmp(text, PreviousMessage->Text) && PreviousMessage->Font == font)
 	{
 		PreviousMessage->Refresh(time);
 		if (PreviousMessage == CurrentMessage)
@@ -128,6 +128,7 @@ void TTextBox::Display(const char* text, float time, bool lowPriority)
 			Clear();
 
 		auto message = new TTextBoxMessage(text, time, lowPriority);
+		message->Font = font;
 		if (message->Text)
 		{
 			if (CurrentMessage)
@@ -234,14 +235,15 @@ void TTextBox::Draw()
 			return;
 		}
 
+		auto font = CurrentMessage->Font ? CurrentMessage->Font : Font;
 		std::vector<LayoutResult> lines{};
 		auto textHeight = 0;
-		for (auto text = CurrentMessage->Text; ; textHeight += Font->Height)
+		for (auto text = CurrentMessage->Text; ; textHeight += font->Height)
 		{
-			if (!text[0] || textHeight + Font->Height > Height)
+			if (!text[0] || (textHeight && textHeight + font->Height > Height))
 				break;
 
-			auto line = LayoutTextLine(text);
+			auto line = LayoutTextLine(text, font);
 			if (line.Start == line.End)
 				break;
 			lines.push_back(line);
@@ -259,7 +261,7 @@ void TTextBox::Draw()
 				offX += (Width - line.Width) / 2;
 			for (auto text = line.Start; text < line.End; text++)
 			{
-				auto charBmp = Font->Chars[*text & 0x7F];
+				auto charBmp = font->Chars[*text & 0x7F];
 				if (charBmp)
 				{
 					auto height = charBmp->Height;
@@ -269,15 +271,15 @@ void TTextBox::Draw()
 						                                 0);
 					else
 						gdrv::copy_bitmap(render::vscreen, width, height, offX, offY, charBmp, 0, 0);
-					offX += charBmp->Width + Font->GapWidth;
+					offX += charBmp->Width + font->GapWidth;
 				}
 			}
-			offY += Font->Height;
+			offY += font->Height;
 		}
 	}
 }
 
-TTextBox::LayoutResult TTextBox::LayoutTextLine(char* textStart) const
+TTextBox::LayoutResult TTextBox::LayoutTextLine(char* textStart, score_msg_font_type* font) const
 {
 	auto lineWidth = 0, wordWidth = 0;
 	char *wordBoundary = nullptr, *textEnd;
@@ -287,11 +289,11 @@ TTextBox::LayoutResult TTextBox::LayoutTextLine(char* textStart) const
 		if (!maskedChar || maskedChar == '\n')
 			break;
 
-		auto charBmp = Font->Chars[maskedChar];
+		auto charBmp = font->Chars[maskedChar];
 		if (!charBmp)
 			continue;
 
-		auto width = lineWidth + charBmp->Width + Font->GapWidth;
+		auto width = lineWidth + charBmp->Width + font->GapWidth;
 		if (width > Width)
 		{
 			if (wordBoundary)

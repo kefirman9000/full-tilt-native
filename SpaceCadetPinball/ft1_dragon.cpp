@@ -292,11 +292,10 @@ DK_TAG(TSound, tabc58wave)
 	// TTextBox::Display of the Full Tilt 1 engine (18:1270) has a third argument, the font: 0 the message font,
 	// 1 the picture font (font1 in DRAGON.DAT: dragon, Jackpot, gems, weapons).
 	// TODO(font): this engine draws every message with the message font; the picture font is not loaded yet.
-	void Display(const char* text, float time, int font)
+	void Display(const char* text, float time, int font) // font 1: the picture font (font2)
 	{
-		(void)font;
 		if (info_text_box.Component)
-			info_text_box.Component->Display(text, time);
+			info_text_box.Component->Display(text, time, false, font == 1 ? score::picture_fontp : nullptr);
 	}
 
 	bool LightOn(component_tag<TLight>& light) // +0x3a / +0x40 / +0x3c

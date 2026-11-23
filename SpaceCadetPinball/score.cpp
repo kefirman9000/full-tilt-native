@@ -10,6 +10,7 @@
 
 
 score_msg_font_type* score::msg_fontp;
+score_msg_font_type* score::picture_fontp;
 
 int score::init()
 {
@@ -65,14 +66,19 @@ scoreStruct* score::dup(scoreStruct* score, int scoreIndex)
 
 void score::load_msg_font(LPCSTR lpName)
 {
+	msg_fontp = load_font(lpName);
+}
+
+score_msg_font_type* score::load_font(LPCSTR lpName)
+{
 	if (!pb::record_table)
-		return;
+		return nullptr;
 
 	int groupIndex = pb::record_table->record_labeled(lpName);
 	if (groupIndex < 0)
-		return;
+		return nullptr;
 
-	msg_fontp = new score_msg_font_type();
+	auto msg_fontp = new score_msg_font_type();
 
 	// FT font has multiple resolutions
 	auto gapArray = reinterpret_cast<int16_t*>(pb::record_table->field(groupIndex, FieldTypes::ShortArray));
@@ -90,11 +96,14 @@ void score::load_msg_font(LPCSTR lpName)
 			msg_fontp->Height = bmp->Height;
 		msg_fontp->Chars[charIndex] = bmp;
 	}
+	return msg_fontp;
 }
 
 
 void score::unload_msg_font()
 {
+	delete picture_fontp;
+	picture_fontp = nullptr;
 	if (msg_fontp)
 	{
 		delete msg_fontp;

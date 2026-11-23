@@ -25,10 +25,12 @@ class score
 {
 public:
 	static score_msg_font_type* msg_fontp;
+	static score_msg_font_type* picture_fontp; // Full Tilt 1 tables: font2, pictures from character 32
 	static int init();
 	static scoreStruct* create(LPCSTR fieldName, gdrv_bitmap8* renderBgBmp);
 	static scoreStruct* dup(scoreStruct* score, int scoreIndex);
 	static void load_msg_font(LPCSTR lpName);
+	static score_msg_font_type* load_font(LPCSTR lpName);
 	static void unload_msg_font();
 	static void erase(scoreStruct* score, int blitFlag);
 	static void set(scoreStruct* score, int value);

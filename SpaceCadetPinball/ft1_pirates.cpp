@@ -341,11 +341,10 @@ namespace
 	}
 
 	// 18:1270: the info box's Display; the third argument is the font (1 = the picture font, not loaded yet)
-	void Display(const char* text, float time, int font)
+	void Display(const char* text, float time, int font) // font 1: the picture font (font2)
 	{
-		(void)font;
 		if (info_text_box.Component)
-			info_text_box.Component->Display(text, time);
+			info_text_box.Component->Display(text, time, false, font == 1 ? score::picture_fontp : nullptr);
 	}
 
 	void InfoClear() // 18:0b0c

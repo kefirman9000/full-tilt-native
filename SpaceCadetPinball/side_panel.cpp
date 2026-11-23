@@ -268,6 +268,8 @@ namespace
 			if (!box || !box->CurrentMessage)
 				continue;
 			auto message = box->CurrentMessage;
+			if (message->Font)
+				continue; // a picture (Full Tilt 1 picture font), not text
 			if (message->Time == -1.0f ? pb::game_mode != GameModes::InGame : message->TimeLeft() > 0.0f)
 				return message->Text;
 		}

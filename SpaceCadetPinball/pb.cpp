@@ -64,6 +64,10 @@ int pb::init()
 	get_rc_int(Msg::TextBoxUseBitmapFont, &useBmpFont);
 	if (useBmpFont)
 		score::load_msg_font("pbmsg_ft");
+	// Full Tilt 1 tables show pictures in the info box (a dragon, gems, treasure, the fathom gauge): font2, its glyphs
+	// from character 32 like the message font's. Only with the message font: the system font has no such glyphs
+	if (useBmpFont && FullTiltMode)
+		score::picture_fontp = score::load_font("font2");
 
 	if (!record_table)
 		return 1;
