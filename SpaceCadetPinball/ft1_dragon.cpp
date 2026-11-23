@@ -171,6 +171,10 @@ DK_TAG(TSound, tabc55wave)
 DK_TAG(TLight, v_lite14)
 DK_TAG(TLightGroup, well_light_group)
 DK_TAG(TSink, a_sink19)
+DK_TAG(TSound, tabc18wave)
+DK_TAG(TSound, tabc09wave)
+DK_TAG(TSound, tabc20wave)
+DK_TAG(TSound, tabc22wave)
 DK_TAG(TSink, a_sink9)
 DK_TAG(TSound, tabc16wave)
 DK_TAG(TLight, v_lite11)
@@ -3219,12 +3223,130 @@ DK_TAG(TSound, tabc58wave)
 		Send(spell_spot_light_group, MessageCode::TLightFlasherStartTimed, 1.0f);
 	}
 
+	// 23:53e7 - a_ramp103 made (FT1 86): tabc18 (not in the gem quest); with v_lite67 still lit the ramp's
+	// MessageField counts the combo (to 9), else it starts again; v_lite67 lights for 20 s; the D diverter goes back
+	// unless a quest uses it; v_lite119 flashes; 50,000 per combo step (+50,000) to the score and the jackpot; in
+	// normal play gem v_lite24 and text 3006 unless that was the last gem
+	void Ramp103Rule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != FT1Code86)
+			return;
+		if (InfoField() != 4)
+			Play(tabc18wave);
+		if (LightOn(v_lite67))
+		{
+			if (caller->MessageField < 9)
+				caller->MessageField++;
+		}
+		else
+			caller->MessageField = 0;
+		Send(v_lite67, MessageCode::TLightTurnOn, 0.0f);
+		Send(v_lite67, MessageCode::TLightFlasherStartTimedThenStayOff, 20.0f);
+		if (!(InfoField() == 6 || InfoField() == 13))
+		{
+			Send(v_lite125, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(v_lite126, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			Send(a_dvtrda, MessageCode::TGateEnable, 0.0f);
+			Send(a_dvtrdb, MessageCode::TGateDisable, 0.0f);
+		}
+		Send(v_lite119, MessageCode::TLightFlasherStartTimed, 2.0f);
+		if (InfoField() != 4)
+		{
+			auto points = caller->MessageField * 50000 + 50000;
+			ScorePoints(caller, points);
+			AddJackpot(points);
+		}
+		if (InfoField() == 2)
+		{
+			Send(v_lite24, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			if (!AllGems())
+				Display(ft1_strings::Get(3006), 2.0f, 0);
+		}
+	}
+
+	// 23:55ee - a_ramp6 made (FT1 86): in normal play gem v_lite26 (nothing more if that was the last gem); with
+	// v_lite70 still lit an armor piece, else tabc09; v_lite70 lights for 10 s
+	void Ramp6Rule(MessageCode code, TPinballComponent*)
+	{
+		if (code != FT1Code86)
+			return;
+		bool last = false;
+		if (InfoField() == 2)
+		{
+			Send(v_lite26, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			last = AllGems();
+		}
+		if (!last)
+		{
+			if (LightOn(v_lite70))
+				AwardRandomArmor();
+			else
+				Play(tabc09wave);
+		}
+		Send(v_lite70, MessageCode::TLightTurnOn, 0.0f);
+		Send(v_lite70, MessageCode::TLightFlasherStartTimedThenStayOff, 10.0f);
+	}
+
+	// 23:5701 - s_oneway5: in normal play the D diverter is set (v_lite125 lit); except in the gem quest tabc20, the
+	// score by v_lite68's count (to 4), super jackpot +200,000 (text 3076), v_lite68 lit for 10 s. 70 clears the count
+	void Oneway5Rule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code == MessageCode::ControlTimerExpired)
+		{
+			Field(v_lite68) = 0;
+			return;
+		}
+		if (code != MessageCode::ControlCollision)
+			return;
+		if (InfoField() == 4)
+			return;
+		if (InfoField() == 2)
+		{
+			Send(v_lite125, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			Send(v_lite126, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(a_dvtrda, MessageCode::TGateDisable, 0.0f);
+			Send(a_dvtrdb, MessageCode::TGateEnable, 0.0f);
+		}
+		Play(tabc20wave);
+		ScoreHit(caller, Field(v_lite68));
+		if (Field(v_lite68) < 4)
+			Field(v_lite68)++;
+		AddSuperJackpot(200000);
+		Display(Format(3076, 200000).c_str(), 2.0f, 0);
+		Send(v_lite68, MessageCode::TLightTurnOn, 0.0f);
+		Send(v_lite68, MessageCode::TLightFlasherStartTimedThenStayOff, 10.0f);
+	}
+
+	// 23:58d4 - a_accl1: tabc22 and its score (the second with v_lite32 lit), not in the gem quest
+	void AcceleratorRule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision || InfoField() == 4)
+			return;
+		Play(tabc22wave);
+		ScoreHit(caller, LightOn(v_lite32) ? 1 : 0);
+	}
+
+	// 23:5970 - s_trip1 / s_trip2 (and v_lite69's timer): the score by v_lite69's count (to 3), text 3007 with it,
+	// v_lite69 lit for 20 s; when v_lite69's time is up (70) the count starts again
+	void Trip12Rule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code == MessageCode::ControlTimerExpired)
+		{
+			Field(v_lite69) = 0;
+			return;
+		}
+		if (code != MessageCode::ControlCollision)
+			return;
+		auto points = ScoreHit(caller, Field(v_lite69));
+		auto text = Format(3007, points);
+		if (Field(v_lite69) < 3)
+			Field(v_lite69)++;
+		Send(v_lite69, MessageCode::TLightTurnOn, 0.0f);
+		Send(v_lite69, MessageCode::TLightFlasherStartTimedThenStayOff, 20.0f);
+		Display(text.c_str(), 2.0f, 0);
+	}
+
 	// ---- rule functions not translated yet (their components do nothing yet) ----
-	void Rule_53e7(MessageCode, TPinballComponent*) {} // TODO(23:53e7): a_ramp103
-	void Rule_55ee(MessageCode, TPinballComponent*) {} // TODO(23:55ee): a_ramp6
-	void Rule_5701(MessageCode, TPinballComponent*) {} // TODO(23:5701): s_oneway5
-	void Rule_58d4(MessageCode, TPinballComponent*) {} // TODO(23:58d4): a_accl1
-	void Rule_5970(MessageCode, TPinballComponent*) {} // TODO(23:5970): s_trip1, s_trip2, v_lite69
 	void Rule_5a62(MessageCode, TPinballComponent*) {} // TODO(23:5a62): a_roll7
 	void Rule_5b25(MessageCode, TPinballComponent*) {} // TODO(23:5b25): a_roll5
 	void Rule_5b69(MessageCode, TPinballComponent*) {} // TODO(23:5b69): a_roll2
@@ -3339,13 +3461,13 @@ DK_TAG(TSound, tabc58wave)
 		{RuleTags[29], {Sink1Rule, 1, Scores29}},
 		{RuleTags[30], {Sink2Rule, 1, Scores30}},
 		{RuleTags[31], {Sink4Rule, 0, nullptr}},
-		{RuleTags[32], {Rule_53e7, 0, nullptr}},
-		{RuleTags[33], {Rule_55ee, 0, nullptr}},
-		{RuleTags[34], {Rule_5701, 5, Scores34}},
-		{RuleTags[35], {Rule_58d4, 2, Scores35}},
-		{RuleTags[36], {Rule_5970, 4, Scores36}},
-		{RuleTags[37], {Rule_5970, 4, Scores37}},
-		{RuleTags[38], {Rule_5970, 0, nullptr}},
+		{RuleTags[32], {Ramp103Rule, 0, nullptr}},
+		{RuleTags[33], {Ramp6Rule, 0, nullptr}},
+		{RuleTags[34], {Oneway5Rule, 5, Scores34}},
+		{RuleTags[35], {AcceleratorRule, 2, Scores35}},
+		{RuleTags[36], {Trip12Rule, 4, Scores36}},
+		{RuleTags[37], {Trip12Rule, 4, Scores37}},
+		{RuleTags[38], {Trip12Rule, 0, nullptr}},
 		{RuleTags[39], {Rule_5a62, 1, Scores39}},
 		{RuleTags[40], {Rule_5b25, 1, Scores40}},
 		{RuleTags[41], {Rule_5b69, 1, Scores41}},
