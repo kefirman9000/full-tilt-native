@@ -2886,6 +2886,192 @@ namespace
 	void Rule_6eef(MessageCode c, TPinballComponent* p) { OrbitSinkRule(c, p, v_mlite110, left_orbit_light_group, a_sink12); }
 	void Rule_7061(MessageCode c, TPinballComponent* p) { OrbitSinkRule(c, p, v_mlite104, right_orbit_light_group, a_sink9); }
 
+	// 23:2f08 - a random award: a map piece, the next treasure, a coin or an extra ball
+	float RandomAward2(float time)
+	{
+		switch (Rand15() * 4 / 0x8000)
+		{
+		case 0: return MapPieceAward(time);
+		case 1: return TreasureAward(time);
+		case 2: return AwardCoin(time);
+		default: return ExtraBallAward(time);
+		}
+	}
+
+	// 23:71d3 - the three cannon sinks' lights (v_lite547's MessageField) as a picture ("333" .. "444", 2 s); all
+	// three: they flash out, cleared, the second score, else the first; tabb08, the score (text 3003, 4 s), the
+	// blockers c, f, g away, sink 8 lets go
+	void CannonSinks(TPinballComponent* caller)
+	{
+		static const char* pictures[8] = {"333", "334", "343", "344", "433", "434", "443", "444"}; // ds:0x2216
+		Display(pictures[Field(v_lite547) & 7], 2.0f, 1);
+		int points;
+		if ((Field(v_lite547) & 7) == 7)
+		{
+			Lights({&v_lite547, &v_lite546, &v_lite545}, MessageCode::TLightFlasherStartTimedThenStayOff, 1.0f);
+			Field(v_lite547) = 0;
+			points = ScoreHit(caller, 1);
+		}
+		else
+			points = ScoreHit(caller, 0);
+		Play(tabb08wave);
+		Display(Format(3003, points).c_str(), 4.0f, 0);
+		for (auto blocker : {&a_blocc, &a_blocf, &a_blocg})
+			Send(*blocker, MessageCode::Ft1BlockerSetPosition, -1.0f);
+		ReleaseSink8(-1.0f);
+	}
+
+	// 23:734c / 742b / 750e - sinks 5, 6, 7 (lights 547, 546, 545; bits 1, 2, 4). State 7: the light blinking
+	// there gives a random award, else tabb08; sink 8 lets go. Else their bit and light, then all three checked
+	void CannonSinkRule(MessageCode code, TPinballComponent* caller, component_tag<TLight>& light, int bit)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		if (InfoField() == 7)
+		{
+			if (light.Component && light.Component->FlasherOnFlag) // +0x3c
+				RandomAward2(0.0f);
+			else
+				Play(tabb08wave);
+			ReleaseSink8(-1.0f);
+			return;
+		}
+		Field(v_lite547) |= bit;
+		Send(light, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+		CannonSinks(caller);
+	}
+
+	void Rule_734c(MessageCode c, TPinballComponent* p) { CannonSinkRule(c, p, v_lite547, 1); }
+	void Rule_742b(MessageCode c, TPinballComponent* p) { CannonSinkRule(c, p, v_lite546, 2); }
+	void Rule_750e(MessageCode c, TPinballComponent* p) { CannonSinkRule(c, p, v_lite545, 4); }
+
+	// 23:321d - state 5 (Bermuda), a ramp whose light flashes: the wind lights move on (g_651e); the next of
+	// 125,000 / 250,000 / 500,000 / 1,000,000 (text 3003, tabb12), after the fourth the jackpot
+	void BermudaShot()
+	{
+		static const int worth[4] = {125000, 250000, 500000, 1000000}; // ds:0x37cc
+		WindLights(false);
+		g_651e++;
+		WindLights(true);
+		if (g_651c < 4)
+		{
+			auto points = SpecialAddScore(nullptr, worth[std::max(0, g_651c)]);
+			Display(Format(3003, points).c_str(), 2.0f, 0);
+			Play(tabb12wave);
+			g_651c++;
+		}
+		else
+		{
+			CollectJackpot(0.0f);
+			g_651c = 0;
+		}
+	}
+
+	// 23:75f1 / 78dd - the island ramps (a_ramp8: combo lights 629/630, island lights 603/604, text 3004; a_ramp5:
+	// 626/627, the right wind lights 611/612, text 3005). Made (FT1 86): in state 5 the light flashing there is a
+	// Bermuda shot, else 50,000 (tabb12); otherwise tabb12, the combo lights (0, 1, 2, more lit before: the score
+	// 0, 3, 6, 9 up) and the island lights (in normal play; 0, 1, more: +0, +1, +2) light up 2 s, that score with
+	// its text. Another shot scored (FT1 77): the combo lights out
+	void IslandRamp(MessageCode code, TPinballComponent* caller, component_tag<TLightGroup>& combo,
+	                component_tag<TLight>& combo1, component_tag<TLight>& combo2, component_tag<TLightGroup>& island,
+	                component_tag<TLight>& island1, component_tag<TLight>& island2, int text)
+	{
+		if (code == LastHitMovedOn)
+		{
+			Send(combo, MessageCode::TLightResetAndTurnOff, 2.0f);
+			return;
+		}
+		if (code != MessageCode::Ft1RampExit3)
+			return;
+		if (InfoField() == 5)
+		{
+			if (island1.Component && island1.Component->FlasherOnFlag)
+			{
+				BermudaShot();
+				return;
+			}
+			SpecialAddScore(caller, 50000);
+			Play(tabb12wave);
+			return;
+		}
+		Play(tabb12wave);
+		auto flash = [](component_tag_base& part) {
+			Send(part, MessageCode::TLightFlasherStartTimedThenStayOn, 2.0f);
+		};
+		int index;
+		switch (Send(combo, MessageCode::TLightGroupGetOnCount, 0.0f))
+		{
+		case 0:
+			flash(combo1);
+			index = 0;
+			break;
+		case 1:
+			flash(combo1);
+			flash(combo2);
+			index = 3;
+			break;
+		case 2:
+			flash(combo);
+			index = 6;
+			break;
+		default:
+			flash(combo);
+			index = 9;
+			break;
+		}
+		bool normal = InfoField() == 2;
+		switch (Send(island, MessageCode::TLightGroupGetOnCount, 0.0f))
+		{
+		case 0:
+			if (normal)
+				flash(island1);
+			break;
+		case 1:
+			if (normal)
+			{
+				flash(island1);
+				flash(island2);
+			}
+			index++;
+			break;
+		default:
+			if (normal)
+				flash(island);
+			index += 2;
+			break;
+		}
+		Display(Format(text, ScoreHit(caller, index)).c_str(), 2.0f, 0);
+	}
+
+	void Rule_75f1(MessageCode code, TPinballComponent* caller)
+	{
+		if (code == MessageCode::Ft1RampEnter) // FT1 84
+		{
+			Send(a_blocg, MessageCode::Ft1BlockerSetPosition, -1.0f);
+			return;
+		}
+		IslandRamp(code, caller, left_island_combo_light_group, v_lite629, v_lite630, left_island_light_group,
+		           v_lite603, v_lite604, 3004);
+	}
+
+	void Rule_78dd(MessageCode code, TPinballComponent* caller)
+	{
+		IslandRamp(code, caller, right_island_combo_light_group, v_lite626, v_lite627, right_wind_light_group,
+		           v_lite611, v_lite612, 3005);
+	}
+
+	// 23:7bab - a_ramp13: line 2 (FT1 85) its score (text 3006, tabb41); made (FT1 86) blocker c away
+	void Rule_7bab(MessageCode code, TPinballComponent* caller)
+	{
+		if (code == MessageCode::Ft1RampExit2)
+		{
+			Display(Format(3006, ScoreHit(caller, 0)).c_str(), 2.0f, 0);
+			Play(tabb41wave);
+		}
+		else if (code == MessageCode::Ft1RampExit3)
+			Send(a_blocc, MessageCode::Ft1BlockerSetPosition, -1.0f);
+	}
+
 	void Rule_98d7(MessageCode, TPinballComponent*) {} // TODO(23:98d7): s_oneway3
 	// 23:472d - the bumpers: in state 9 each hit 25,000 (tabb74) and every tenth the jackpot; in normal play every
 	// twelfth hit (a_bump1's MessageField) raises the bumpers' level (a_bump2's, up to 6; text 3001 with the new
@@ -3095,12 +3281,6 @@ namespace
 			break;
 		}
 	}
-	void Rule_734c(MessageCode, TPinballComponent*) {} // TODO(23:734c): a_sink5
-	void Rule_742b(MessageCode, TPinballComponent*) {} // TODO(23:742b): a_sink6
-	void Rule_750e(MessageCode, TPinballComponent*) {} // TODO(23:750e): a_sink7
-	void Rule_75f1(MessageCode, TPinballComponent*) {} // TODO(23:75f1): a_ramp8
-	void Rule_78dd(MessageCode, TPinballComponent*) {} // TODO(23:78dd): a_ramp5
-	void Rule_7bab(MessageCode, TPinballComponent*) {} // TODO(23:7bab): a_ramp13
 	void Rule_7c6f(MessageCode, TPinballComponent*) {} // TODO(23:7c6f): s_trip1
 	void Rule_7cf1(MessageCode, TPinballComponent*) {} // TODO(23:7cf1): s_hole19
 	void Rule_7dc4(MessageCode, TPinballComponent*) {} // TODO(23:7dc4): s_trip2
