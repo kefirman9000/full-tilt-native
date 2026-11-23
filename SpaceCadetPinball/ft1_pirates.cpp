@@ -20,6 +20,7 @@
 #include "TPinballTable.h"
 #include "TSink.h"
 #include "TRollover.h"
+#include "TLightRollover.h"
 #include "TPopupTarget.h"
 #include "TSoloTarget.h"
 #include "THole.h"
@@ -1486,7 +1487,123 @@ namespace
 			break;
 		}
 	}
-	void State8(MessageCode, TPinballComponent*) {}  // TODO(23:a93e)
+	// 23:21e2 - sinks 9 and 12 on; the next multiball shot (g_651e 0-3, then back to the first) flashes its lights;
+	// returns its light sweep (5, 2, 6, 3, else 1)
+	int NextMultiShot()
+	{
+		for (auto sink : {&a_sink9, &a_sink12})
+			if (auto comp = sink->GetComponent())
+				comp->ActiveFlag = 1;
+		auto flash = [](component_tag_base& part) { Send(part, MessageCode::TLightFlasherStartTimed, -1.0f); };
+		switch (g_651e++)
+		{
+		case 0:
+			flash(v_mlite110);
+			flash(left_orbit_light_group);
+			return 5;
+		case 1:
+			flash(v_mlite107);
+			flash(v_lite525);
+			flash(v_lite520);
+			return 2;
+		case 2:
+			flash(v_mlite104);
+			flash(right_orbit_light_group);
+			return 6;
+		case 3:
+			flash(v_mlite106);
+			flash(v_lite526);
+			flash(v_lite521);
+			return 3;
+		default:
+			g_651e = 0;
+			flash(v_mlite44);
+			flash(v_lite524);
+			flash(v_lite519);
+			return 1;
+		}
+	}
+
+	// 23:a93e - state 8 (text 3061, tabb3, tabb59): the plunger blockers away, 300,000, the multiball lights out,
+	// tripwires 3 and 8 off keeping the orbit lights lit (their MessageFields), the orbits and combos out; the next
+	// multiball shot flashes and its light sweep runs; 30.68 s (countdown text 3053). Light rollovers add 20,000 to
+	// the jackpot. Its end: tripwires 3 and 8 back on with their orbit lights
+	void State8(MessageCode code, TPinballComponent* cmp)
+	{
+		switch (code)
+		{
+		case FT1Event79:
+			MissionStart();
+			for (auto blocker : {&a_blocc, &a_blocf, &a_blocg})
+				Send(*blocker, MessageCode::Ft1BlockerSetPosition, -1.0f);
+			ScorePoints(nullptr, 300000);
+			Helper211c();
+			for (auto trip : {&s_trip3, &s_trip8})
+				if (auto comp = trip->GetComponent())
+					comp->ActiveFlag = 0;
+			Field(s_trip3) = Send(left_orbit_light_group, MessageCode::TLightGroupGetOnCount, 0.0f);
+			Field(s_trip8) = Send(right_orbit_light_group, MessageCode::TLightGroupGetOnCount, 0.0f);
+			for (auto group : {&left_orbit_light_group, &right_orbit_light_group, &left_orbit_combo_light_group,
+			                   &right_orbit_combo_light_group})
+				Send(*group, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(v_lite520, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(v_lite521, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(light_sweeps, MessageCode::Ft1LightSweepStart, static_cast<float>(NextMultiShot()));
+			PlayMusic(3); // g_22d6
+			Play(tabb59wave);
+			Display(ft1_strings::Get(3061), -1.0f, 0);
+			break;
+		case MessageCode::ControlCollision:
+			if (dynamic_cast<TLightRollover*>(cmp)) // 1020
+				AddJackpot(20000);
+			break;
+		case FT1Event83:
+			Send(mode_timer, MessageCode::Ft1BlockerTimer, -1.0f);
+			MissionEvent(FT1Event82, nullptr);
+			break;
+		case FT1Event82:
+			Helper211c();
+			Helper21be();
+			MissionEnd();
+			Field(v_lite606)++;
+			Send(a_bloce, MessageCode::Ft1BlockerSetPosition, 0.0f);
+			Send(v_lite504, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(v_lite505, MessageCode::TLightResetAndTurnOn, 0.0f);
+			Send(v_lite519, MessageCode::TLightResetAndTurnOff, 0.0f);
+			for (auto trip : {&s_trip3, &s_trip8})
+				if (auto comp = trip->GetComponent())
+					comp->ActiveFlag = 1;
+			Send(left_orbit_light_group, MessageCode::TLightTurnOff, 0.0f);
+			Send(right_orbit_light_group, MessageCode::TLightTurnOff, 0.0f);
+			Send(left_orbit_light_group, MessageCode::TLightGroupToggleSplitIndex, static_cast<float>(Field(s_trip3)));
+			Send(right_orbit_light_group, MessageCode::TLightGroupToggleSplitIndex,
+			     static_cast<float>(Field(s_trip8))); // FT1 49
+			break;
+		case FT1Event80:
+		{
+			auto left = Send(mode_timer, MessageCode::Ft1TimerTimeLeft, 0.0f);
+			if (left)
+				Display(Format(3053, left / 1000).c_str(), 0.5f, 0);
+			break;
+		}
+		case MessageCode::ControlTimerExpired:
+			if (dynamic_cast<TTimer*>(cmp))
+			{
+				if (cmp == mode_timer.GetComponent())
+					MissionEvent(FT1Event82, nullptr);
+			}
+			else if (dynamic_cast<TLightSweeps*>(cmp))
+			{
+				if (!g_6520)
+					ReleaseSink8(0.0f);
+				Send(mode_timer, MessageCode::Ft1BlockerTimer, 30.68f);
+				MissionEvent(FT1Event80, nullptr);
+			}
+			break;
+		default:
+			break;
+		}
+	}
 	void State9(MessageCode, TPinballComponent*) {}  // TODO(23:c5cc)
 	void State10(MessageCode, TPinballComponent*) {} // TODO(23:c84b)
 	void State11(MessageCode, TPinballComponent*) {} // TODO(23:cd08)
