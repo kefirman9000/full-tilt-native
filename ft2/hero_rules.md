@@ -61,6 +61,14 @@ Modes: 1 Quake, 2 Mad Scientist, 3 Mystman, 4 Slime Man, 5 Mr. Pling (`MODE_ELAS
   (10 s).
 - Pop bumpers (0x4022f8 / 0x4023c8): 1,000, +1,000 every 8 hits up to 5,000.
 
+## Slingshots (0x402a74, 0x4029e4 / 0x402a2c, 0x401260)
+- Each slingshot's picture is six lights (lslng1of 1on 2of 2on 3of 3on, rslng...), one on at a time. A hit (750)
+  shows the next ("on") one and 0.2 s later the one after that, the next look at rest; hits in those 0.2 s only
+  score. Sounds wave19.. in turn (five).
+- Wire ramp ends: s_elev01 / s_elev02 are holes on the ramp layers that drop the ball to the playfield (z 3.6) by
+  the flippers. The hole now takes the ball off the ramp plane when it catches it (it used to keep rolling at wire
+  height).
+
 ## s_kout01's powers (0x406294, 0x4061f0)
 - Each s_kout01 hit gives the next of three powers, 75,000 and its text for 3 s (3034-3036, wave33): Super
   Strength (0x405dc0: the pops score x3, 0x405de8 in the score helper 0x401a38), Super Speed (0x405ef8: the pops'
