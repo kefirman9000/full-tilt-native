@@ -88,6 +88,19 @@ int TKickout::Message(MessageCode code, float value)
 		if (NotSomeFlag)
 			ActiveFlag = 0;
 		break;
+	case MessageCode::Ft1Activate: // Full Tilt 1 code 75 (15:5c23)
+		ActiveFlag = 1;
+		break;
+	case MessageCode::Ft1Deactivate: // FT1 76: off, a ball it holds goes at once
+		ActiveFlag = 0;
+		if (BallCaputeredFlag)
+		{
+			if (Timer)
+				timer::kill(Timer);
+			Timer = 0;
+			TimerExpired(0, this);
+		}
+		break;
 	case MessageCode::Reset:
 		if (BallCaputeredFlag)
 		{

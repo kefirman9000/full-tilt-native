@@ -21,6 +21,11 @@ TKickback::TKickback(TPinballTable* table, int groupIndex): TCollisionComponent(
 
 int TKickback::Message(MessageCode code, float value)
 {
+	if (code == MessageCode::Ft1Activate || code == MessageCode::Ft1Deactivate) // Full Tilt 1 codes 75 / 76
+	{
+		ActiveFlag = code == MessageCode::Ft1Activate;
+		return 0;
+	}
 	if ((code == MessageCode::SetTiltLock || code == MessageCode::Reset) && Timer)
 	{
 		timer::kill(Timer);

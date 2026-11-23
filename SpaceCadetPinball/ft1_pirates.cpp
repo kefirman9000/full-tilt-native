@@ -25,6 +25,7 @@
 #include "TRamp.h"
 #include "TSound.h"
 #include "TTextBox.h"
+#include "high_score.h"
 
 namespace
 {
@@ -502,9 +503,9 @@ namespace
 				kick->ActiveFlag = 0;
 			if (auto wall = s_bwal610.GetComponent())
 				wall->ActiveFlag = 0;
-			Send(a_kick1, MessageCode::ControlDisableMultiplier, 0.0f); // FT1 76
-			Send(a_kout1, MessageCode::ControlDisableMultiplier, 0.0f);
-			Send(a_kout2, MessageCode::ControlDisableMultiplier, 0.0f);
+			Send(a_kick1, MessageCode::Ft1Deactivate, 0.0f); // FT1 76
+			Send(a_kout1, MessageCode::Ft1Deactivate, 0.0f);
+			Send(a_kout2, MessageCode::Ft1Deactivate, 0.0f);
 			Helper0ad6();
 			SetInfoField(0);
 			break;
@@ -813,7 +814,29 @@ namespace
 		}
 	}
 
-	void State1(MessageCode, TPinballComponent*) {}  // TODO(23:b949)
+	// 23:b949 - state 1, the game is over: the table's game over (FT1 1024), tabb5 (g_22e6); when a score makes the
+	// high score table (14:0505) tabb73, all the lights flash 3 s and text 3027 shows
+	void State1(MessageCode code, TPinballComponent*)
+	{
+		if (code != FT1Event79)
+			return;
+		auto t = control::TableG;
+		t->Message(MessageCode::GameOver, 0.0f);
+		if (MusicPlaying != 5)
+			PlayMusic(5);
+		bool high = false;
+		for (int i = t->PlayerCount - 1; i >= 0 && !high; i--)
+		{
+			auto score = i == t->CurrentPlayer ? t->CurScore : t->PlayerScores[i].Score;
+			high = high_score::get_score_position(score) >= 0;
+		}
+		if (!high)
+			return;
+		Play(tabb73wave);
+		if (t->LightGroup)
+			t->LightGroup->Message(MessageCode::TLightFlasherStartTimedThenStayOff, 3.0f);
+		Display(ft1_strings::Get(3027), -1.0f, 0);
+	}
 
 	// 23:a27d - state 2, normal play: the main tune; event 80 shows text 3076
 	void State2(MessageCode code, TPinballComponent*)
@@ -893,7 +916,34 @@ namespace
 	void State12(MessageCode, TPinballComponent*) {} // TODO(23:d2b8)
 	void State13(MessageCode, TPinballComponent*) {} // TODO(23:d414)
 	void State16(MessageCode, TPinballComponent*) {} // TODO(23:b27e)
-	void State17(MessageCode, TPinballComponent*) {} // TODO(23:d63c)
+	int g_22ee = 0;
+
+	// 23:d63c - state 17, tilt: kicker 2 and wall 610 off, kicker 1 on, oneway 12 off, the magnets and kickouts off,
+	// balls kept back (g_6526) back in play; with the last ball draining kicker 1 off
+	void State17(MessageCode code, TPinballComponent*)
+	{
+		auto t = control::TableG;
+		if (code == FT1Event79)
+		{
+			g_22ee = 0;
+			for (auto part : {&a_kick2, &s_bwal610})
+				if (auto comp = part->GetComponent())
+					comp->ActiveFlag = 0;
+			Send(a_kick1, MessageCode::Ft1Activate, 0.0f); // FT1 75
+			if (auto oneway = s_oneway12.GetComponent())
+				oneway->ActiveFlag = 0;
+			for (auto part : {&s_magnet1, &s_magnet2, &s_magnet3, &s_magnet4, &s_magnet5, &s_magnet6, &a_kout1,
+			                  &a_kout2})
+				Send(*part, MessageCode::Ft1Deactivate, 0.0f); // FT1 76
+			if (g_6526 > 0)
+			{
+				t->MultiballCount += g_6526;
+				g_6526 = 0;
+			}
+		}
+		else if (code == FT1Event83 && t->MultiballCount == 1)
+			Send(a_kick1, MessageCode::Ft1Deactivate, 0.0f);
+	}
 
 	// 23:d7b6 - any other state: back to normal play
 	void StateOther(MessageCode, TPinballComponent*)
