@@ -61,6 +61,14 @@ Modes: 1 Quake, 2 Mad Scientist, 3 Mystman, 4 Slime Man, 5 Mr. Pling (`MODE_ELAS
   (10 s).
 - Pop bumpers (0x4022f8 / 0x4023c8): 1,000, +1,000 every 8 hits up to 5,000.
 
+## s_kout01's powers (0x406294, 0x4061f0)
+- Each s_kout01 hit gives the next of three powers, 75,000 and its text for 3 s (3034-3036, wave33): Super
+  Strength (0x405dc0: the pops score x3, 0x405de8 in the score helper 0x401a38), Super Speed (0x405ef8: the pops'
+  kick, +0x59 = attribute 402, 55 -> 1,000, the slingshots' 90 -> 1,800), Flight (0x4060c0: a flag nothing
+  reads, only its light). Each lasts 30 s: light_96 / light_98 / light100 steady for 25 s, flashing for 5 s
+  (0x405e04 / 0x405fcc / 0x4060e8). A new ball (0x3f9) puts them all out and starts again with Super Strength.
+- The Super Jackpot (0x408638) gives the award three times.
+
 ## Buildings (0x449928, ten buildings btrig01..10)
 - Parts that throw the ball write a mark on it (ball +0x140): lit spot targets a_spot09..16 (1), drop targets
   a_drop29..46 (2), kickouts s_kout03..05 (4), Mr. Pling's walls (5), the magnet pockets s_kout06..10 (6).
@@ -85,7 +93,5 @@ Modes: 1 Quake, 2 Mad Scientist, 3 Mystman, 4 Slime Man, 5 Mr. Pling (`MODE_ELAS
 
 ## Not ported yet
 - Mr. Pling's second ball travelling up s_ramp02 into him; the walls simply switch on with the battle.
-- The s_kout01 award (0x4061f0: three steps, 75,000 each) given at the Super Jackpot.
 - The countdown and capture texts in their own display boxes (the port uses the info text and side panel).
-- Playfield multiplier 0x405de8 (pops x3), table multiplier in the bonus (table +0x12d), Super Strength / Speed /
-  Flight (3034-3036), Quake's light bars and Slime Man's slime patches (pictures only).
+- Table multiplier in the bonus (table +0x12d), Quake's light bars and Slime Man's slime patches (pictures only).

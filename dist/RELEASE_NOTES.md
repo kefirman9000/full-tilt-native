@@ -6,6 +6,11 @@
 
 **Game data is not included.** Copy your original game folders into `Put game files here` and start `FullTiltPinball.exe`: tables are found and sorted automatically.
 
+**New in 0.12.4: Captain Hero's powers**
+- The kickout s_kout01 gives Super Strength (pop bumpers score x3), Super Speed (pop bumpers and slingshots kick
+  much harder) and Flight in turn, 75,000 each, 30 seconds each with their lights (hero.exe 0x4061f0). The Super
+  Jackpot gives all three.
+
 **New in 0.12.3**
 - Mad Scientist's shoot again light: 15 seconds after each new ball goes through the shooter lane's one-way
   (mad.exe 0x42dab8); a drain while it is lit serves the ball again.

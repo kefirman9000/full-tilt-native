@@ -576,6 +576,12 @@ namespace
 		// Evil Twin
 		bool Krypton[5]{};
 		int SuperLit = 0; // 0x441a44: 1 lit, 2 collected
+		// s_kout01's powers (0x4061f0): Super Strength, Super Speed, Flight in turn, 30 s each
+		int PowerStep = 0;           // 0x441544
+		bool Power[3]{};             // 0x441548 strength (pops x3), 0x44154c speed, 0x441550 flight
+		int PowerTimer[3]{};         // 0x441560 / 0x441568 / 0x441570
+		int PowerStage[3]{2, 2, 2};  // 0x441564..: 0 steady, 1 flashing, 2 off
+		float PopBoost = -1, SlingBoost = -1; // the kickers' own strength, back after Super Speed
 		int SuperShots = 0;
 		// this ball's bonus (0x441224 battles, 0x441228 captures)
 		int BallBattles = 0, BallCaptures = 0;
@@ -1041,6 +1047,80 @@ namespace
 		}
 	}
 
+	// ---- s_kout01's powers (0x4061f0 .. 0x406190) ----
+	const char* PowerLights[3] = {"light_96", "light_98", "light100"};
+
+	void set_super_speed(bool on)
+	{
+		// 0x405ef8 / 0x405f64: the pops' and slingshots' kick (+0x59, the kicker's boost, attribute 402) goes from
+		// 55 / 90 to 1,000 / 1,800
+		for (auto name : {"a_bump01", "a_bump02", "a_bump03", "a_rebo01", "a_rebo02"})
+			if (auto kicker = dynamic_cast<TCollisionComponent*>(hero_part(name)))
+			{
+				bool pop = name[2] == 'b';
+				auto& saved = pop ? hb.PopBoost : hb.SlingBoost;
+				if (saved < 0)
+					saved = kicker->Boost;
+				kicker->Boost = on ? (pop ? 1000.0f : 1800.0f) : saved;
+			}
+	}
+
+	void power_off(int which)
+	{
+		hero_kill(hb.PowerTimer[which]);
+		hb.PowerStage[which] = 2;
+		hero_light(PowerLights[which], false);
+		if (which == 1 && hb.Power[1])
+			set_super_speed(false);
+		hb.Power[which] = false;
+	}
+
+	template <int Which>
+	void power_step(int, void*)
+	{
+		hb.PowerTimer[Which] = 0;
+		if (hb.PowerStage[Which] == 0) // 25 s steady, then 5 s flashing (0x405e04)
+		{
+			hb.PowerStage[Which] = 1;
+			hero_flash(PowerLights[Which]);
+			hb.PowerTimer[Which] = timer::set(5.0f, nullptr, power_step<Which>);
+		}
+		else
+			power_off(Which);
+	}
+
+	void power_on(int which)
+	{
+		hero_kill(hb.PowerTimer[which]);
+		if (which == 1 && !hb.Power[1])
+			set_super_speed(true);
+		hb.Power[which] = true;
+		hb.PowerStage[which] = 0;
+		hero_light(PowerLights[which], true);
+		static void (*const steps[3])(int, void*) = {power_step<0>, power_step<1>, power_step<2>};
+		hb.PowerTimer[which] = timer::set(25.0f, nullptr, steps[which]);
+	}
+
+	// 0x4061f0: Super Strength (pops score x3), Super Speed (pops and slingshots kick hard), Flight; 75,000 each
+	int kout01_award()
+	{
+		auto which = hb.PowerStep;
+		power_on(which);
+		if (auto sound = dynamic_cast<TSound*>(hero_part("wave33")))
+			sound->Play(nullptr, "wave33");
+		static const char* names[3] = {"Super Strength!", "Super Speed!", "Flight!"};
+		show(hero_text(3034 + which, names[which]), 3.0f);
+		hb.PowerStep = (hb.PowerStep + 1) % 3;
+		return 75000;
+	}
+
+	void powers_reset() // 0x406294 on a new ball (0x3f9) and 0x4061dc
+	{
+		for (int i = 0; i < 3; i++)
+			power_off(i);
+		hb.PowerStep = 0;
+	}
+
 	void super_jackpot_shot()
 	{
 		if (hb.SuperLit != 1)
@@ -1057,9 +1137,12 @@ namespace
 		show(upper_copy(hero_text(3065, "SUPER JACKPOT!!!")) + "  " + with_commas(award), 4.0f);
 		light_show(4.0f);
 		hb.SuperJackpot = SuperJackpotStart;
-		// APPROXIMATION: the original (0x408638) gives the s_kout01 award three times (0x4061f0, 75,000 each with
-		// its own text, not ported), sends "eject" (67) to s_sink03/05/04/01 and adds 4 to the balls-in-play count
-		// (table +0x161). Where the extra balls come from is not read yet; here three balls are added at the holes.
+		// 0x408638: the s_kout01 award three times (all three powers, 75,000 each)
+		for (int i = 0; i < 3; i++)
+			add_points(kout01_award());
+		// APPROXIMATION: the original then sends "eject" (67) to s_sink03/05/04/01 and adds 4 to the balls-in-play
+		// count (table +0x161). Where the extra balls come from is not read yet; here three balls are added at the
+		// holes.
 		for (auto name : {"s_sink03", "s_sink05", "s_sink04"})
 			add_ball_at_sink(name);
 	}
@@ -1398,6 +1481,8 @@ namespace
 		rs.PopHits = 0;
 		if (is_hero() && !(pb::DevDebug && getenv("FT2_KEEPBATTLE"))) // development: keep the battle over drains
 			lose_battle();
+		if (is_hero())
+			powers_reset(); // 0x406294 on the new ball
 	}
 
 	void drain_collision()
@@ -1684,9 +1769,15 @@ void ft2_control::handler(MessageCode code, TPinballComponent* caller)
 		auto henchman = bumper && bumper->HiddenUntilMode;
 		auto points = henchman ? 0 : points_for(caller); // a henchman's hits are scored by henchman_hit
 		if (auto pops = pop_rule(caller))
+		{
 			points = pop_points(*pops);
+			if (is_hero() && hb.Power[0])
+				points *= 3; // 0x401a38 x 0x405de8: Super Strength
+		}
 		if (is_hero())
 		{
+			if (named(caller, {"s_kout01"}))
+				points += kout01_award(); // 0x406294
 			points = hero_hit(caller, points);
 			if (named(caller, {"ss_trigger"}))
 				hero_skill_shot();
@@ -1871,6 +1962,8 @@ void ft2_control::table_handler(MessageCode code)
 		ft2_control::PracticeGame = options::Options.Practice;
 		set_save_sink(false);
 		lose_battle();
+		if (is_hero())
+			powers_reset();
 		hb = HeroBattles{};
 		if (is_hero())
 			set_pling(false);
