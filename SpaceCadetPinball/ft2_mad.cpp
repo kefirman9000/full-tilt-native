@@ -103,6 +103,8 @@ namespace
 		int BCombo = 0, CCombo = 0, MercuryCombo = 0;
 		int BComboUntil = 0, CComboUntil = 0, MercuryComboUntil = 0;
 		bool SkillShot = false;
+		bool LaunchSave = true;                 // 0x444f60: a new ball, its shoot again still to come
+		int SaveTimer = 0, SaveState = 2;       // 0x444f58 / 0x444f5c: 0 steady, 1 flashing, 2 off
 		TKickout* FlaskHolding = nullptr;
 		int FlaskTimer = 0, ResetTimer = 0;
 
@@ -764,6 +766,39 @@ namespace
 		ms.FlaskHolding = nullptr;
 	}
 
+	// 0x42da48 / 0x42d994: the shoot again light, steady and then flashing for its last 5 seconds; a drain while
+	// it is on gives the ball back (0x42da10 puts it out)
+	void timed_save_step(int, void*)
+	{
+		ms.SaveTimer = 0;
+		if (ms.SaveState == 0)
+		{
+			ms.SaveState = 1;
+			flash("shoot_again_light");
+			ms.SaveTimer = timer::set(5.0f, nullptr, timed_save_step);
+		}
+		else
+		{
+			ms.SaveState = 2;
+			light("shoot_again_light", ms.ShootAgain);
+		}
+	}
+
+	void timed_save(float seconds)
+	{
+		kill(ms.SaveTimer);
+		ms.SaveState = 0;
+		light("shoot_again_light", true);
+		ms.SaveTimer = timer::set(std::max(0.1f, seconds - 5.0f), nullptr, timed_save_step);
+	}
+
+	void timed_save_off()
+	{
+		kill(ms.SaveTimer);
+		ms.SaveState = 2;
+		light("shoot_again_light", ms.ShootAgain);
+	}
+
 	void flask_timeout(int, void*)
 	{
 		ms.FlaskTimer = 0;
@@ -819,6 +854,7 @@ void ft2_mad::NewGame()
 	kill(ms.FlaskTimer);
 	kill(ms.WizardTimer);
 	kill(ms.ResetTimer);
+	kill(ms.SaveTimer);
 	ms = MadState{};
 	ms.Table = t;
 	for (auto name : MobDrops)
@@ -865,6 +901,12 @@ bool ft2_mad::SaveBall()
 		show("BALL RECAPTURED", 2.5f);
 		return true;
 	}
+	if (ms.SaveState != 2)
+	{
+		timed_save_off();
+		show("SHOOT AGAIN", 2.5f);
+		return true;
+	}
 	if (ms.ShootAgain)
 	{
 		ms.ShootAgain = false;
@@ -908,6 +950,8 @@ void ft2_mad::EndOfBall()
 	light("recapture_activation_light01", false);
 	light("recapture_activation_light02", false);
 	reset_ball_state();
+	timed_save_off();
+	ms.LaunchSave = true;
 }
 
 bool ft2_mad::Message(MessageCode code, TPinballComponent* caller)
@@ -933,6 +977,13 @@ bool ft2_mad::Collision(TPinballComponent* caller)
 	if (pb::DevDebug)
 		printf("FT2DBG mad hit %s\n", caller->GroupName ? caller->GroupName : "?");
 	auto& p = player();
+
+	// the shooter lane's one-way (0x42dab8): the first time each new ball goes through, 15 s of shoot again
+	if (is(caller, "plunger_oneway") && ms.LaunchSave)
+	{
+		ms.LaunchSave = false;
+		timed_save(15.0f);
+	}
 
 	// the skill shot (0x432eec): the first part the launched ball hits, other than the shooter lane
 	if (ms.SkillShot && !is(caller, "plunger") && !is(caller, "plunger_oneway"))

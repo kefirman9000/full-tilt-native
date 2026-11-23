@@ -59,4 +59,6 @@ The port is `SpaceCadetPinball/ft2_mad.cpp`; its comments give the original func
 
 ## Not ported yet
 - The cork lights on the plunger (0x42d534), the teleporter diverters, the light shows and flask animations,
-  the shoot again ball save timer after each launch (the engine's own ball save option covers it), music.
+  the flask level sprites.
+- Ported since: the shoot again light, 15 s after each new ball passes plunger_oneway (0x42dab8, 0x42da48 steady
+  then flashing for 5 s, 0x42d994); music per experiment, tabd(mode + 1) (0x4304c4).

@@ -6,6 +6,10 @@
 
 **Game data is not included.** Copy your original game folders into `Put game files here` and start `FullTiltPinball.exe`: tables are found and sorted automatically.
 
+**New in 0.12.3**
+- Mad Scientist's shoot again light: 15 seconds after each new ball goes through the shooter lane's one-way
+  (mad.exe 0x42dab8); a drain while it is lit serves the ball again.
+
 **New in 0.12.2**
 - Captain Hero changes music with each battle (tabf2-tabf7, from hero.exe 0x40787c) and goes back to the table
   music when the battle ends.
