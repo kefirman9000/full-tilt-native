@@ -6,6 +6,11 @@
 
 **Game data is not included.** Copy your original game folders into `Put game files here` and start `FullTiltPinball.exe`: tables are found and sorted automatically.
 
+**New in 0.12.1: music changes with the mode**
+- Alien Daze plays each mission's own music (tabe2-tabe6) and goes back to the table music after it, as the
+  original does. Mad Scientist does the same for its five experiments (tabd2-tabd6).
+- Full Tilt! 2 tables now load all eight music tracks (files in the table's Music folder replace them in order).
+
 **New in 0.12.0: Captain Hero plays by its real rules**
 Captain Hero's rules were recovered from hero.exe (ft2/hero_rules.md has the details):
 - **Battles are timed**: 60 seconds for Quake, Mad Scientist, Mystman, Slime Man and Mr. Pling; shooting the scoop

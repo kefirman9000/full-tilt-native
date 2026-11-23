@@ -12,6 +12,7 @@
 
 std::vector<Mix_Music*> midi::LoadedTracks{};
 Mix_Music* midi::track1, * midi::track2, * midi::track3;
+Mix_Music* midi::Ft2Tracks[8]{};
 MidiTracks midi::active_track, midi::NextTrack;
 int midi::Volume = MIX_MAX_VOLUME;
 bool midi::IsPlaying = false, midi::MixOpen = false;
@@ -209,6 +210,8 @@ int midi::music_init(bool mixOpen, int volume)
 	IsPlaying = false;
 	Paused = false;
 	track1 = track2 = track3 = nullptr;
+	for (auto& track : Ft2Tracks)
+		track = nullptr;
 
 	if (pb::FT2Table)
 	{
@@ -216,8 +219,10 @@ int midi::music_init(bool mixOpen, int volume)
 		// replace MIDI tracks 1, 2, 3...; any track without a file keeps the table's own MIDI music.
 		auto cdFiles = ftmusic::ListAudioFiles(pb::make_path_name("Music"));
 		auto prefix = ftmusic::FindMidiPrefix(pb::make_path_name("SOUND"));
-		Mix_Music** tracks[] = {&track1, &track2, &track3};
-		for (int i = 0; i < 3; i++)
+		Mix_Music** tracks[8];
+		for (int i = 0; i < 8; i++)
+			tracks[i] = &Ft2Tracks[i];
+		for (int i = 0; i < 8; i++)
 		{
 			if (i < static_cast<int>(cdFiles.size()) && MixOpen && !pb::quickFlag)
 			{
@@ -237,6 +242,9 @@ int midi::music_init(bool mixOpen, int volume)
 					printf("Music track %d: MIDI %s%d\n", i + 1, prefix.c_str(), i + 1);
 			}
 		}
+		track1 = Ft2Tracks[0];
+		track2 = Ft2Tracks[1];
+		track3 = Ft2Tracks[2];
 		if (!track1)
 			printf("Music: no Music folder files and no MIDI tracks found for this table\n");
 	}
@@ -373,6 +381,14 @@ bool midi::play_track(MidiTracks track, bool replay)
 	return true;
 }
 
+bool midi::play_ft2_track(int number)
+{
+	if (number < 1 || number > 8 || !Ft2Tracks[number - 1])
+		return false;
+	play_track(static_cast<MidiTracks>(number), false);
+	return true;
+}
+
 MidiTracks midi::get_active_track()
 {
 	if (!IsPlaying)
@@ -398,6 +414,13 @@ Mix_Music* midi::TrackToMidi(MidiTracks track)
 		break;
 	case MidiTracks::Track3:
 		midi = track3;
+		break;
+	case MidiTracks::Track4:
+	case MidiTracks::Track5:
+	case MidiTracks::Track6:
+	case MidiTracks::Track7:
+	case MidiTracks::Track8:
+		midi = Ft2Tracks[static_cast<int>(track) - 1];
 		break;
 	}
 	return midi;

@@ -3,6 +3,7 @@
 
 #include "ft2_control.h"
 #include "pb.h"
+#include "midi.h"
 #include "table_art.h"
 #include "timer.h"
 #include "TBall.h"
@@ -453,6 +454,7 @@ namespace
 	void start_experiment()
 	{
 		ms.Mode = ms.NextMode;
+		midi::play_ft2_track(ms.Mode + 1); // 0x4304c4: each experiment has its music, tabd2-tabd6
 		ms.ModeLeft = ExperimentSeconds;
 		auto& p = player();
 		wave("wave42");
@@ -504,6 +506,7 @@ namespace
 		kill(ms.ModeTimer);
 		kill(ms.WizardTimer);
 		ms.Mode = NoExperiment;
+		midi::play_ft2_track(1); // no experiment: tabd1
 		auto& p = player();
 		switch (mode)
 		{

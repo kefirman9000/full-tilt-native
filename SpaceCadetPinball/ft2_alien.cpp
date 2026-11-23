@@ -4,6 +4,7 @@
 #include "ft2_animation.h"
 #include "loader.h"
 #include "pb.h"
+#include "midi.h"
 #include "table_art.h"
 #include "timer.h"
 #include "TBall.h"
@@ -407,6 +408,7 @@ namespace
 	void mission_over(bool completed)
 	{
 		auto mission = as.NextMission;
+		midi::play_ft2_track(1); // 0x42cede: back to the table's own music (tabe1)
 		kill(as.MissionTimer);
 		if (!as.MissionOn || mission < 0)
 			return;
@@ -443,6 +445,7 @@ namespace
 	{
 		if (as.MissionOn || as.NextMission < 0)
 			return;
+		midi::play_ft2_track(2 + as.NextMission); // 0x42d242..: each mission has its music, tabe2-tabe6
 		auto mission = as.NextMission;
 		as.MissionOn = true;
 		as.MissionLeft = MissionSeconds[mission];

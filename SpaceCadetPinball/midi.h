@@ -88,7 +88,13 @@ enum class MidiTracks
 	None,
 	Track1,
 	Track2,
-	Track3
+	Track3,
+	// Full Tilt! 2 tables have up to eight (TAB<letter>1-8): the rules change the music with the mode
+	Track4,
+	Track5,
+	Track6,
+	Track7,
+	Track8
 };
 
 class midi
@@ -102,9 +108,12 @@ public:
 	static void SetVolume(int volume);
 	static bool play_track(MidiTracks track, bool replay);
 	static MidiTracks get_active_track();
+	// Full Tilt! 2: play music track 1-8 (repeats), unless it is the one playing; false when the table has none
+	static bool play_ft2_track(int number);
 private:
 	static std::vector<Mix_Music*> LoadedTracks;
 	static Mix_Music* track1, * track2, * track3;
+	static Mix_Music* Ft2Tracks[8];
 	static MidiTracks active_track, NextTrack;
 	static int Volume;
 	static bool IsPlaying, MixOpen;

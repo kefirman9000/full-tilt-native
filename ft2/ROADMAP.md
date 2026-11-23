@@ -74,6 +74,7 @@
       type 1042, done as a pull circle around the stun kickout), reserve power, multiplier, bonus hold, extra
       ball, artifact trading, jackpot, end-of-ball bonus. Texts come from the user's Alien.exe at run time.
 - [x] Alien: cornfield skill shot (with its multiball) and the shoot again light
+- [x] Alien and Mad: music per mission / experiment (tabe2-6, tabd2-6)
 - [ ] Alien: the levitation path animation, a_gate01 behind the ray gun, mission
       music, loop diverter
 - [x] Mad Scientist rules (ft2/mad_rules.md, SpaceCadetPinball/ft2_mad.cpp)
