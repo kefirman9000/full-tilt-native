@@ -82,6 +82,14 @@ enum class MessageCode
 	TBlockerDisable = 51,
 	TBlockerEnable = 52,
 	TBlockerRestartTimeout = 59,
+	// Full Tilt 1's blocker is an animated part with several positions (frames), each with its own wall (engine
+	// 15:3d94): FT1 codes 57-60 and 69, which this engine does not have
+	Ft1BlockerSetPosition = 2057, // FT1 57: straight to frame round(value) (-1: none)
+	Ft1BlockerMoveTo = 2058,      // FT1 58: frame by frame to round(value)
+	Ft1BlockerShowLast = 2059,    // FT1 59: straight to the last frame, with the raise sound
+	Ft1BlockerHide = 2060,        // FT1 60: straight to no frame, with the lower sound
+	Ft1BlockerTimer = 2069,       // FT1 69: tell the rules Ft1TimerExpired after `value` seconds
+	Ft1TimerExpired = 2070,       // FT1 70 from a blocker's timer (69)
 
 	TGateDisable = 53,
 	TGateEnable = 54,

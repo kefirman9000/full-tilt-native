@@ -7,6 +7,8 @@ that a faithful port of the rules has to bridge. Everything here was read from t
 DRAGON.EXE's.
 
 ## Tools
+(These need the capstone module. Without it, a stand-in built on GNU objdump -m i8086 that prints operands the
+way capstone does works for these scripts.)
 - `ft1draft.py EXE --all [helpers.txt]`: every function of segment 23 (rule functions and helpers), with component
   names, table fields and helper names. Follows both switch forms (case-value tables and indexed jump tables).
 - `ft1condense.py LISTING STRINGS`: folds push/call sequences into one-line calls. Where two branches share one call
@@ -54,7 +56,16 @@ it still has to be read.
 Not the on/off blocker of this engine: an animated, multi-position part (Dragon's Keep's sword, rocks, the dragon's
 jaw, the center post). 55 lower (value >= 0: after that many seconds), 56 raise (the same), 57 set position
 (rounded value), 58 move to position with its animation, 59/60 position from the frame count and a sound, 69 timer;
-the timeout tells the rules 61. Porting Dragon's Keep needs this behaviour in TBlocker.
+the timeout tells the rules 61. Implemented in TBlocker (Ft1 mode, Full Tilt 1 tables only): the constructor
+(15:3a83) installs each state's wall (600) with its own flag (+0x68 + frame), attribute 903 is the step delay
+(+0x7e, default 0.1 s), 409 the initial frame (+0x72, default -1), 407 two durations (+0x74/+0x76, 55/5). Message
+(15:3d94): GameOver / Reset / tilt go straight to the initial frame; 55/56 move frame by frame (15:3cd3, one step per
+delay) to -1 / the last frame, starting after `value` seconds when it is positive, with sounds +0x98 / +0x96; 58 the
+same to round(value); 57 straight there; 59/60 straight to the last frame / none with the sounds; 69 a timer that
+tells the rules 70. At the target the stepper tells the rules 61 (this engine: ControlTimerExpired).
+Not done: 57's check for a ball in the way (15:1a68 / 15:0ab1 defer the move).
+This engine's codes: Ft1BlockerSetPosition (57), Ft1BlockerMoveTo (58), Ft1BlockerShowLast (59), Ft1BlockerHide (60),
+Ft1BlockerTimer (69), Ft1TimerExpired (70).
 
 ## Dragon's Keep segment 23
 126 functions: 62 rule functions (75 components) and 64 helpers. 0x06cf scores a hit, 0x072c a given score, 0x0778
