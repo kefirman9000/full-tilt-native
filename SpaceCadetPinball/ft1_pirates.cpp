@@ -1391,7 +1391,101 @@ namespace
 			break;
 		}
 	}
-	void State7(MessageCode, TPinballComponent*) {}  // TODO(23:adc2)
+	// 23:3fcf - lights 530-532 (on and then flashing out over 1 s) or off; a_spot6's MessageField cleared
+	void Lights530(bool flash)
+	{
+		auto code = flash ? MessageCode::TLightFlasherStartTimedThenStayOff : MessageCode::TLightResetAndTurnOff;
+		if (flash)
+			Lights({&v_lite530, &v_lite531, &v_lite532}, MessageCode::TLightTurnOn, 0.0f);
+		Lights({&v_lite530, &v_lite531, &v_lite532}, code, 1.0f);
+		Field(a_spot6) = 0;
+	}
+
+	// 23:2a00 - the six magnets and their lights (560-565) off
+	void MagnetsOff()
+	{
+		component_tag_base* magnets[6] = {&s_magnet1, &s_magnet2, &s_magnet3, &s_magnet4, &s_magnet5, &s_magnet6};
+		component_tag<TLight>* lights[6] = {&v_lite560, &v_lite561, &v_lite562, &v_lite563, &v_lite564, &v_lite565};
+		for (int i = 0; i < 6; i++)
+		{
+			Send(*magnets[i], MessageCode::Ft1Deactivate, 0.0f);
+			Send(*lights[i], MessageCode::TLightResetAndTurnOff, 0.0f);
+		}
+	}
+
+	// 23:adc2 - state 7 (text 3062, tabb4, tabb65): 200,000, the light sweep 7, drops 13-15 up, lights 1-3 flash;
+	// then lights 545-547 blink at random (one of them flashes 0.1-0.25 s, then the next), 27.4 s (countdown text
+	// 3025). Its end: the magnets off
+	void State7(MessageCode code, TPinballComponent* cmp)
+	{
+		switch (code)
+		{
+		case FT1Event79:
+			MissionStart();
+			Lights530(false);
+			ScorePoints(nullptr, 200000);
+			Send(light_sweeps, MessageCode::Ft1LightSweepStart, 7.0f);
+			PlayMusic(4); // g_22da
+			Play(tabb65wave);
+			Drops13Up();
+			Lights({&v_lite547, &v_lite546, &v_lite545}, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Field(a_spot6) = 0;
+			Lights({&v_lite530, &v_lite531, &v_lite532}, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Display(ft1_strings::Get(3062), -1.0f, 0);
+			Lights({&v_lite1, &v_lite2, &v_lite3}, MessageCode::TLightFlasherStartTimed, -1.0f);
+			break;
+		case FT1Event83:
+			Send(mode_timer, MessageCode::Ft1BlockerTimer, -1.0f);
+			MissionEvent(FT1Event82, nullptr);
+			break;
+		case FT1Event82:
+			Lights530(false);
+			Drops13Up();
+			MagnetsOff();
+			MissionEnd();
+			Field(v_lite606)++;
+			Send(a_bloce, MessageCode::Ft1BlockerSetPosition, 0.0f);
+			Send(v_lite504, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(v_lite505, MessageCode::TLightResetAndTurnOn, 0.0f);
+			break;
+		case FT1Event80:
+		{
+			auto left = Send(mode_timer, MessageCode::Ft1TimerTimeLeft, 0.0f);
+			if (left)
+				Display(Format(3025, left / 1000).c_str(), 0.5f, 0);
+			break;
+		}
+		case MessageCode::ControlTimerExpired:
+			if (dynamic_cast<TLight*>(cmp)) // 1002
+			{
+				if (cmp != v_lite547.GetComponent() && cmp != v_lite546.GetComponent() &&
+					cmp != v_lite545.GetComponent())
+					break;
+				component_tag<TLight>* lights[3] = {&v_lite547, &v_lite546, &v_lite545};
+				auto which = Rand15() * 3 / 0x8000;
+				auto time = static_cast<float>(Rand15() * 150 / 0x8000 + 100) / 1000.0f; // ds:0x43fc
+				Send(*lights[which > 2 ? 2 : which], MessageCode::TLightFlasherStartTimed, time);
+			}
+			else if (dynamic_cast<TTimer*>(cmp))
+			{
+				if (cmp != mode_timer.GetComponent())
+					break;
+				Lights({&v_lite547, &v_lite546, &v_lite545}, MessageCode::TLightResetAndTurnOff, 0.0f);
+				MissionEvent(FT1Event82, nullptr);
+			}
+			else if (dynamic_cast<TLightSweeps*>(cmp))
+			{
+				if (!g_6520)
+					ReleaseSink8(0.0f);
+				Send(mode_timer, MessageCode::Ft1BlockerTimer, 27.4f);
+				MissionEvent(FT1Event80, nullptr);
+				State7(MessageCode::ControlTimerExpired, v_lite547.GetComponent());
+			}
+			break;
+		default:
+			break;
+		}
+	}
 	void State8(MessageCode, TPinballComponent*) {}  // TODO(23:a93e)
 	void State9(MessageCode, TPinballComponent*) {}  // TODO(23:c5cc)
 	void State10(MessageCode, TPinballComponent*) {} // TODO(23:c84b)
