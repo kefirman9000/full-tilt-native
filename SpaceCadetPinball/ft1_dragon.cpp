@@ -160,6 +160,13 @@ namespace
 	DK_TAG(TPinballComponent, s_oneway5)
 	DK_TAG(TPinballComponent, a_ramp103)
 	DK_TAG(TPinballComponent, a_ramp6)
+	DK_TAG(TSound, tabc48wave)
+	DK_TAG(TLight, v_lite65)
+	DK_TAG(TLight, v_lite66)
+	DK_TAG(TSound, tabc50wave)
+	DK_TAG(TLightGroup, prison_window_light_group)
+	DK_TAG(TLightGroup, watch_window_light_group)
+	DK_TAG(TLightGroup, gate_window_light_group)
 	DK_TAG(TLight, v_lite22)
 	DK_TAG(TLight, v_lite23)
 	DK_TAG(TLight, v_lite24)
@@ -1459,10 +1466,238 @@ namespace
 		}
 	}
 
+	// The common end of a quest's ControlTimerExpired: the mode timer ran out (hurry-up, state 3; `lights` go out of
+	// their override), or the light sweep finished (the quest starts: the ball comes out of sink 1, `seconds` on the
+	// mode timer)
+	void QuestTimers(TPinballComponent* cmp, std::initializer_list<component_tag_base*> lights, float seconds)
+	{
+		if (cmp == mode_timer.GetComponent())
+		{
+			Field(mode_timer) = InfoField();
+			for (auto light : lights)
+				Send(*light, FT1LightOverrideOff, 0.0f);
+			SetState(3);
+		}
+		else if (cmp == light_sweeps.GetComponent())
+		{
+			ResetTowerAndLetters();
+			ReleaseTo(a_sink1.GetComponent(), 0.0f);
+			Send(mode_timer, MessageCode::Ft1BlockerTimer, seconds);
+			MissionEvent(FT1Event80, nullptr);
+		}
+	}
+
+	void Countdown(int textId) // the mode timer's seconds in a table text, for half a second
+	{
+		auto left = TimeLeftMs(mode_timer);
+		if (left)
+			Display(Format(textId, left / 1000).c_str(), 0.5f, 0);
+	}
+
+	// 23:8b1b - state 5, quest (text 3031, music tabc1): lights 63-66 and 91; sink 2's MessageField and v_lite91's
+	// count the shots (their rules); 15 s again after a hurry-up; text 3030 counts down
+	void Mission5(MessageCode code, TPinballComponent* cmp)
+	{
+		if (code == FT1Event79)
+		{
+			Send(light_sweeps, FT1LightSweepStart, 1.0f);
+			Field(v_lite91) = 0;
+			Field(a_sink2) = 0;
+			ScorePoints(nullptr, 100000);
+			InfoClear();
+			Display(ft1_strings::Get(3031), -1.0f, 0);
+			Send(v_lite63, MessageCode::TLightFlasherStartTimed, -1.0f);
+			Send(v_lite64, MessageCode::TLightFlasherStartTimed, -1.0f);
+			Play(tabc48wave);
+			PlayMusic(MusicTrack1);
+			return;
+		}
+		if (code == FT1Event83 || code == FT1Event82)
+		{
+			if (code == FT1Event83)
+			{
+				SetInfoField(2);
+				Send(mode_timer, MessageCode::Ft1BlockerTimer, -1.0f);
+			}
+			ClearLettersAndLocks();
+			Send(v_lite63, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(v_lite64, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(v_lite66, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(v_lite66, FT1LightResetOverride, 0.0f);
+			Send(v_lite65, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(v_lite65, FT1LightResetOverride, 0.0f);
+			Send(v_lite91, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(v_lite91, FT1LightResetOverride, 0.0f);
+			CompleteQuest();
+			return;
+		}
+		if (code == FT1Event81)
+		{
+			Send(v_lite63, MessageCode::TLightFlasherStartTimed, -1.0f);
+			Send(v_lite64, MessageCode::TLightFlasherStartTimed, -1.0f);
+			Play(tabc48wave);
+			Send(v_lite66, FT1LightResetOverride, 0.0f);
+			Send(v_lite65, FT1LightResetOverride, 0.0f);
+			Send(v_lite91, FT1LightResetOverride, 0.0f);
+			Send(mode_timer, MessageCode::Ft1BlockerTimer, 15.0f);
+			if (TextQueued())
+				return;
+		}
+		if (code == FT1Event81 || code == FT1Event80)
+		{
+			Countdown(3030);
+			return;
+		}
+		if (code == MessageCode::ControlTimerExpired && cmp)
+			QuestTimers(cmp, {&v_lite66, &v_lite65, &v_lite91}, 31.69f);
+	}
+
+	int g_5fea = 0; // how v_lite48 was when the prison quest started: 0 off, 1 on, 2 flashing
+
+	// FT1 group codes 28-50 are this engine's 24-46
+	const MessageCode FT1GroupRestartNotify = MessageCode::TLightGroupRestartNotifyTimer; // FT1 47
+
+	// 23:8f75 - state 6, the prison (text 3033, music tabc4): the tower's diverters send the ball up; the four prison
+	// windows (their group chases every 0.2 s, an unlit window blinking) light from the tower's rules; with all four,
+	// a_sink18 frees the prisoners
+	void Mission6(MessageCode code, TPinballComponent* cmp)
+	{
+		auto end = [&](MessageCode why)
+		{
+			switch (g_5fea)
+			{
+			case 0:
+				Send(v_lite48, MessageCode::TLightResetAndTurnOff, -1.0f);
+				break;
+			case 1:
+				Send(v_lite48, MessageCode::TLightResetAndTurnOn, -1.0f);
+				break;
+			default:
+				Send(v_lite48, MessageCode::TLightTurnOn, -1.0f);
+				Send(v_lite48, MessageCode::TLightFlasherStartTimed, -1.0f);
+				break;
+			}
+			ClearLettersAndLocks();
+			Send(prison_window_light_group, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(prison_window_light_group, FT1LightResetOverride, 0.0f);
+			if (why == MessageCode::ControlCollision)
+				SetState(2);
+			CompleteQuest();
+			bool keep = InfoField() == 6 || InfoField() == 13;
+			if (keep)
+				return;
+			Send(v_lite47, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(a_dvtraa, MessageCode::TGateEnable, 0.0f);
+			Send(a_dvtrab, MessageCode::TGateDisable, 0.0f);
+			Send(v_lite125, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(v_lite126, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			Send(a_dvtrda, MessageCode::TGateEnable, 0.0f);
+			Send(a_dvtrdb, MessageCode::TGateDisable, 0.0f);
+		};
+		if (code == FT1Event79)
+		{
+			g_5fea = Flashing(v_lite48) ? 2 : LightOn(v_lite48) ? 1 : 0;
+			Send(light_sweeps, FT1LightSweepStart, 2.0f);
+			Send(v_lite47, MessageCode::TLightResetAndTurnOn, 0.0f);
+			Send(a_dvtraa, MessageCode::TGateDisable, 0.0f);
+			Send(a_dvtrab, MessageCode::TGateEnable, 0.0f);
+			Send(a_dvtrba, MessageCode::TGateEnable, 0.0f);
+			Send(a_dvtrbb, MessageCode::TGateDisable, 0.0f);
+			Send(a_dvtrca, MessageCode::TGateDisable, 0.0f);
+			Send(a_dvtrcb, MessageCode::TGateEnable, 0.0f);
+			Send(v_lite125, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			Send(v_lite126, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(a_dvtrda, MessageCode::TGateDisable, 0.0f);
+			Send(a_dvtrdb, MessageCode::TGateEnable, 0.0f);
+			ScorePoints(nullptr, 100000);
+			InfoClear();
+			Display(ft1_strings::Get(3033), -1.0f, 0);
+			Play(tabc50wave);
+			PlayMusic(MusicTrack4);
+			Send(v_lite48, MessageCode::TLightFlasherStartTimed, -1.0f);
+			return;
+		}
+		if (code == MessageCode::ControlCollision)
+		{
+			if (cmp == a_sink18.GetComponent() &&
+				Send(prison_window_light_group, MessageCode::TLightGroupGetOnCount, 0.0f) == 4)
+			{
+				Send(mode_timer, MessageCode::Ft1BlockerTimer, -1.0f);
+				Send(prison_window_light_group, FT1GroupRestartNotify, -1.0f);
+				end(code);
+			}
+			return;
+		}
+		if (code == FT1Event83 || code == FT1Event82)
+		{
+			if (code == FT1Event83)
+			{
+				SetInfoField(2);
+				Send(mode_timer, MessageCode::Ft1BlockerTimer, -1.0f);
+			}
+			end(code);
+			return;
+		}
+		if (code == FT1Event81)
+		{
+			Play(tabc50wave);
+			Send(prison_window_light_group, FT1LightResetOverride, 0.0f);
+			Send(mode_timer, MessageCode::Ft1BlockerTimer, 15.0f);
+			Send(prison_window_light_group, FT1GroupRestartNotify, 0.2f);
+			if (TextQueued())
+				return;
+		}
+		if (code == FT1Event81 || code == FT1Event80)
+		{
+			Countdown(3032);
+			return;
+		}
+		if (code == MessageCode::ControlNotifyTimerExpired && cmp == prison_window_light_group.GetComponent())
+		{
+			// the chase: the window in the group's MessageField back from its override, the next one blinks when
+			// unlit (override on) or holds when lit (override off)
+			auto group = prison_window_light_group.Component;
+			Send(prison_window_light_group, FT1GroupRestartNotify, 0.2f);
+			auto index = group->MessageField;
+			auto light = [&](int i) -> TLight*
+			{
+				return i >= 0 && i < static_cast<int>(group->List.size()) ? group->List[i] : nullptr;
+			};
+			if (auto previous = light(index))
+				previous->Message(FT1LightResetOverride, 0.0f);
+			index = index < 3 ? index + 1 : 0;
+			group->MessageField = index;
+			if (auto next = light(index))
+				next->Message(next->light_on() ? FT1LightOverrideOff : FT1LightOverrideOn, 0.0f);
+			return;
+		}
+		if (code == MessageCode::ControlTimerExpired && cmp)
+		{
+			if (cmp == light_sweeps.GetComponent())
+			{
+				ResetTowerAndLetters();
+				Send(v_lite48, MessageCode::TLightFlasherStartTimed, -1.0f);
+				Send(v_lite48, FT1LightResetOverride, 0.0f);
+				Send(watch_window_light_group, MessageCode::TLightResetAndTurnOff, 0.0f);
+				Send(gate_window_light_group, MessageCode::TLightResetAndTurnOff, 0.0f);
+				Send(prison_window_light_group, MessageCode::TLightResetAndTurnOff, 0.0f);
+				Send(prison_window_light_group, FT1GroupRestartNotify, 0.2f);
+				ReleaseTo(a_sink18.GetComponent(), 0.0f);
+				Send(mode_timer, MessageCode::Ft1BlockerTimer, 30.45f);
+				MissionEvent(FT1Event80, nullptr);
+			}
+			else if (cmp == mode_timer.GetComponent())
+			{
+				Send(prison_window_light_group, FT1LightOverrideOff, 0.0f);
+				Send(prison_window_light_group, FT1GroupRestartNotify, -1.0f);
+				Field(mode_timer) = InfoField();
+				SetState(3);
+			}
+		}
+	}
+
 	// ---- mission handlers not translated yet ----
 	void Mission0(MessageCode, TPinballComponent*) {}
-	void Mission5(MessageCode, TPinballComponent*) {}
-	void Mission6(MessageCode, TPinballComponent*) {}
 	void Mission7(MessageCode, TPinballComponent*) {}
 	void Mission8(MessageCode, TPinballComponent*) {}
 	void Mission9(MessageCode, TPinballComponent*) {}
