@@ -89,3 +89,10 @@
 - Testing rules without aiming: FT2_DEBUG=1 FT2_HITS="part,part,..." sends one hit every 0.6 s after New Game
   ("wait", "drain", flippers allowed); every message the rules show is logged as "FT2DBG show:".
 - [ ] Next: Dragon's Keep and Skulduggery rule ports (ft1lift/ft1draft), per-table self-test scenarios in CI.
+
+## 2026-11-23: Skulduggery one-to-one (v0.13.2)
+- Every mission state (0-17) and every rule function of PIRATES.EXE segment 23 is translated in
+  SpaceCadetPinball/ft1_pirates.cpp and on by default (FT1_PIRATES_OLD=1 for the earlier recovered rules).
+- s_hole19 drops a locked ball into the lock lane below (between s_oneway7 and s_oneway12); s_oneway7 counts kept
+  balls rolling out.
+- Left: the info box's own engine messages and timed texts, the picture font (pictures show as their letters).

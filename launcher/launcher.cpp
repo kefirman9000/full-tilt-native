@@ -116,8 +116,8 @@ static const KnownTable KnownTables[] =
 	{"HERO.DAT", "Hero", "Captain Hero", "Full Tilt! 2", "Playable - simple rules", true, 20},
 	{"MAD.DAT", "Mad", "Mad Scientist", "Full Tilt! 2", "Playable - simple rules", true, 30},
 	{"CADET.DAT", "SpaceCadet", "Space Cadet", "Full Tilt! Pinball", "Playable - full original rules", false, 40},
-	{"DRAGON.DAT", "DragonsKeep", "Dragon's Keep", "Full Tilt! Pinball", "Playable - simple rules", true, 50},
-	{"PIRATES.DAT", "Skulduggery", "Skulduggery", "Full Tilt! Pinball", "Playable - simple rules", true, 60},
+	{"DRAGON.DAT", "DragonsKeep", "Dragon's Keep", "Full Tilt! Pinball", "Playable - full original rules", true, 50},
+	{"PIRATES.DAT", "Skulduggery", "Skulduggery", "Full Tilt! Pinball", "Playable - full original rules", true, 60},
 	{"PINBALL.DAT", "SpaceCadetWindows", "3D Pinball Space Cadet", "Windows XP Pinball", "Playable - full original rules", false, 45},
 };
 

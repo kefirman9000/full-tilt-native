@@ -3983,7 +3983,7 @@ namespace
 
 bool ft1_pirates::Wanted()
 {
-	return pb::DevDebug && getenv("FT1_PIRATES_FULL");
+	return !getenv("FT1_PIRATES_OLD"); // FT1_PIRATES_OLD=1: the earlier recovered rules instead
 }
 
 bool ft1_pirates::Link(TPinballTable* table)
@@ -4004,7 +4004,7 @@ bool ft1_pirates::Link(TPinballTable* table)
 			ftlog::Line(std::string("FT1 Skulduggery rules: rule component missing: ") + rule.Tag.Name);
 	TRamp::Ft1Events = true;
 	Active = true;
-	ftlog::Line("FT1 Skulduggery: translation active (work in progress), " + std::to_string(linked) + " rule entries");
+	ftlog::Line("FT1 Skulduggery: translation active, " + std::to_string(linked) + " rule entries");
 	return Active;
 }
 
