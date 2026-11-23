@@ -107,10 +107,12 @@ def index_table(code, before, jmp):
     case addresses indexed by the switch value (minus a bias the code subtracts or adds first). Returns [(index,
     target)], the index being the position in the table."""
     import re as _re
-    m = _re.search(r'cs:\[bx \+ (0x[0-9a-f]+)\]', jmp.op_str)
+    m = _re.search(r'cs:\[bx ([+-]) (0x[0-9a-f]+)\]', jmp.op_str)
     if not m:
         return None
-    table = int(m.group(1), 16)
+    table = int(m.group(2), 16)
+    if m.group(1) == '-':
+        table = -table & 0xffff
     count = None
     for i in reversed(before[-6:]):
         mm = _re.match(r'bx, (0x[0-9a-f]+|\d+)$', i.op_str)

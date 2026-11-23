@@ -145,6 +145,8 @@ TRamp::TRamp(TPinballTable* table, int groupIndex) : TCollisionComponent(table, 
 	TTableLayer::edges_insert_square(y0, x0, y1, x1, nullptr, &Field);
 }
 
+bool TRamp::Ft1Events = false;
+
 void TRamp::Collision(TBall* ball, vector2* nextPosition, vector2* direction, float distance, TEdgeSegment* edge)
 {
 	ball->not_again(edge);
@@ -155,6 +157,8 @@ void TRamp::Collision(TBall* ball, vector2* nextPosition, vector2* direction, fl
 	auto plane = static_cast<ramp_plane_type*>(edge->WallValue);
 	if (plane)
 	{
+		if (Ft1Events && ball->CollisionMask != CollisionGroup)
+			control::handler(MessageCode::Ft1RampEnter, this);
 		if (!Line1 && ball->CollisionMask != CollisionGroup)
 			EntryPosition[ball] = {ball->Position.X, ball->Position.Y}; // the ball comes onto the ramp here
 		ball->CollisionFlag = 1;
@@ -180,7 +184,9 @@ void TRamp::Collision(TBall* ball, vector2* nextPosition, vector2* direction, fl
 	else
 	{
 		ball->CollisionFlag = 0;
-		if (!Line1)
+		if (Ft1Events)
+			control::handler(edge == Line2 ? MessageCode::Ft1RampExit2 : MessageCode::Ft1RampExit3, this);
+		else if (!Line1)
 		{
 			// leaving the ramp: made when it gets off at another end than the one it came on by (rolling back
 			// down leaves close to where it came on)

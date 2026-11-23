@@ -56,6 +56,18 @@ THole::THole(TPinballTable* table, int groupIndex) : TCollisionComponent(table, 
 
 int THole::Message(MessageCode code, float value)
 {
+	if (Ft1Hold && BallCapturedFlag && !BallCapturedSecondStage &&
+		(code == MessageCode::Ft1HoleRelease || code == MessageCode::SetTiltLock))
+	{
+		if (Timer)
+			timer::kill(Timer);
+		Timer = 0;
+		if (code == MessageCode::Ft1HoleRelease && value > 0.0f)
+			Timer = timer::set(value, this, TimerExpired);
+		else
+			BallCapturedSecondStage = true;
+		return 0;
+	}
 	if (code == MessageCode::Reset && BallCapturedFlag)
 	{
 		if (Timer)
@@ -81,7 +93,7 @@ void THole::Collision(TBall* ball, vector2* nextPosition, vector2* direction, fl
 
 		// Ramp hole has no delay in FT.
 		auto captureTime = pb::FullTiltMode ? 0 : 0.5f;
-		Timer = timer::set(captureTime, this, TimerExpired);
+		Timer = Ft1Hold ? 0 : timer::set(captureTime, this, TimerExpired);
 
 		if (!PinballTable->TiltLockFlag)
 		{

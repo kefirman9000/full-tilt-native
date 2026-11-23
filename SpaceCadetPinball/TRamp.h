@@ -31,4 +31,7 @@ public:
 	float Wall2BallOffset;
 	// FT2 ramps have no end wall (1303): a shot counts when the ball leaves the ramp well away from where it came on
 	std::map<TBall*, vector2> EntryPosition;
+	// Full Tilt 1 rules (15:7f2c) hear the ramp's own events: Ft1RampEnter, ControlCollision (line 1), Ft1RampExit2,
+	// Ft1RampExit3; set while the Dragon's Keep translation runs
+	static bool Ft1Events;
 };

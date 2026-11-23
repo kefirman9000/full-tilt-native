@@ -26,6 +26,7 @@
 #include "TSoloTarget.h"
 #include "TPopupTarget.h"
 #include "TSink.h"
+#include "THole.h"
 #include "TDrain.h"
 #include "TBumper.h"
 #include "TKickout.h"
@@ -169,6 +170,9 @@ DK_TAG(TSound, tabc55wave)
 DK_TAG(TLight, v_lite14)
 DK_TAG(TLightGroup, well_light_group)
 DK_TAG(TSink, a_sink19)
+DK_TAG(TSound, tabc32wave)
+DK_TAG(TSound, tabc33wave)
+DK_TAG(TLight, v_lite57)
 DK_TAG(TPinballComponent, s_oneway2)
 DK_TAG(TLight, v_lite58)
 DK_TAG(TLight, v_lite59)
@@ -718,14 +722,14 @@ DK_TAG(TSound, tabc58wave)
 	int g_2270 = 0;
 
 	// 23:1eda - release the ball from the sink a component keeps in its MessageField (a pointer in the original);
-	// with g_2270 set, the ball goes to s_hole118 instead (its MessageField 2, FT1 code 67)
+	// with g_2270 set, s_hole118 lets its ball go instead (its MessageField 2, FT1 code 67)
 	// TODO(23:1eda): this engine's MessageField is an int and cannot hold the sink; the callers' sinks are passed in
 	void ReleaseTo(TPinballComponent* sink, float time)
 	{
 		if (g_2270)
 		{
 			Field(s_hole118) = 2;
-			Send(s_hole118, MessageCode::ControlBallCaptured, 0.0f); // FT1 67 to the hole: TODO check the hole's use
+			Send(s_hole118, MessageCode::Ft1HoleRelease, 0.0f);
 			return;
 		}
 		if (sink)
@@ -1254,8 +1258,8 @@ DK_TAG(TSound, tabc58wave)
 		}
 	}
 
-	// FT1 code 66: a hole (s_hole118) has the ball. TODO(66): confirm against the FT1 hole; here THole's
-	// ControlBallCaptured is passed on as 66 (ft1_dragon::Handle)
+	// FT1 code 66: a hole (s_hole118) has the ball (15:667b); THole's ControlBallCaptured is passed on as 66
+	// (ft1_dragon::Handle)
 	const MessageCode FT1Code66 = static_cast<MessageCode>(2066);
 
 	void InfoClear() // 18:0b0c
@@ -1373,7 +1377,7 @@ DK_TAG(TSound, tabc58wave)
 	const MessageCode FT1Event81 = static_cast<MessageCode>(2081); // a paused quest goes on
 	const MessageCode FT1Event82 = static_cast<MessageCode>(2082); // a quest is over
 	// FT1 code 86 from a ramp: the ramp made. TODO(86): here TRamp's ControlCollision is passed on as 86
-	const MessageCode FT1Code86 = static_cast<MessageCode>(2086);
+	const MessageCode FT1Code86 = MessageCode::Ft1RampExit3; // FT1 86: a ramp made (TRamp::Ft1Events)
 	const MessageCode FT1LightSweepStart = static_cast<MessageCode>(27); // FT1 27 to light_sweeps (type 1038)
 
 	// 1:1dcb (sprintf) of a table text with one number
@@ -1929,10 +1933,10 @@ DK_TAG(TSound, tabc58wave)
 		}
 	}
 
-	// FT1 84 / 85: TODO - sent by a ramp (a_ramp107) when the ball goes onto / off it (the battle's timer waits while
-	// the ball is on it); not mapped yet, so the battle never waits
-	const MessageCode FT1Code84 = static_cast<MessageCode>(2084);
-	const MessageCode FT1Code85 = static_cast<MessageCode>(2085);
+	// FT1 84 / 85: a ramp (a_ramp107) has the ball come onto it / leave by its second line (the battle's timer waits
+	// while the ball is on it)
+	const MessageCode FT1Code84 = MessageCode::Ft1RampEnter;
+	const MessageCode FT1Code85 = MessageCode::Ft1RampExit2;
 
 	int g_5ff0 = 0; // the battle's light sweep is running
 	int g_5fee = 0; // the ball is on a_ramp107
@@ -2199,14 +2203,346 @@ DK_TAG(TSound, tabc58wave)
 		}
 	}
 
+	int g_5ff2 = 0; // the egg award on offer (0 none, 1 quest, 4 armor, 5 multiplier, 6 weapon, 7 v_lite57, 8 extra ball)
+	int g_5ff4 = 0; // the armor piece on offer
+
+	// 23:ae65 - state 12, s_hole118 has the ball: the dragon eggs lit pick an award, lower when it is already had
+	// (8 eggs extra ball, 7 v_lite57, 6 a weapon, 5 the multiplier, 4 armor, 1-3 the next quest; texts 3052-3061).
+	// The left flipper takes it (the eggs it cost go out), the right one 25,000; then the hole lets the ball go
+	void Mission12(MessageCode code, TPinballComponent* cmp)
+	{
+		if (code == FT1Event79)
+		{
+			Field(s_hole118) = 0;
+			InfoClear();
+			g_5ff2 = Send(dragon_egg_light_group, MessageCode::TLightGroupGetOnCount, 0.0f);
+			switch (g_5ff2)
+			{
+			case 8:
+				if (!control::TableG->ExtraBalls)
+					break;
+				g_5ff2 = 7;
+				[[fallthrough]];
+			case 7:
+				if (!LightOn(v_lite57))
+					break;
+				g_5ff2 = 6;
+				[[fallthrough]];
+			case 6:
+				if (!(LightOn(v_lite37) && LightOn(v_lite38) && LightOn(v_lite39)))
+					break;
+				g_5ff2 = 5;
+				[[fallthrough]];
+			case 5:
+				if (!(LightOn(v_lite33) && LightOn(v_lite34) && LightOn(v_lite35) && LightOn(v_lite36)))
+					break;
+				g_5ff2 = 4;
+				[[fallthrough]];
+			case 4:
+				g_5ff4 = RandomArmor();
+				if (g_5ff4 != -1)
+					break;
+				[[fallthrough]];
+			case 1:
+			case 2:
+			case 3:
+				g_5ff2 = 1;
+				break;
+			default:
+				g_5ff2 = 0;
+				break;
+			}
+		}
+		if (code == FT1Event79 || code == FT1Event80)
+		{
+			int text = 0;
+			switch (g_5ff2)
+			{
+			case 0:
+				Play(tabc32wave);
+				ScorePoints(nullptr, 25000);
+				Field(s_hole118) = 0;
+				Display(ft1_strings::Get(3068), 2.0f, 0);
+				Send(s_hole118, MessageCode::Ft1HoleRelease, 2.0f);
+				g_2270 = 1;
+				SetInfoField(2);
+				MissionEvent(FT1Event79, nullptr);
+				return;
+			case 1:
+			case 2:
+			case 3:
+				if (Field(a_kout2) >= 4 && Field(a_kout2) <= 8)
+					text = 3057 + Field(a_kout2) - 4; // the quest's name
+				break;
+			case 4:
+				text = 3056;
+				break;
+			case 5:
+				text = 3055;
+				break;
+			case 6:
+				text = 3054;
+				break;
+			case 7:
+				text = 3053;
+				break;
+			default:
+				text = 3052;
+				break;
+			}
+			if (text)
+				Display(ft1_strings::Get(text), -1.0f, 0);
+			if (code == FT1Event79)
+				Play(tabc33wave);
+			return;
+		}
+		if (code == MessageCode::TFlipperExtend) // FT1 1 from a flipper
+		{
+			SetInfoField(2);
+			InfoClear();
+			if (cmp == a_flip1.GetComponent())
+			{
+				switch (g_5ff2)
+				{
+				case 7:
+					Play(tabc35wave);
+					Send(v_lite57, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+					break;
+				case 6:
+					RandomWeapon();
+					break;
+				case 5:
+					RaiseMultiplier();
+					break;
+				case 4:
+					AwardArmor(g_5ff4);
+					break;
+				case 1:
+				case 2:
+				case 3:
+					g_2270 = 1;
+					if (QuestRunningStart())
+					{
+						Send(dragon_egg_light_group, MessageCode::TLightGroupResetAndTurnOff, 1.0f);
+						return;
+					}
+					g_2270 = 0;
+					break;
+				default:
+					AddExtraBall(2.0f);
+					break;
+				}
+				while (g_5ff2-- != 0) // the eggs it cost go out
+					Send(dragon_egg_light_group, MessageCode::TLightGroupResetAndTurnOff, 1.0f);
+				Field(s_hole118) = 1;
+			}
+			else
+			{
+				ScorePoints(nullptr, 25000);
+				Field(s_hole118) = 0;
+			}
+			Send(s_hole118, MessageCode::Ft1HoleRelease, 0.0f);
+			g_2270 = 1;
+			MissionEvent(FT1Event79, nullptr);
+		}
+	}
+
 	// ---- mission handlers not translated yet ----
 	void Mission0(MessageCode, TPinballComponent*) {}
 	void Mission11(MessageCode, TPinballComponent*) {}
-	void Mission12(MessageCode, TPinballComponent*) {}
 	void Mission13(MessageCode, TPinballComponent*) {}
 	void Mission14(MessageCode, TPinballComponent*) {}
 	void Mission15(MessageCode, TPinballComponent*) {}
 	void MissionOther(MessageCode, TPinballComponent*) {}
+
+	// ---- rule functions not translated yet (their components do nothing yet) ----
+	void Rule_2b8a(MessageCode, TPinballComponent*) {} // TODO(23:2b8a): a_bump1, a_bump2, a_bump3, a_bump4
+	void Rule_2ced(MessageCode, TPinballComponent*) {} // TODO(23:2ced): a_rebo1
+	void Rule_2d4c(MessageCode, TPinballComponent*) {} // TODO(23:2d4c): a_rebo2
+	void Rule_2f95(MessageCode, TPinballComponent*) {} // TODO(23:2f95): a_spot4
+	void Rule_3082(MessageCode, TPinballComponent*) {} // TODO(23:3082): a_spot5
+	void Rule_316f(MessageCode, TPinballComponent*) {} // TODO(23:316f): a_spot6
+	void Rule_325c(MessageCode, TPinballComponent*) {} // TODO(23:325c): a_spot7
+	void Rule_3349(MessageCode, TPinballComponent*) {} // TODO(23:3349): a_spot22
+	void Rule_35e3(MessageCode, TPinballComponent*) {} // TODO(23:35e3): a_spot3
+	void Rule_3640(MessageCode, TPinballComponent*) {} // TODO(23:3640): a_spot2
+	void Rule_369d(MessageCode, TPinballComponent*) {} // TODO(23:369d): a_spot1
+	void Rule_39f7(MessageCode, TPinballComponent*) {} // TODO(23:39f7): a_spot10
+	void Rule_3a9f(MessageCode, TPinballComponent*) {} // TODO(23:3a9f): a_spot8
+	void Rule_3b77(MessageCode, TPinballComponent*) {} // TODO(23:3b77): a_spot14
+	void Rule_3c2e(MessageCode, TPinballComponent*) {} // TODO(23:3c2e): a_spot12
+	void Rule_3d06(MessageCode, TPinballComponent*) {} // TODO(23:3d06): a_spot27
+	void Rule_3eba(MessageCode, TPinballComponent*) {} // TODO(23:3eba): a_spot19
+	void Rule_3f93(MessageCode, TPinballComponent*) {} // TODO(23:3f93): a_spot26
+	void Rule_406c(MessageCode, TPinballComponent*) {} // TODO(23:406c): a_spot28
+	void Rule_4157(MessageCode, TPinballComponent*) {} // TODO(23:4157): a_spot30
+	void Rule_41b6(MessageCode, TPinballComponent*) {} // TODO(23:41b6): a_spot31
+	void Rule_4931(MessageCode, TPinballComponent*) {} // TODO(23:4931): a_sink1
+	void Rule_4afc(MessageCode, TPinballComponent*) {} // TODO(23:4afc): a_sink2
+	void Rule_4c97(MessageCode, TPinballComponent*) {} // TODO(23:4c97): a_sink4
+	void Rule_53e7(MessageCode, TPinballComponent*) {} // TODO(23:53e7): a_ramp103
+	void Rule_55ee(MessageCode, TPinballComponent*) {} // TODO(23:55ee): a_ramp6
+	void Rule_5701(MessageCode, TPinballComponent*) {} // TODO(23:5701): s_oneway5
+	void Rule_58d4(MessageCode, TPinballComponent*) {} // TODO(23:58d4): a_accl1
+	void Rule_5970(MessageCode, TPinballComponent*) {} // TODO(23:5970): s_trip1, s_trip2, v_lite69
+	void Rule_5a62(MessageCode, TPinballComponent*) {} // TODO(23:5a62): a_roll7
+	void Rule_5b25(MessageCode, TPinballComponent*) {} // TODO(23:5b25): a_roll5
+	void Rule_5b69(MessageCode, TPinballComponent*) {} // TODO(23:5b69): a_roll2
+	void Rule_5bad(MessageCode, TPinballComponent*) {} // TODO(23:5bad): a_roll6
+	void Rule_5c74(MessageCode, TPinballComponent*) {} // TODO(23:5c74): a_roll1
+	void Rule_5d3b(MessageCode, TPinballComponent*) {} // TODO(23:5d3b): s_rexit19
+	void Rule_5db7(MessageCode, TPinballComponent*) {} // TODO(23:5db7): s_rexit18
+	void Rule_5e33(MessageCode, TPinballComponent*) {} // TODO(23:5e33): a_flip2
+	void Rule_5f13(MessageCode, TPinballComponent*) {} // TODO(23:5f13): a_kick1
+	void Rule_5fe4(MessageCode, TPinballComponent*) {} // TODO(23:5fe4): a_kout1
+	void Rule_6122(MessageCode, TPinballComponent*) {} // TODO(23:6122): a_kout2
+	void Rule_6241(MessageCode, TPinballComponent*) {} // TODO(23:6241): s_hole118
+	void Rule_6394(MessageCode, TPinballComponent*) {} // TODO(23:6394): a_sink15
+	void Rule_658a(MessageCode, TPinballComponent*) {} // TODO(23:658a): a_sink18
+	void Rule_678f(MessageCode, TPinballComponent*) {} // TODO(23:678f): a_sink13
+	void Rule_68ec(MessageCode, TPinballComponent*) {} // TODO(23:68ec): a_sink17
+	void Rule_6a49(MessageCode, TPinballComponent*) {} // TODO(23:6a49): a_sink9
+	void Rule_6c5c(MessageCode, TPinballComponent*) {} // TODO(23:6c5c): a_sink10
+	void Rule_6ea6(MessageCode, TPinballComponent*) {} // TODO(23:6ea6): v_wlite96, v_wlite97, v_wlite98, v_wlite99
+	void Rule_6eea(MessageCode, TPinballComponent*) {} // TODO(23:6eea): s_trip6, s_trip5
+	void Rule_71e4(MessageCode, TPinballComponent*) {} // TODO(23:71e4): s_trip3, s_trip4
+	void Rule_73e6(MessageCode, TPinballComponent*) {} // TODO(23:73e6): s_trip8, s_trip9
+	void Rule_75d3(MessageCode, TPinballComponent*) {} // TODO(23:75d3): a_kout3
+	void Rule_7617(MessageCode, TPinballComponent*) {} // TODO(23:7617): a_sink19
+	void Rule_109f(MessageCode, TPinballComponent*) {} // TODO(23:109f): a_rocka
+	void Rule_10f8(MessageCode, TPinballComponent*) {} // TODO(23:10f8): a_rockb
+	void Rule_79db(MessageCode, TPinballComponent*) {} // TODO(23:79db): v_lite37
+	void Rule_7a8d(MessageCode, TPinballComponent*) {} // TODO(23:7a8d): v_lite29
+
+	// ds:0x2a34 - the rule table (23:0595 links it): each component's rule function and scores
+	const int Scores4[] = {1500};
+	const int Scores5[] = {1500};
+	const int Scores6[] = {1500};
+	const int Scores7[] = {1500};
+	const int Scores8[] = {1000};
+	const int Scores9[] = {1000};
+	const int Scores10[] = {2500};
+	const int Scores11[] = {2500};
+	const int Scores12[] = {2500};
+	const int Scores13[] = {2500};
+	const int Scores14[] = {2500};
+	const int Scores15[] = {2000, 10000};
+	const int Scores16[] = {2000, 10000};
+	const int Scores17[] = {2000, 10000};
+	const int Scores18[] = {3000, 15000};
+	const int Scores19[] = {3000, 15000};
+	const int Scores20[] = {3000, 15000};
+	const int Scores21[] = {3000, 15000};
+	const int Scores22[] = {5000};
+	const int Scores23[] = {20000};
+	const int Scores24[] = {50000};
+	const int Scores26[] = {2500};
+	const int Scores27[] = {2500};
+	const int Scores29[] = {5000};
+	const int Scores30[] = {5000};
+	const int Scores34[] = {25000, 75000, 100000, 125000, 150000};
+	const int Scores35[] = {75000, 500000};
+	const int Scores36[] = {20000, 50000, 100000, 1000000};
+	const int Scores37[] = {20000, 50000, 100000, 1000000};
+	const int Scores39[] = {15000};
+	const int Scores40[] = {30000};
+	const int Scores41[] = {30000};
+	const int Scores42[] = {10000};
+	const int Scores43[] = {10000};
+	const int Scores51[] = {100000};
+	const int Scores52[] = {100000};
+	const int Scores53[] = {200000};
+	const int Scores54[] = {200000};
+	const int Scores55[] = {300000};
+	const int Scores56[] = {300000};
+	const int Scores57[] = {1500};
+	const int Scores58[] = {1500};
+	const int Scores59[] = {1500};
+	const int Scores60[] = {1500};
+	const int Scores61[] = {25000, 50000, 75000, 100000};
+	const int Scores62[] = {25000, 50000, 75000, 100000};
+	const int Scores63[] = {40000, 80000, 120000};
+	const int Scores64[] = {40000, 80000, 120000};
+	const int Scores65[] = {50000, 100000};
+	const int Scores66[] = {50000, 100000};
+	component_tag<> RuleTags[] = {{"drain"}, {"s_plunger1"}, {"s_oneway2"}, {"v_lite40"}, {"a_bump1"}, {"a_bump2"}, {"a_bump3"}, {"a_bump4"}, {"a_rebo1"}, {"a_rebo2"}, {"a_spot4"}, {"a_spot5"}, {"a_spot6"}, {"a_spot7"}, {"a_spot22"}, {"a_spot3"}, {"a_spot2"}, {"a_spot1"}, {"a_spot10"}, {"a_spot8"}, {"a_spot14"}, {"a_spot12"}, {"a_spot27"}, {"a_spot19"}, {"a_spot26"}, {"a_spot28"}, {"a_spot30"}, {"a_spot31"}, {"a_center_post"}, {"a_sink1"}, {"a_sink2"}, {"a_sink4"}, {"a_ramp103"}, {"a_ramp6"}, {"s_oneway5"}, {"a_accl1"}, {"s_trip1"}, {"s_trip2"}, {"v_lite69"}, {"a_roll7"}, {"a_roll5"}, {"a_roll2"}, {"a_roll6"}, {"a_roll1"}, {"s_rexit19"}, {"s_rexit18"}, {"a_flip2"}, {"a_kick1"}, {"a_kout1"}, {"a_kout2"}, {"s_hole118"}, {"a_sink15"}, {"a_sink18"}, {"a_sink13"}, {"a_sink17"}, {"a_sink9"}, {"a_sink10"}, {"v_wlite96"}, {"v_wlite97"}, {"v_wlite98"}, {"v_wlite99"}, {"s_trip6"}, {"s_trip5"}, {"s_trip3"}, {"s_trip4"}, {"s_trip8"}, {"s_trip9"}, {"a_bloce"}, {"a_blocf"}, {"a_kout3"}, {"a_sink19"}, {"a_rocka"}, {"a_rockb"}, {"v_lite37"}, {"v_lite29"}};
+	component_info Rules[] = {
+		{RuleTags[0], {DrainRule, 0, nullptr}},
+		{RuleTags[1], {PlungerRule, 0, nullptr}},
+		{RuleTags[2], {OnewayRule2, 0, nullptr}},
+		{RuleTags[3], {LightRule40, 0, nullptr}},
+		{RuleTags[4], {Rule_2b8a, 1, Scores4}},
+		{RuleTags[5], {Rule_2b8a, 1, Scores5}},
+		{RuleTags[6], {Rule_2b8a, 1, Scores6}},
+		{RuleTags[7], {Rule_2b8a, 1, Scores7}},
+		{RuleTags[8], {Rule_2ced, 1, Scores8}},
+		{RuleTags[9], {Rule_2d4c, 1, Scores9}},
+		{RuleTags[10], {Rule_2f95, 1, Scores10}},
+		{RuleTags[11], {Rule_3082, 1, Scores11}},
+		{RuleTags[12], {Rule_316f, 1, Scores12}},
+		{RuleTags[13], {Rule_325c, 1, Scores13}},
+		{RuleTags[14], {Rule_3349, 1, Scores14}},
+		{RuleTags[15], {Rule_35e3, 2, Scores15}},
+		{RuleTags[16], {Rule_3640, 2, Scores16}},
+		{RuleTags[17], {Rule_369d, 2, Scores17}},
+		{RuleTags[18], {Rule_39f7, 2, Scores18}},
+		{RuleTags[19], {Rule_3a9f, 2, Scores19}},
+		{RuleTags[20], {Rule_3b77, 2, Scores20}},
+		{RuleTags[21], {Rule_3c2e, 2, Scores21}},
+		{RuleTags[22], {Rule_3d06, 1, Scores22}},
+		{RuleTags[23], {Rule_3eba, 1, Scores23}},
+		{RuleTags[24], {Rule_3f93, 1, Scores24}},
+		{RuleTags[25], {Rule_406c, 0, nullptr}},
+		{RuleTags[26], {Rule_4157, 1, Scores26}},
+		{RuleTags[27], {Rule_41b6, 1, Scores27}},
+		{RuleTags[28], {CenterPostRule, 0, nullptr}},
+		{RuleTags[29], {Rule_4931, 1, Scores29}},
+		{RuleTags[30], {Rule_4afc, 1, Scores30}},
+		{RuleTags[31], {Rule_4c97, 0, nullptr}},
+		{RuleTags[32], {Rule_53e7, 0, nullptr}},
+		{RuleTags[33], {Rule_55ee, 0, nullptr}},
+		{RuleTags[34], {Rule_5701, 5, Scores34}},
+		{RuleTags[35], {Rule_58d4, 2, Scores35}},
+		{RuleTags[36], {Rule_5970, 4, Scores36}},
+		{RuleTags[37], {Rule_5970, 4, Scores37}},
+		{RuleTags[38], {Rule_5970, 0, nullptr}},
+		{RuleTags[39], {Rule_5a62, 1, Scores39}},
+		{RuleTags[40], {Rule_5b25, 1, Scores40}},
+		{RuleTags[41], {Rule_5b69, 1, Scores41}},
+		{RuleTags[42], {Rule_5bad, 1, Scores42}},
+		{RuleTags[43], {Rule_5c74, 1, Scores43}},
+		{RuleTags[44], {Rule_5d3b, 0, nullptr}},
+		{RuleTags[45], {Rule_5db7, 0, nullptr}},
+		{RuleTags[46], {Rule_5e33, 0, nullptr}},
+		{RuleTags[47], {Rule_5f13, 0, nullptr}},
+		{RuleTags[48], {Rule_5fe4, 0, nullptr}},
+		{RuleTags[49], {Rule_6122, 0, nullptr}},
+		{RuleTags[50], {Rule_6241, 0, nullptr}},
+		{RuleTags[51], {Rule_6394, 1, Scores51}},
+		{RuleTags[52], {Rule_658a, 1, Scores52}},
+		{RuleTags[53], {Rule_678f, 1, Scores53}},
+		{RuleTags[54], {Rule_68ec, 1, Scores54}},
+		{RuleTags[55], {Rule_6a49, 1, Scores55}},
+		{RuleTags[56], {Rule_6c5c, 1, Scores56}},
+		{RuleTags[57], {Rule_6ea6, 1, Scores57}},
+		{RuleTags[58], {Rule_6ea6, 1, Scores58}},
+		{RuleTags[59], {Rule_6ea6, 1, Scores59}},
+		{RuleTags[60], {Rule_6ea6, 1, Scores60}},
+		{RuleTags[61], {Rule_6eea, 4, Scores61}},
+		{RuleTags[62], {Rule_6eea, 4, Scores62}},
+		{RuleTags[63], {Rule_71e4, 3, Scores63}},
+		{RuleTags[64], {Rule_71e4, 3, Scores64}},
+		{RuleTags[65], {Rule_73e6, 2, Scores65}},
+		{RuleTags[66], {Rule_73e6, 2, Scores66}},
+		{RuleTags[67], {BloceRule, 0, nullptr}},
+		{RuleTags[68], {BlocfRule, 0, nullptr}},
+		{RuleTags[69], {Rule_75d3, 0, nullptr}},
+		{RuleTags[70], {Rule_7617, 0, nullptr}},
+		{RuleTags[71], {Rule_109f, 0, nullptr}},
+		{RuleTags[72], {Rule_10f8, 0, nullptr}},
+		{RuleTags[73], {Rule_79db, 0, nullptr}},
+		{RuleTags[74], {Rule_7a8d, 0, nullptr}},
+	};
 
 	// 23:0657 - the rules' message handler (control::handler): the mission system hears every message first, then the
 	// component's own rule runs
@@ -2234,6 +2570,20 @@ bool ft1_dragon::Link(TPinballTable* table)
 	for (auto tag : tags)
 		if (!control::make_component_link(*tag))
 			ftlog::Line(std::string("FT1 Dragon's Keep rules: component missing on the table: ") + tag->Name);
+	// 23:0595: every component of the rule table gets its rule function and scores
+	int linked = 0;
+	for (auto& rule : Rules)
+		if (auto comp = control::make_component_link(rule.Tag))
+		{
+			comp->Control = &rule.Control;
+			linked++;
+		}
+		else
+			ftlog::Line(std::string("FT1 Dragon's Keep rules: rule component missing: ") + rule.Tag.Name);
+	if (auto hole = dynamic_cast<THole*>(s_hole118.GetComponent()))
+		hole->Ft1Hold = true; // the FT1 hole keeps its ball until the rules let it go (FT1 67)
+	TRamp::Ft1Events = true;
+	ftlog::Line("FT1 Dragon's Keep: " + std::to_string(linked) + " components linked to their rules");
 	Active = true;
 	ftlog::Line("FT1 Dragon's Keep: full translation active (work in progress), " + std::to_string(Translated) +
 	            " rule functions");
@@ -2243,6 +2593,7 @@ bool ft1_dragon::Link(TPinballTable* table)
 void ft1_dragon::Clear()
 {
 	Active = false;
+	TRamp::Ft1Events = false;
 	Translated = 0;
 	g_5fdc = nullptr;
 	g_5fe4 = 0;
@@ -2253,9 +2604,12 @@ void ft1_dragon::Clear()
 
 bool ft1_dragon::Handle(MessageCode code, TPinballComponent* cmp)
 {
-	if (!Active || !cmp || !cmp->Control)
+	if (!Active)
 		return false;
-	ControlHandler(code, cmp);
+	if (code == MessageCode::ControlBallCaptured && dynamic_cast<THole*>(cmp))
+		code = FT1Code66;
+	ControlHandler(code, cmp); // 23:0657: the mission system hears every message, with a rule or without
+
 	return true;
 }
 

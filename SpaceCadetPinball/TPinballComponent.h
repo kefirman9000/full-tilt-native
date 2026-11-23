@@ -89,7 +89,11 @@ enum class MessageCode
 	Ft1BlockerShowLast = 2059,    // FT1 59: straight to the last frame, with the raise sound
 	Ft1BlockerHide = 2060,        // FT1 60: straight to no frame, with the lower sound
 	Ft1BlockerTimer = 2069,       // FT1 69: tell the rules ControlTimerExpired (FT1 70) after `value` seconds
-	Ft1BlockerArrived = 2061,     // FT1 61 to the rules: a blocker reached the frame it was moving to
+	Ft1BlockerArrived = 2061,
+	Ft1HoleRelease = 2067,
+	Ft1RampEnter = 2084,          // FT1 84 to the rules: the ball came onto a ramp
+	Ft1RampExit2 = 2085,          // FT1 85: it left by the ramp's second line
+	Ft1RampExit3 = 2086,          // FT1 86: it left by the third line (the far end: the shot is made)        // FT1 67 to a hole: let the ball go after `value` seconds (at once when <= 0)     // FT1 61 to the rules: a blocker reached the frame it was moving to
 	Ft1TimerTimeLeft = 2072,      // FT1 72 to a timer: returns the milliseconds left
 
 	TGateDisable = 53,
