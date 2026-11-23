@@ -3797,7 +3797,8 @@ namespace
 		if (g_6526 < 0)
 			g_6526 = 0;
 	}
-	void Rule_0000(MessageCode, TPinballComponent*) {} // TODO(23:0000): v_lite547, v_lite546, v_lite545
+	// v_lite547 / 546 / 545: in the rule table with no function (0000): their messages go to the mission system only
+	void Rule_0000(MessageCode, TPinballComponent*) {}
 	// 23:9922 - a_sink8: a ball in it goes out again at once (FT1 65 with 0); out (FT1 70) tabb55 except in the
 	// multiball
 	void Rule_9922(MessageCode code, TPinballComponent* caller)
@@ -3821,12 +3822,24 @@ namespace
 		if (caller)
 			caller->Message(MessageCode::TKickoutRestartTimer, 1.0f);
 	}
-	void Rule_9a2e(MessageCode, TPinballComponent*) {} // TODO(23:9a2e): s_magnet1
-	void Rule_9aff(MessageCode, TPinballComponent*) {} // TODO(23:9aff): s_magnet2
-	void Rule_9bd0(MessageCode, TPinballComponent*) {} // TODO(23:9bd0): s_magnet3
-	void Rule_9ca1(MessageCode, TPinballComponent*) {} // TODO(23:9ca1): s_magnet4
-	void Rule_9d72(MessageCode, TPinballComponent*) {} // TODO(23:9d72): s_magnet5
-	void Rule_9e43(MessageCode, TPinballComponent*) {} // TODO(23:9e43): s_magnet6
+	// 23:9a2e .. 9e43 - a magnet that caught the ball: tabb87, its light out, the magnet off (FT1 76), 100,000 (text
+	// 3003)
+	void MagnetRule(MessageCode code, TPinballComponent* caller, component_tag<TLight>& light, component_tag_base& magnet)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		Play(tabb87wave);
+		Send(light, MessageCode::TLightResetAndTurnOff, 2.0f);
+		Send(magnet, MessageCode::Ft1Deactivate, 0.0f);
+		Display(Format(3003, ScorePoints(caller, 100000)).c_str(), 2.0f, 0);
+	}
+
+	void Rule_9a2e(MessageCode c, TPinballComponent* p) { MagnetRule(c, p, v_lite560, s_magnet1); }
+	void Rule_9aff(MessageCode c, TPinballComponent* p) { MagnetRule(c, p, v_lite561, s_magnet2); }
+	void Rule_9bd0(MessageCode c, TPinballComponent* p) { MagnetRule(c, p, v_lite562, s_magnet3); }
+	void Rule_9ca1(MessageCode c, TPinballComponent* p) { MagnetRule(c, p, v_lite563, s_magnet4); }
+	void Rule_9d72(MessageCode c, TPinballComponent* p) { MagnetRule(c, p, v_lite564, s_magnet5); }
+	void Rule_9e43(MessageCode c, TPinballComponent* p) { MagnetRule(c, p, v_lite565, s_magnet6); }
 
 	// ds:0x2c18 - the rule table (23:05ad links it): each component's rule function and scores
 	const int Scores1[] = {1500, 3000, 4500, 6000, 7500, 9000, 10500};
