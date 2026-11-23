@@ -17,5 +17,6 @@ namespace ft1_dragon
 	bool Link(TPinballTable* table);
 	void Clear();
 	bool Handle(MessageCode code, TPinballComponent* cmp);
+	bool TableHandler(MessageCode code); // the table's own messages (23:1fa4), true when the translation is active
 	int TranslatedCount();
 }
