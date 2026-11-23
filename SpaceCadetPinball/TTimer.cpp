@@ -13,6 +13,13 @@ int TTimer::Message(MessageCode code, float value)
 {
 	switch (code)
 	{
+	case MessageCode::Ft1BlockerTimer: // Full Tilt 1 code 69: start for `value` seconds, stop when negative
+		if (Timer)
+			timer::kill(Timer);
+		Timer = value >= 0 ? timer::set(value, this, TimerExpired) : 0;
+		break;
+	case MessageCode::Ft1TimerTimeLeft: // Full Tilt 1 code 72
+		return timer::time_left(Timer);
 	case MessageCode::TTimerResetTimer:
 		if (Timer)
 			timer::kill(Timer);

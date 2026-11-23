@@ -26,6 +26,16 @@
 #include "TSoloTarget.h"
 #include "TPopupTarget.h"
 #include "TSink.h"
+#include "TDrain.h"
+#include "TBumper.h"
+#include "TKickout.h"
+#include "TKickback.h"
+#include "TRollover.h"
+#include "TFlagSpinner.h"
+#include "TLightRollover.h"
+#include "TRamp.h"
+#include "TTripwire.h"
+#include "TOneway.h"
 #include "TSound.h"
 #include "TTextBox.h"
 
@@ -116,6 +126,40 @@ namespace
 	DK_TAG(TPinballComponent, a_sink16)
 	DK_TAG(TPinballComponent, a_sink1)
 	DK_TAG(TPinballComponent, a_sink4)
+	DK_TAG(TLightGroup, dragon_letter_light_group)
+	DK_TAG(TLight, v_lite63)
+	DK_TAG(TLight, v_lite64)
+	DK_TAG(TPinballComponent, a_spot4)
+	DK_TAG(TPinballComponent, a_spot5)
+	DK_TAG(TPinballComponent, a_spot6)
+	DK_TAG(TPinballComponent, a_spot7)
+	DK_TAG(TPinballComponent, a_spot22)
+	DK_TAG(TPinballComponent, mode_timer)
+	DK_TAG(TLightGroup, gem_light_group)
+	DK_TAG(TPinballComponent, light_sweeps)
+	DK_TAG(TSound, tabc46wave)
+	DK_TAG(TSound, tabc47wave)
+	DK_TAG(TLight, v_lite88)
+	DK_TAG(TLight, v_lite89)
+	DK_TAG(TLight, v_lite90)
+	DK_TAG(TLight, v_lite91)
+	DK_TAG(TLight, v_lite92)
+	DK_TAG(TLight, v_lite93)
+	DK_TAG(TLight, v_lite94)
+	DK_TAG(TLight, v_lite95)
+	DK_TAG(TLight, v_lite117)
+	DK_TAG(TPinballComponent, a_accl1)
+	DK_TAG(TPinballComponent, a_spot1)
+	DK_TAG(TPinballComponent, a_spot2)
+	DK_TAG(TPinballComponent, a_spot3)
+	DK_TAG(TPinballComponent, a_spot8)
+	DK_TAG(TPinballComponent, a_spot10)
+	DK_TAG(TPinballComponent, a_spot12)
+	DK_TAG(TPinballComponent, a_spot14)
+	DK_TAG(TPinballComponent, a_sink2)
+	DK_TAG(TPinballComponent, s_oneway5)
+	DK_TAG(TPinballComponent, a_ramp103)
+	DK_TAG(TPinballComponent, a_ramp6)
 	DK_TAG(TLight, v_lite22)
 	DK_TAG(TLight, v_lite23)
 	DK_TAG(TLight, v_lite24)
@@ -1110,17 +1154,318 @@ namespace
 	{
 	}
 
+	// FT1 code 66: a hole (s_hole118) has the ball. TODO(66): confirm against the FT1 hole; here THole's
+	// ControlBallCaptured is passed on as 66 (ft1_dragon::Handle)
+	const MessageCode FT1Code66 = static_cast<MessageCode>(2066);
+
+	void InfoClear() // 18:0b0c
+	{
+		if (info_text_box.Component)
+			info_text_box.Component->Clear();
+	}
+
+	void SetState(int state) // the info box's MessageField is the mission state; the handlers hear event 79
+	{
+		SetInfoField(state);
+		MissionEvent(FT1Event79, nullptr);
+	}
+
+	// 23:7d0e - the tower lock lights reset and the dragon letters back from their override
+	void ResetTowerAndLetters()
+	{
+		ResetTowerLocks();
+		Send(dragon_letter_light_group, FT1LightOverrideOff, 0.0f);
+	}
+
+	// 23:7d3c - the info box cleared, lights 63/64 off, the dragon letters' override reset, the tower locks updated
+	void ClearLettersAndLocks()
+	{
+		InfoClear();
+		Send(v_lite63, MessageCode::TLightResetAndTurnOff, 0.0f);
+		Send(v_lite64, MessageCode::TLightResetAndTurnOff, 0.0f);
+		Send(dragon_letter_light_group, FT1LightResetOverride, 0.0f);
+		UpdateTowerLocks();
+	}
+
+	// 23:7da7 - state 10, the skill shot after a new ball (text 3066): the first part hit decides. Solo targets: spot4
+	// an armor piece, spot5 a dragon egg, spot6 the multiplier, spot7 a weapon, spot22 state 14; other parts 15,000;
+	// then state 2 (normal play). s_hole118 (FT1 66) starts the quest instead
+	void Mission10(MessageCode code, TPinballComponent* cmp)
+	{
+		auto t = control::TableG;
+		auto toPlay = [&](bool score)
+		{
+			if (score && !t->TiltLockFlag)
+				ScorePoints(nullptr, 15000);
+			SetState(2);
+			MissionEvent(FT1Event80, nullptr);
+		};
+		if (code == FT1Event79)
+			g_2270 = 1;
+		if (code == FT1Event79 || code == FT1Event80)
+		{
+			Display(ft1_strings::Get(3066), -1.0f, 0);
+			return;
+		}
+		if (code == FT1Code66)
+		{
+			if (cmp == s_hole118.GetComponent())
+				QuestRunningStart();
+			else
+				toPlay(true);
+			return;
+		}
+		if (code != MessageCode::ControlCollision || !cmp)
+			return;
+		if (dynamic_cast<TSoloTarget*>(cmp)) // FT1 type 1019
+		{
+			if (cmp == a_spot4.GetComponent())
+				AwardRandomArmor();
+			else if (cmp == a_spot5.GetComponent())
+				AwardDragonEggs(1);
+			else if (cmp == a_spot6.GetComponent())
+				RaiseMultiplier();
+			else if (cmp == a_spot7.GetComponent())
+				RandomWeapon();
+			else if (cmp == a_spot22.GetComponent())
+			{
+				SetState(14);
+				return;
+			}
+			else
+			{
+				toPlay(true);
+				return;
+			}
+			SetState(2);
+			return;
+		}
+		if (dynamic_cast<TDrain*>(cmp)) // type 1007
+		{
+			toPlay(false);
+			return;
+		}
+		// types 1000, 1005, 1006, 1012, 1014, 1015, 1017, 1018, 1020, 1021, 1024, 1030: 15,000
+		if (dynamic_cast<TBumper*>(cmp) || dynamic_cast<TPopupTarget*>(cmp) || dynamic_cast<TKickout*>(cmp) ||
+			dynamic_cast<TKickback*>(cmp) || dynamic_cast<TRollover*>(cmp) || dynamic_cast<TSink*>(cmp) ||
+			dynamic_cast<TFlagSpinner*>(cmp) || dynamic_cast<TLightRollover*>(cmp) || dynamic_cast<TRamp*>(cmp) ||
+			dynamic_cast<TTripwire*>(cmp))
+			toPlay(true);
+	}
+
+	// 23:7f7d - state 2, normal play: text 3001; on entering, the info box cleared (unless g_2270) and the table's
+	// music back
+	void Mission2(MessageCode code, TPinballComponent* cmp)
+	{
+		if (code == FT1Event80)
+			Display(ft1_strings::Get(3001), -1.0f, 0);
+		else if (code == FT1Event79)
+		{
+			if (!g_2270)
+				InfoClear();
+			g_2270 = 0;
+			if (MusicPlaying != MusicMain)
+				PlayMusic(MusicMain);
+		}
+	}
+
+	// Full Tilt 1 events between the mission handlers
+	const MessageCode FT1Event81 = static_cast<MessageCode>(2081); // a paused quest goes on
+	const MessageCode FT1Event82 = static_cast<MessageCode>(2082); // a quest is over
+	// FT1 code 86 from a ramp: the ramp made. TODO(86): here TRamp's ControlCollision is passed on as 86
+	const MessageCode FT1Code86 = static_cast<MessageCode>(2086);
+	const MessageCode FT1LightSweepStart = static_cast<MessageCode>(27); // FT1 27 to light_sweeps (type 1038)
+
+	// 1:1dcb (sprintf) of a table text with one number
+	std::string Format(int textId, long long value)
+	{
+		char buffer[256];
+		snprintf(buffer, sizeof buffer, ft1_strings::Get(textId), static_cast<int>(value));
+		return buffer;
+	}
+
+	int TimeLeftMs(component_tag_base& timerTag) // FT1 72
+	{
+		return Send(timerTag, MessageCode::Ft1TimerTimeLeft, 0.0f);
+	}
+
+	bool TextQueued() // the FT1 text box's +0x4e. TODO(+0x4e): this engine's text box has no queue flag
+	{
+		return false;
+	}
+
+	// 23:802d - state 3, a quest's hurry-up: lights 63/64 flash and the mode timer gives 10 s to get back into it
+	// (text 3067 counts down). Run out or drained: the paused quest (kept in the mode timer's MessageField) hears 82
+	void Mission3(MessageCode code, TPinballComponent* cmp)
+	{
+		if (code == FT1Event79)
+		{
+			Send(v_lite63, MessageCode::TLightFlasherStartTimed, -1.0f);
+			Send(v_lite64, MessageCode::TLightFlasherStartTimed, -1.0f);
+			Send(mode_timer, MessageCode::Ft1BlockerTimer, 10.0f);
+		}
+		if (code == FT1Event79 || code == FT1Event80)
+		{
+			auto left = TimeLeftMs(mode_timer);
+			if (left)
+				Display(Format(3067, left / 1000).c_str(), 0.5f, 0);
+			return;
+		}
+		if (code == FT1Event83)
+		{
+			MissionDispatch(Field(mode_timer), FT1Event82, nullptr);
+			Send(mode_timer, MessageCode::Ft1BlockerTimer, -1.0f);
+			Field(mode_timer) = -1;
+			SetInfoField(2);
+			return;
+		}
+		if (code == MessageCode::ControlTimerExpired && cmp == mode_timer.GetComponent())
+		{
+			Send(v_lite63, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(v_lite64, MessageCode::TLightResetAndTurnOff, 0.0f);
+			MissionDispatch(Field(mode_timer), FT1Event82, nullptr);
+			Field(mode_timer) = -1;
+			if (InfoField() == 3)
+				SetState(2);
+		}
+	}
+
+	// 23:8236 - one of the nine gem shots (bits in v_lite88's MessageField); all nine: the gems flash and an extra
+	// ball is lit
+	void GemShot(int bit)
+	{
+		auto& gems = Field(v_lite88);
+		gems |= bit;
+		if (gems == 0x1ff)
+		{
+			Send(gem_light_group, MessageCode::TLightFlasherStartTimed, -1.0f);
+			AddExtraBall(2.0f);
+		}
+		else
+			Play(tabc47wave);
+	}
+
+	// 23:82a6 - state 4, the gem quest (text 3020, music tabc2): nine shots, each with its gem light and points;
+	// 15 s on the mode timer, then the hurry-up (state 3)
+	void Mission4(MessageCode code, TPinballComponent* cmp)
+	{
+		auto gem = [&](component_tag<TLight>& light, int points, int textId, int bit)
+		{
+			Send(light, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			auto scored = ScorePoints(cmp, points);
+			Display(Format(textId, scored).c_str(), 2.0f, 0);
+			GemShot(bit);
+		};
+		if (code == FT1Event79)
+		{
+			Send(light_sweeps, FT1LightSweepStart, 0.0f);
+			Send(gem_light_group, MessageCode::TLightFlasherStartTimed, -1.0f);
+			Send(a_dvtrba, MessageCode::TGateEnable, 0.0f);
+			Send(a_dvtrbb, MessageCode::TGateDisable, 0.0f);
+			Send(a_dvtrca, MessageCode::TGateEnable, 0.0f);
+			Send(a_dvtrcb, MessageCode::TGateDisable, 0.0f);
+			ScorePoints(nullptr, 100000);
+			InfoClear();
+			Display(ft1_strings::Get(3020), -1.0f, 0);
+			Field(v_lite88) = 0;
+			PlayMusic(MusicTrack2);
+			Play(tabc46wave);
+			return;
+		}
+		if (code == FT1Event83 || code == FT1Event82)
+		{
+			if (code == FT1Event83)
+			{
+				SetInfoField(2);
+				Send(mode_timer, MessageCode::Ft1BlockerTimer, -1.0f);
+			}
+			ClearLettersAndLocks();
+			Send(gem_light_group, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(gem_light_group, FT1LightResetOverride, 0.0f);
+			CompleteQuest();
+			return;
+		}
+		if (code == FT1Event81)
+		{
+			Play(tabc46wave);
+			Send(gem_light_group, FT1LightResetOverride, 0.0f);
+			Send(mode_timer, MessageCode::Ft1BlockerTimer, 15.0f);
+			if (TextQueued())
+				return;
+		}
+		if (code == FT1Event81 || code == FT1Event80)
+		{
+			auto left = TimeLeftMs(mode_timer);
+			if (left)
+				Display(Format(3019, left / 1000).c_str(), 0.5f, 0);
+			return;
+		}
+		if (code == MessageCode::ControlCollision && cmp)
+		{
+			if (dynamic_cast<TSink*>(cmp)) // 1017
+			{
+				if (cmp == a_sink1.GetComponent() || cmp == a_sink2.GetComponent())
+					gem(v_lite91, 100000, 3024, 0x20);
+			}
+			else if (dynamic_cast<TBumper*>(cmp)) // 1005
+				gem(v_lite88, 10000, 3021, 1);
+			else if (dynamic_cast<TOneway*>(cmp)) // 1016
+			{
+				if (cmp == s_oneway5.GetComponent())
+				{
+					Send(v_lite95, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+					CollectJackpot(0.0f, true);
+					GemShot(0x40);
+				}
+			}
+			else if (dynamic_cast<TSoloTarget*>(cmp)) // 1019
+			{
+				if (cmp == a_spot4.GetComponent() || cmp == a_spot5.GetComponent() || cmp == a_spot6.GetComponent() ||
+					cmp == a_spot7.GetComponent() || cmp == a_spot22.GetComponent())
+					gem(v_lite89, 50000, 3022, 2);
+				else if (cmp == a_spot3.GetComponent() || cmp == a_spot2.GetComponent() || cmp == a_spot1.GetComponent())
+					gem(v_lite90, 60000, 3023, 4);
+				else if (cmp == a_spot10.GetComponent() || cmp == a_spot8.GetComponent() ||
+					cmp == a_spot14.GetComponent() || cmp == a_spot12.GetComponent())
+					gem(v_lite93, 70000, 3026, 0x10);
+			}
+			else if (cmp == a_accl1.GetComponent()) // 1036
+				gem(v_lite117, 100000, 3028, 0x100);
+			return;
+		}
+		if (code == FT1Code86)
+		{
+			if (cmp == a_ramp103.GetComponent())
+				gem(v_lite94, 250000, 3027, 0x80);
+			else if (cmp == a_ramp6.GetComponent())
+				gem(v_lite92, 200000, 3025, 8);
+			return;
+		}
+		if (code == MessageCode::ControlTimerExpired && cmp)
+		{
+			if (cmp == mode_timer.GetComponent())
+			{
+				Field(mode_timer) = InfoField();
+				Send(gem_light_group, FT1LightOverrideOff, 0.0f);
+				SetState(3);
+			}
+			else if (cmp == light_sweeps.GetComponent()) // 1038: the sweep is over, the quest starts
+			{
+				ResetTowerAndLetters();
+				ReleaseTo(a_sink1.GetComponent(), 0.0f);
+				Send(mode_timer, MessageCode::Ft1BlockerTimer, 27.73f);
+				MissionEvent(FT1Event80, nullptr);
+			}
+		}
+	}
+
 	// ---- mission handlers not translated yet ----
 	void Mission0(MessageCode, TPinballComponent*) {}
-	void Mission2(MessageCode, TPinballComponent*) {}
-	void Mission3(MessageCode, TPinballComponent*) {}
-	void Mission4(MessageCode, TPinballComponent*) {}
 	void Mission5(MessageCode, TPinballComponent*) {}
 	void Mission6(MessageCode, TPinballComponent*) {}
 	void Mission7(MessageCode, TPinballComponent*) {}
 	void Mission8(MessageCode, TPinballComponent*) {}
 	void Mission9(MessageCode, TPinballComponent*) {}
-	void Mission10(MessageCode, TPinballComponent*) {}
 	void Mission11(MessageCode, TPinballComponent*) {}
 	void Mission12(MessageCode, TPinballComponent*) {}
 	void Mission13(MessageCode, TPinballComponent*) {}

@@ -90,6 +90,7 @@ enum class MessageCode
 	Ft1BlockerHide = 2060,        // FT1 60: straight to no frame, with the lower sound
 	Ft1BlockerTimer = 2069,       // FT1 69: tell the rules Ft1TimerExpired after `value` seconds
 	Ft1TimerExpired = 2070,       // FT1 70 from a blocker's timer (69)
+	Ft1TimerTimeLeft = 2072,      // FT1 72 to a timer: returns the milliseconds left
 
 	TGateDisable = 53,
 	TGateEnable = 54,

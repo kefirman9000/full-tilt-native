@@ -141,6 +141,16 @@ int timer::set(float time, void* caller, void (* callback)(int, void*))
 	return timer->TimerId;
 }
 
+int timer::time_left(int timerId)
+{
+	if (!timerId)
+		return 0;
+	for (auto current = ActiveList; current; current = current->NextTimer)
+		if (current->TimerId == timerId)
+			return std::max(0, current->TargetTime - pb::time_ticks);
+	return 0;
+}
+
 int timer::check()
 {
 	timer_struct* current = ActiveList;

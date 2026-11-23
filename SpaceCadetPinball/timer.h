@@ -18,6 +18,8 @@ public:
 	static int kill(void (*callback)(int, void*));
 	static int set(float time, void* caller, void (* callback)(int, void*));
 	static int check();
+	// Milliseconds until the timer fires, 0 when it is not running
+	static int time_left(int timerId);
 
 private:
 	static int SetCount;
