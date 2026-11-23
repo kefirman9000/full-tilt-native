@@ -18,6 +18,8 @@ public:
 	// Full Tilt 1 hole that keeps the ball (15:6905): the rules hear ControlBallCaptured and release it with
 	// Ft1HoleRelease (FT1 67: after `value` seconds, at once when <= 0; tilt releases it too)
 	bool Ft1Hold{};
+	// Skulduggery's lock (s_hole19): the ball it catches leaves play (the rules count it and serve another one)
+	bool Ft1Swallow{};
 	bool BallCapturedFlag{};
 	bool BallCapturedSecondStage{};
 	int Timer;

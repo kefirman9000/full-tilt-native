@@ -316,6 +316,7 @@ namespace
 	bool Active = false;
 
 	// Full Tilt 1 codes without an equivalent in this engine
+	const MessageCode FT1HoleCaptured = static_cast<MessageCode>(2066); // FT1 66: a hole has the ball
 	const MessageCode LastHitMovedOn = static_cast<MessageCode>(2077); // FT1 77, to the component that scored last
 	const MessageCode FT1Event79 = static_cast<MessageCode>(2079);    // rules-internal events of the mission system
 	const MessageCode FT1Event80 = static_cast<MessageCode>(2080);
@@ -3281,10 +3282,90 @@ namespace
 			break;
 		}
 	}
-	void Rule_7c6f(MessageCode, TPinballComponent*) {} // TODO(23:7c6f): s_trip1
-	void Rule_7cf1(MessageCode, TPinballComponent*) {} // TODO(23:7cf1): s_hole19
-	void Rule_7dc4(MessageCode, TPinballComponent*) {} // TODO(23:7dc4): s_trip2
-	void Rule_7e9b(MessageCode, TPinballComponent*) {} // TODO(23:7e9b): s_rexit8
+	// 23:7c6f - s_trip1: the plunger blocker up (blocker e 1, light 504 on, 505 off)
+	void Rule_7c6f(MessageCode code, TPinballComponent*)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		Send(a_bloce, MessageCode::Ft1BlockerSetPosition, 1.0f);
+		Send(v_lite504, MessageCode::TLightResetAndTurnOn, 0.0f);
+		Send(v_lite505, MessageCode::TLightResetAndTurnOff, 0.0f);
+	}
+
+	// 23:1ce0 - a ball locked in s_hole19: one ball fewer in play, one more kept (g_6526; the second opens oneway 12);
+	// the third starts the kept balls' multiball (state 13), otherwise tabb39 and a new ball is served
+	float LockBall(float time)
+	{
+		auto t = control::TableG;
+		t->MultiballCount--; // +0x146
+		if (++g_6526 == 2)
+			if (auto oneway = s_oneway12.GetComponent())
+				oneway->ActiveFlag = 1;
+		if (t->MultiballCount < 0)
+			t->MultiballCount = 0;
+		if (g_6526 == 3)
+			SkillMission(13, nullptr, 0.0f); // 23:0d66
+		else
+		{
+			Play(tabb39wave);
+			Send(s_launcher1, MessageCode::PlungerRelaunchBall, 0.96f); // FT1 1019
+		}
+		return time;
+	}
+
+	// 23:7cf1 - s_hole19, the lock: in the multiballs and when tilted nothing; else its score (text 3007) and the
+	// ball is locked
+	void Rule_7cf1(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != FT1HoleCaptured)
+			return;
+		auto state = InfoField();
+		if (state == 12 || state == 13 || state == 17)
+			return;
+		Display(Format(3007, ScoreHit(caller, 0)).c_str(), 2.0f, 0);
+		LockBall(2.0f);
+	}
+
+	// 23:7dc4 - s_trip2: in state 4 drops 5-9 up; in normal play and the multiballs the plunger blocker down
+	void Rule_7dc4(MessageCode code, TPinballComponent*)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		switch (InfoField())
+		{
+		case 4:
+			Drops5Up();
+			break;
+		case 2:
+		case 12:
+		case 13:
+			Send(a_bloce, MessageCode::Ft1BlockerSetPosition, 0.0f);
+			Send(v_lite504, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(v_lite505, MessageCode::TLightResetAndTurnOn, 0.0f);
+			break;
+		default:
+			break;
+		}
+	}
+
+	// 23:7e9b - s_rexit8, the shot made (FT1 86): in state 4 drops 5-9 up, a fathom (text 3018); else its score
+	// (text 3003, tabb40)
+	void Rule_7e9b(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::Ft1RampExit3)
+			return;
+		if (InfoField() == 4)
+		{
+			Drops5Up();
+			g_651c++;
+			Display(ft1_strings::Get(3018), 2.0f, 0);
+			FathomAward(2.0f);
+			Play(tabb57wave);
+			return;
+		}
+		Display(Format(3003, ScoreHit(caller, 0)).c_str(), 2.0f, 0);
+		Play(tabb40wave);
+	}
 	void Rule_7fb9(MessageCode, TPinballComponent*) {} // TODO(23:7fb9): s_trip3
 	void Rule_8287(MessageCode, TPinballComponent*) {} // TODO(23:8287): s_trip8
 	void Rule_858e(MessageCode, TPinballComponent*) {} // TODO(23:858e): s_trip11
@@ -3475,6 +3556,8 @@ bool ft1_pirates::Link(TPinballTable* table)
 		else
 			ftlog::Line(std::string("FT1 Skulduggery rules: rule component missing: ") + rule.Tag.Name);
 	TRamp::Ft1Events = true;
+	if (auto hole = dynamic_cast<THole*>(s_hole19.GetComponent()))
+		hole->Ft1Swallow = true;
 	Active = true;
 	ftlog::Line("FT1 Skulduggery: translation active (work in progress), " + std::to_string(linked) + " rule entries");
 	return Active;
@@ -3493,6 +3576,8 @@ bool ft1_pirates::Handle(MessageCode code, TPinballComponent* cmp)
 {
 	if (!Active)
 		return false;
+	if (code == MessageCode::ControlBallCaptured && dynamic_cast<THole*>(cmp))
+		code = FT1HoleCaptured; // FT1 66
 	ControlHandler(code, cmp);
 	return true;
 }
