@@ -38,6 +38,7 @@
 #include "TTripwire.h"
 #include "TOneway.h"
 #include "TSound.h"
+#include "high_score.h"
 #include "TTextBox.h"
 
 namespace
@@ -170,6 +171,9 @@ DK_TAG(TSound, tabc55wave)
 DK_TAG(TLight, v_lite14)
 DK_TAG(TLightGroup, well_light_group)
 DK_TAG(TSink, a_sink19)
+DK_TAG(TSound, tabc44wave)
+DK_TAG(TSound, tabc56wave)
+DK_TAG(TSound, tabc06wave)
 DK_TAG(TSound, tabc61wave)
 DK_TAG(TSound, tabc32wave)
 DK_TAG(TSound, tabc33wave)
@@ -2494,10 +2498,196 @@ DK_TAG(TSound, tabc58wave)
 		}
 	}
 
-	// ---- mission handlers not translated yet ----
-	void Mission0(MessageCode, TPinballComponent*) {}
-	void Mission11(MessageCode, TPinballComponent*) {}
-	void MissionOther(MessageCode, TPinballComponent*) {}
+	// 23:c4c7 - state 0, the game is over: the music back, the table's game over (FT1 1024); when a score makes the
+	// high score table (14:0505) all the lights flash 3 s and text 3065 shows
+	void Mission0(MessageCode code, TPinballComponent*)
+	{
+		if (code != FT1Event79)
+			return;
+		if (MusicPlaying != MusicTrack1)
+			PlayMusic(MusicTrack1);
+		auto t = control::TableG;
+		t->Message(MessageCode::GameOver, 0.0f); // FT1 1024 to the table
+		bool high = false;
+		for (int i = t->PlayerCount - 1; i >= 0 && !high; i--)
+		{
+			auto score = i == t->CurrentPlayer ? t->CurScore : t->PlayerScores[i].Score;
+			high = high_score::get_score_position(score) >= 0;
+		}
+		if (!high)
+			return;
+		Play(tabc56wave);
+		if (t->LightGroup)
+			t->LightGroup->Message(MessageCode::TLightFlasherStartTimedThenStayOff, 3.0f);
+		Display(ft1_strings::Get(3065), -1.0f, 0);
+	}
+
+	int g_5ff6 = 0;  // the bonus count is hurried (a flipper)
+	int g_5ff8 = 0;  // the bonus count's step
+	int g_5ffa = 0;  // the bonus so far
+
+	// 23:be51 - state 11, the end of the ball: the lights go out and the bonus is counted, one line per 2 s (a flipper
+	// hurries it; nothing when tilted): gems x2,000 (3012), loops x100,000 (3013), weapons x50,000 (3014), armor
+	// x75,000 (3015), eggs x150,000 (3069), multiplier x75,000 (3070), the held bonus (3016); the total is scored
+	// (3017) and kept when v_lite31 (bonus hold) is lit. Then an extra ball, the next player, or the game is over.
+	// mode_timer (30 s) ends it if it hangs.
+	void Mission11(MessageCode code, TPinballComponent* cmp)
+	{
+		auto t = control::TableG;
+		auto show = [&](int textId, int value, component_tag<TSound>& sound)
+		{
+			Display(Format(textId, value).c_str(), 2.0f, 0);
+			Play(sound);
+		};
+		switch (code)
+		{
+		case MessageCode::TFlipperExtend: // FT1 1
+			g_5ff6 = 1;
+			InfoClear();
+			Mission11(FT1Event80, cmp);
+			return;
+		case FT1Event83:
+			if (g_5ff8 >= 8)
+				break;
+			return;
+		case MessageCode::ControlTimerExpired: // FT1 70
+			if (cmp != mode_timer.GetComponent())
+				return;
+			g_2276 = 0;
+			g_5ff8 = 8;
+			Mission11(FT1Event80, nullptr);
+			return;
+		case FT1Event79:
+			g_5ff6 = 0;
+			g_5ff8 = 0;
+			g_5ffa = 0;
+			Send(mode_timer, MessageCode::Ft1BlockerTimer, 30.0f);
+			if (t->TiltLockFlag && g_2276 != 1)
+				g_5ff8 = 8;
+			if (t->LightGroup)
+				t->LightGroup->Message(FT1LightOverrideOff, 0.0f);
+			InfoClear();
+			Play(tabc44wave);
+			break;
+		case FT1Event80:
+			break;
+		default:
+			return;
+		}
+		// event 80: the next step
+		for (;;)
+		{
+			auto step = g_5ff8++;
+			int value = 0, text = 0;
+			switch (step)
+			{
+			case 0:
+				value = g_5fe2 * 2000;
+				text = 3012;
+				break;
+			case 1:
+			{
+				int loops = Field(v_lite28);
+				ClearQuestLight();
+				value = loops * 100000;
+				text = 3013;
+				break;
+			}
+			case 2:
+			{
+				int weapons = (LightOn(v_lite37) ? 1 : 0) + (LightOn(v_lite38) ? 1 : 0) + (LightOn(v_lite39) ? 1 : 0);
+				value = weapons * 50000;
+				text = 3014;
+				break;
+			}
+			case 3:
+				value = g_5fe4 * 75000;
+				text = 3015;
+				break;
+			case 4:
+				value = Send(dragon_egg_light_group, MessageCode::TLightGroupGetOnCount, 0.0f) * 150000;
+				text = 3069;
+				break;
+			case 5:
+				if (Multiplier > 1)
+					value = Multiplier * 75000;
+				text = 3070;
+				break;
+			case 6:
+				value = Field(drain); // the held bonus
+				text = 3016;
+				break;
+			case 7:
+				if (LightOn(v_lite31))
+				{
+					Send(v_lite31, MessageCode::TLightResetAndTurnOff, 0.0f);
+					Field(drain) = g_5ffa;
+				}
+				else
+					Field(drain) = 0;
+				if (!g_5ffa)
+					continue;
+				{
+					auto added = SpecialAddScore(cmp, g_5ffa);
+					if (g_5ff6)
+						continue;
+					show(3017, added, tabc13wave);
+				}
+				return;
+			default:
+			{
+				// the ball is over
+				if (g_2276 && t->MultiballCount)
+					return;
+				g_2276 = 0;
+				Send(mode_timer, MessageCode::Ft1BlockerTimer, -1.0f);
+				if (t->ExtraBalls)
+				{
+					t->ExtraBalls--;
+					auto player = t->CurrentPlayer;
+					Display(ft1_strings::Get(player >= 0 && player <= 2 ? 2011 + player : 2014), -1.0f, 0);
+					t->Message(MessageCode::ClearTiltLock, 0.0f); // FT1 1012
+				}
+				else
+				{
+					t->ChangeBallCount(t->BallCount - 1); // 15:b9c6
+					if (t->CurrentPlayer + 1 == t->PlayerCount && t->BallCount == 0)
+					{
+						if (t->LightGroup)
+							t->LightGroup->Message(MessageCode::TLightResetAndTurnOff, 0.0f);
+						SetInfoField(0);
+						MissionEvent(FT1Event79, nullptr);
+						if (t->LightGroup)
+							t->LightGroup->Message(FT1LightResetOverride, 0.0f);
+						return;
+					}
+					t->Message(MessageCode::ClearTiltLock, 0.0f);    // FT1 1012
+					Send(drain, MessageCode::Reset, 0.0f);             // FT1 1011 to the drain
+					t->Message(MessageCode::SwitchToNextPlayer, 0.0f); // FT1 1023
+				}
+				Send(s_plunger1, MessageCode::PlungerStartFeedTimer, 0.96f); // FT1 1017
+				if (t->LightGroup)
+					t->LightGroup->Message(FT1LightResetOverride, 0.0f);
+				return;
+			}
+			}
+			if (!value)
+				continue;
+			g_5ffa += value;
+			if (g_5ff6)
+				continue;
+			show(text, value, tabc06wave);
+			return;
+		}
+	}
+
+	// 23:c5a9 - any other state: back to normal play
+	void MissionOther(MessageCode, TPinballComponent*)
+	{
+		SetInfoField(2);
+		MissionEvent(FT1Event79, nullptr);
+	}
+
 
 	// ---- rule functions not translated yet (their components do nothing yet) ----
 	void Rule_2b8a(MessageCode, TPinballComponent*) {} // TODO(23:2b8a): a_bump1, a_bump2, a_bump3, a_bump4
