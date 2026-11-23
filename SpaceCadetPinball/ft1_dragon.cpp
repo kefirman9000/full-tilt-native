@@ -171,6 +171,21 @@ DK_TAG(TSound, tabc55wave)
 DK_TAG(TLight, v_lite14)
 DK_TAG(TLightGroup, well_light_group)
 DK_TAG(TSink, a_sink19)
+DK_TAG(TSound, tabc03wave)
+DK_TAG(TSound, tabc05wave)
+DK_TAG(TSound, tabc07wave)
+DK_TAG(TLight, v_lite120)
+DK_TAG(TLight, v_lite121)
+DK_TAG(TLight, v_lite3)
+DK_TAG(TLight, v_lite4)
+DK_TAG(TLight, v_lite5)
+DK_TAG(TLight, v_lite6)
+DK_TAG(TLight, v_lite7)
+DK_TAG(TLight, v_lite8)
+DK_TAG(TLight, v_lite9)
+DK_TAG(TLight, v_lite10)
+DK_TAG(TPinballComponent, a_bump3)
+DK_TAG(TPinballComponent, a_bump4)
 DK_TAG(TSound, tabc44wave)
 DK_TAG(TSound, tabc56wave)
 DK_TAG(TSound, tabc06wave)
@@ -2689,18 +2704,142 @@ DK_TAG(TSound, tabc58wave)
 	}
 
 
+	// 23:2b8a - the bumpers: 74 = hit (in the gem quest only the lights and the count): tabc03, bumpers 3 and 4 flash
+	// v_lite65 / v_lite66, the bumper's score; every tenth hit (a_bump1's MessageField) the next multiplier
+	void BumperRule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		if (InfoField() != 4)
+			Play(tabc03wave);
+		if (caller == a_bump3.GetComponent())
+			Send(v_lite65, MessageCode::TLightFlasherStartTimed, 0.5f);
+		else if (caller == a_bump4.GetComponent())
+			Send(v_lite66, MessageCode::TLightFlasherStartTimed, 0.5f);
+		if (InfoField() != 4)
+			ScoreHit(caller, 0);
+		auto count = Field(a_bump1) + 1;
+		if (count == 10)
+		{
+			Field(a_bump1) = 0;
+			RaiseMultiplier();
+		}
+		else
+			Field(a_bump1) = count;
+	}
+
+	// 23:2ced / 23:2d4c - the rebounders: their light on 0.1 s, their score
+	void Rebound1Rule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		Send(v_lite120, MessageCode::TLightTurnOnTimed, 0.1f);
+		ScoreHit(caller, 0);
+	}
+
+	void Rebound2Rule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		Send(v_lite121, MessageCode::TLightTurnOnTimed, 0.1f);
+		ScoreHit(caller, 0);
+	}
+
+	// 23:2dab - after a spot of the five (lights 3-7): all five lit go out (flashing 1 s); in normal play gem
+	// v_lite23 lights and, unless that was the last gem, an armor piece; otherwise the spot's score and tabc05
+	void FiveSpots(TPinballComponent* caller)
+	{
+		component_tag<TLight>* lights[] = {&v_lite3, &v_lite4, &v_lite5, &v_lite6, &v_lite7};
+		bool all = true;
+		for (auto light : lights)
+			all = all && LightOn(*light);
+		if (all)
+		{
+			for (auto light : lights)
+				Send(*light, MessageCode::TLightFlasherStartTimedThenStayOff, 1.0f);
+			if (InfoField() == 2)
+			{
+				Send(v_lite23, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+				if (AllGems())
+					return;
+			}
+			AwardRandomArmor();
+			return;
+		}
+		if (InfoField() == 4)
+			return;
+		ScoreHit(caller, 0);
+		Play(tabc05wave);
+	}
+
+	// 23:2f95 / 3082 / 316f / 325c / 3349 - spots 4-7 and 22: in the well and spell quest (state 8) a_sink4 keeps
+	// which one (0-4) and its text shows (3039-3043); otherwise its light (3-7) lights and FiveSpots
+	void SpellSpot(MessageCode code, TPinballComponent* caller, int index, component_tag<TLight>& light)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		if (InfoField() == 8)
+		{
+			Field(a_sink4) = index;
+			Play(tabc05wave);
+			Display(ft1_strings::Get(3039 + index), 2.0f, 0);
+			return;
+		}
+		Send(light, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+		FiveSpots(caller);
+	}
+
+	void Spot4Rule(MessageCode code, TPinballComponent* caller) { SpellSpot(code, caller, 0, v_lite3); }
+	void Spot5Rule(MessageCode code, TPinballComponent* caller) { SpellSpot(code, caller, 1, v_lite4); }
+	void Spot6Rule(MessageCode code, TPinballComponent* caller) { SpellSpot(code, caller, 2, v_lite5); }
+	void Spot7Rule(MessageCode code, TPinballComponent* caller) { SpellSpot(code, caller, 3, v_lite6); }
+	void Spot22Rule(MessageCode code, TPinballComponent* caller) { SpellSpot(code, caller, 4, v_lite7); }
+
+	// 23:3436 - after spots 1-3 (lights 8-10): all three lit go out, the second score; in normal play gem v_lite27
+	// lights and, unless that was the last gem, the tower opens (tabc07, text 3003); tabc06 except in the gem quest.
+	// Otherwise the spot's score and tabc06
+	void ThreeSpots(TPinballComponent* caller)
+	{
+		if (LightOn(v_lite8) && LightOn(v_lite9) && LightOn(v_lite10))
+		{
+			Send(v_lite8, MessageCode::TLightFlasherStartTimedThenStayOff, 1.0f);
+			Send(v_lite9, MessageCode::TLightFlasherStartTimedThenStayOff, 1.0f);
+			Send(v_lite10, MessageCode::TLightFlasherStartTimedThenStayOff, 1.0f);
+			ScoreHit(caller, 1);
+			if (InfoField() == 2)
+			{
+				Send(v_lite27, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+				if (!AllGems())
+				{
+					OpenTower();
+					Play(tabc07wave);
+					Display(ft1_strings::Get(3003), 2.0f, 0);
+				}
+			}
+			if (InfoField() != 4)
+				Play(tabc06wave);
+			return;
+		}
+		if (InfoField() == 4)
+			return;
+		ScoreHit(caller, 0);
+		Play(tabc06wave);
+	}
+
+	// 23:35e3 / 3640 / 369d - spots 3, 2, 1: their light (8, 9, 10) lights, then ThreeSpots
+	void ThreeSpot(MessageCode code, TPinballComponent* caller, component_tag<TLight>& light)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		Send(light, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+		ThreeSpots(caller);
+	}
+
+	void Spot3Rule(MessageCode code, TPinballComponent* caller) { ThreeSpot(code, caller, v_lite8); }
+	void Spot2Rule(MessageCode code, TPinballComponent* caller) { ThreeSpot(code, caller, v_lite9); }
+	void Spot1Rule(MessageCode code, TPinballComponent* caller) { ThreeSpot(code, caller, v_lite10); }
+
 	// ---- rule functions not translated yet (their components do nothing yet) ----
-	void Rule_2b8a(MessageCode, TPinballComponent*) {} // TODO(23:2b8a): a_bump1, a_bump2, a_bump3, a_bump4
-	void Rule_2ced(MessageCode, TPinballComponent*) {} // TODO(23:2ced): a_rebo1
-	void Rule_2d4c(MessageCode, TPinballComponent*) {} // TODO(23:2d4c): a_rebo2
-	void Rule_2f95(MessageCode, TPinballComponent*) {} // TODO(23:2f95): a_spot4
-	void Rule_3082(MessageCode, TPinballComponent*) {} // TODO(23:3082): a_spot5
-	void Rule_316f(MessageCode, TPinballComponent*) {} // TODO(23:316f): a_spot6
-	void Rule_325c(MessageCode, TPinballComponent*) {} // TODO(23:325c): a_spot7
-	void Rule_3349(MessageCode, TPinballComponent*) {} // TODO(23:3349): a_spot22
-	void Rule_35e3(MessageCode, TPinballComponent*) {} // TODO(23:35e3): a_spot3
-	void Rule_3640(MessageCode, TPinballComponent*) {} // TODO(23:3640): a_spot2
-	void Rule_369d(MessageCode, TPinballComponent*) {} // TODO(23:369d): a_spot1
 	void Rule_39f7(MessageCode, TPinballComponent*) {} // TODO(23:39f7): a_spot10
 	void Rule_3a9f(MessageCode, TPinballComponent*) {} // TODO(23:3a9f): a_spot8
 	void Rule_3b77(MessageCode, TPinballComponent*) {} // TODO(23:3b77): a_spot14
@@ -2805,20 +2944,20 @@ DK_TAG(TSound, tabc58wave)
 		{RuleTags[1], {PlungerRule, 0, nullptr}},
 		{RuleTags[2], {OnewayRule2, 0, nullptr}},
 		{RuleTags[3], {LightRule40, 0, nullptr}},
-		{RuleTags[4], {Rule_2b8a, 1, Scores4}},
-		{RuleTags[5], {Rule_2b8a, 1, Scores5}},
-		{RuleTags[6], {Rule_2b8a, 1, Scores6}},
-		{RuleTags[7], {Rule_2b8a, 1, Scores7}},
-		{RuleTags[8], {Rule_2ced, 1, Scores8}},
-		{RuleTags[9], {Rule_2d4c, 1, Scores9}},
-		{RuleTags[10], {Rule_2f95, 1, Scores10}},
-		{RuleTags[11], {Rule_3082, 1, Scores11}},
-		{RuleTags[12], {Rule_316f, 1, Scores12}},
-		{RuleTags[13], {Rule_325c, 1, Scores13}},
-		{RuleTags[14], {Rule_3349, 1, Scores14}},
-		{RuleTags[15], {Rule_35e3, 2, Scores15}},
-		{RuleTags[16], {Rule_3640, 2, Scores16}},
-		{RuleTags[17], {Rule_369d, 2, Scores17}},
+		{RuleTags[4], {BumperRule, 1, Scores4}},
+		{RuleTags[5], {BumperRule, 1, Scores5}},
+		{RuleTags[6], {BumperRule, 1, Scores6}},
+		{RuleTags[7], {BumperRule, 1, Scores7}},
+		{RuleTags[8], {Rebound1Rule, 1, Scores8}},
+		{RuleTags[9], {Rebound2Rule, 1, Scores9}},
+		{RuleTags[10], {Spot4Rule, 1, Scores10}},
+		{RuleTags[11], {Spot5Rule, 1, Scores11}},
+		{RuleTags[12], {Spot6Rule, 1, Scores12}},
+		{RuleTags[13], {Spot7Rule, 1, Scores13}},
+		{RuleTags[14], {Spot22Rule, 1, Scores14}},
+		{RuleTags[15], {Spot3Rule, 2, Scores15}},
+		{RuleTags[16], {Spot2Rule, 2, Scores16}},
+		{RuleTags[17], {Spot1Rule, 2, Scores17}},
 		{RuleTags[18], {Rule_39f7, 2, Scores18}},
 		{RuleTags[19], {Rule_3a9f, 2, Scores19}},
 		{RuleTags[20], {Rule_3b77, 2, Scores20}},
