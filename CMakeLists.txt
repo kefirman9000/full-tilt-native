@@ -193,6 +193,8 @@ set(SOURCE_FILES
         SpaceCadetPinball/TTextBoxMessage.h
         SpaceCadetPinball/TTimer.cpp
         SpaceCadetPinball/TLightSweeps.cpp
+        SpaceCadetPinball/TFt1Magnet.cpp
+        SpaceCadetPinball/TFt1Magnet.h
         SpaceCadetPinball/TLightSweeps.h
         SpaceCadetPinball/TTimer.h
         SpaceCadetPinball/TTripwire.cpp

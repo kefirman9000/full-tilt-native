@@ -32,7 +32,8 @@ TKickout::TKickout(TPinballTable* table, int groupIndex, bool someFlag): TCollis
 
 	Circle.Center.X = visual.FloatArr[0];
 	Circle.Center.Y = visual.FloatArr[1];
-	Circle.RadiusSq = *loader::query_float_attribute(groupIndex, 0, 306) * visual.FloatArr[2];
+	auto reach = loader::query_float_attribute(groupIndex, 0, 306); // Full Tilt 1 magnets have none: 0.1 (15:5518)
+	Circle.RadiusSq = (reach ? *reach : 0.1f) * visual.FloatArr[2];
 	if (Circle.RadiusSq == 0.0f)
 		Circle.RadiusSq = 0.001f;
 	auto tCircle = new TCircle(this, &ActiveFlag, visual.CollisionGroup,
@@ -60,7 +61,7 @@ TKickout::TKickout(TPinballTable* table, int groupIndex, bool someFlag): TCollis
 	if (pb::DevDebug)
 		printf("FT2DBG kickout %s at %.1f %.1f radius %.2f reach %.2f pull %.1f active %d notsome %d\n",
 		       GroupName ? GroupName : "?", Circle.Center.X, Circle.Center.Y, std::sqrt(Circle.RadiusSq),
-		       *loader::query_float_attribute(groupIndex, 0, 306), FieldMult, ActiveFlag, NotSomeFlag);
+		       reach ? *reach : 0.1f, FieldMult, ActiveFlag, NotSomeFlag);
 
 	circle.RadiusSq = Circle.RadiusSq;
 	circle.Center.X = Circle.Center.X;

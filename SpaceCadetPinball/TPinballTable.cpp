@@ -28,6 +28,8 @@
 #include "TLightBargraph.h"
 #include "TLightGroup.h"
 #include "TLightSweeps.h"
+#include "TFt1Magnet.h"
+#include "ft1_pirates.h"
 #include "TLightRollover.h"
 #include "TOneway.h"
 #include "TPopupTarget.h"
@@ -198,6 +200,11 @@ TPinballTable::TPinballTable(): TPinballComponent(nullptr, -1, false)
 			case 1038:
 				if (pb::FT2Table && !pb::FT2FullScreen)
 					new TLightSweeps(this, groupIndex); // Full Tilt 1 light sweep
+				break;
+			case 1042:
+				// Full Tilt 1 magnet (Skulduggery): only with its rules, which switch it off and on
+				if (pb::FT2Table && !pb::FT2FullScreen && ft1_pirates::Wanted())
+					new TFt1Magnet(this, groupIndex);
 				break;
 			case 1043:
 				if (pb::FT2Table)

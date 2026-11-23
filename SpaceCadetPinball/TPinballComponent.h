@@ -92,6 +92,8 @@ enum class MessageCode
 	Ft1LightSweepStart = 2027,    // FT1 27 to light_sweeps (TLightSweeps): run sweep `value`
 	Ft1BlockerArrived = 2061,
 	Ft1HoleRelease = 2067,
+	Ft1Activate = 2075,           // FT1 75 to a collision part (magnet, kicker): on
+	Ft1Deactivate = 2076,         // FT1 76: off
 	Ft1RampEnter = 2084,          // FT1 84 to the rules: the ball came onto a ramp
 	Ft1RampExit2 = 2085,          // FT1 85: it left by the ramp's second line
 	Ft1RampExit3 = 2086,          // FT1 86: it left by the third line (the far end: the shot is made)        // FT1 67 to a hole: let the ball go after `value` seconds (at once when <= 0)     // FT1 61 to the rules: a blocker reached the frame it was moving to
