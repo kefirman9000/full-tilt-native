@@ -13,7 +13,11 @@ import struct
 import os, re, struct, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ne import NE
-from capstone import Cs, CS_ARCH_X86, CS_MODE_16
+try:
+    from capstone import Cs, CS_ARCH_X86, CS_MODE_16
+except ImportError:  # no capstone: the objdump-based stand-in next to this script
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'objdump_capstone'))
+    from capstone import Cs, CS_ARCH_X86, CS_MODE_16
 
 RULE_SEG = 23
 
