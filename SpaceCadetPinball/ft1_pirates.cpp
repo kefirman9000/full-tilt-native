@@ -513,9 +513,6 @@ namespace
 		}
 	}
 
-	// ---- helpers not translated yet ----
-	void Helper211c() {} // TODO(23:211c)
-	void Helper21be() {} // TODO(23:21be)
 
 	// ---- the mission system ----
 	// The info box's MessageField is the state: 0 game over, 1 ..., 2 normal play, 3 ..., 4-11 the eight map piece
@@ -657,10 +654,163 @@ namespace
 		return time;
 	}
 
-	float RandomAward(float time) // 23:3eec
+	float Step() { return g_22f4 ? 0.25f : 2.0f; } // ds:0x43f4 / 0x43f8: each award's text 2 s (0.25 when hurried)
+
+	// 23:211c - the six multiball lights off
+	void Helper211c()
 	{
-		(void)time;
-		return time; // TODO(23:3eec): one of 2627, 11cb, 2f86, 1ea3, 12ed, else 3d4c
+		for (auto light : {&v_mlite44, &v_mlite107, &v_mlite106, &v_mlite51, &v_mlite110, &v_mlite104})
+			Send(*light, MessageCode::TLightResetAndTurnOff, 0.0f);
+	}
+
+	// 23:21be - sinks 9 and 12 inactive
+	void Helper21be()
+	{
+		for (auto sink : {&a_sink9, &a_sink12})
+			if (auto comp = sink->GetComponent())
+				comp->ActiveFlag = 0;
+	}
+
+	// 23:2435 - treasure n: special_treasure_light_group's MessageField counts them; 0-4 light 571-575 and are worth
+	// 100,000 / 250,000 / 500,000 / 750,000 / 1,000,000 (texts 3019-3023), anything else light 576 and 1,500,000
+	// (text 3024)
+	float Treasure(int n, float time)
+	{
+		Field(special_treasure_light_group)++;
+		static component_tag<TLight>* const lights[6] = {&v_lite571, &v_lite572, &v_lite573, &v_lite574, &v_lite575,
+		                                                 &v_lite576};
+		static const int points[6] = {100000, 250000, 500000, 750000, 1000000, 1500000};
+		auto index = n >= 0 && n <= 4 ? n : 5;
+		auto text = ft1_strings::Get(3019 + index);
+		Send(*lights[index], MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+		ScorePoints(nullptr, points[index]);
+		time += Step();
+		Display(text, time, 0);
+		Play(tabb84wave);
+		return time;
+	}
+
+	float TreasureAward(float time) // 23:2627 - the next treasure
+	{
+		return Treasure(Field(special_treasure_light_group), time);
+	}
+
+	// 23:11cb - extra ball (text 3014)
+	float ExtraBallAward(float time)
+	{
+		Play(tabb00wave);
+		control::TableG->ExtraBalls = 1; // +0x144
+		time += 2.0f;
+		Display(ft1_strings::Get(3014), time, 0);
+		return time;
+	}
+
+	// 23:12ed - a map piece: one more map light (v_lite607's MessageField counts), the map picture, text 3015,
+	// 1,000,000, tabb83; all pieces in normal play: the next map mission is picked
+	float MapPieceAward(float time)
+	{
+		Send(map_piece_light_group, MessageCode::TLightGroupResetAndTurnOn, 1.0f);
+		Field(v_lite607)++;
+		time += 2.0f;
+		Display("C", time, 1); // ds:0x225c
+		time += 2.0f;
+		Display(ft1_strings::Get(3015), time, 0);
+		ScorePoints(nullptr, 1000000);
+		Play(tabb83wave);
+		if (Send(map_piece_light_group, MessageCode::TLightGroupGetOnCount, 0.0f) ==
+			Send(map_piece_light_group, MessageCode::TLightGroupGetLightCount, 0.0f) && InfoField() == 2)
+			PickNext();
+		return time;
+	}
+
+	// 23:2f86 - the bumpers at their top value (a_bump2's MessageField 6; text 3044 with a_bump1's 7th score)
+	float BumperAward(float time)
+	{
+		Field(a_bump2) = 6;
+		if (time < 0.0f)
+			return time;
+		auto bump = a_bump1.GetComponent();
+		auto text = Format(3044, bump ? bump->get_scoring(6) : 0);
+		time += 2.0f;
+		Display(text.c_str(), time, 0);
+		return time;
+	}
+
+	// 23:1ea3 - one more fathom light; the multiplier is the fathoms lit + 1 (its picture, ds:0x2240 + n * 4)
+	float FathomAward(float time)
+	{
+		static const char* pictures[] = {":", ":=<", ":><", ":?<", ":@<", ":A<", ":B<"};
+		Send(fathom_light_group, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+		auto n = Send(fathom_light_group, MessageCode::TLightGroupGetOnCount, 0.0f);
+		if (time >= 0.0f)
+		{
+			time += 2.0f;
+			Display(pictures[std::max(0, std::min(6, n))], time, 1);
+		}
+		Multiplier = n + 1; // +0x122
+		return time;
+	}
+
+	// 23:3d4c - the awards collected meanwhile, shown quickly: coins (g_652a), two treasures (g_652c / g_652e; the
+	// second reads g_652c too, as the original does), points (g_6530, text 3057), more points (g_6534, text 3058,
+	// tabb85), an extra ball (g_6538)
+	float PendingAwards(float time)
+	{
+		g_22f4 = 1;
+		g_6528 = 0;
+		while (g_652a > 0)
+		{
+			time = AwardCoin(time);
+			g_652a--;
+		}
+		g_652a = 1;
+		if (g_652c != -1)
+		{
+			time = Treasure(g_652c, time);
+			g_652c = -1;
+		}
+		if (g_652e != -1)
+		{
+			time = Treasure(g_652c, time);
+			g_652e = -1;
+		}
+		if (g_6530)
+		{
+			auto text = Format(3057, SpecialAddScore(nullptr, g_6530));
+			time += 2.0f;
+			Display(text.c_str(), time, 0);
+			g_6530 = 0;
+		}
+		if (g_6534)
+		{
+			auto text = Format(3058, SpecialAddScore(nullptr, g_6534));
+			time += 2.0f;
+			Display(text.c_str(), time, 0);
+			Play(tabb85wave);
+			g_6534 = 0;
+		}
+		if (g_6538)
+		{
+			ExtraBallAward(time);
+			g_6538 = 0;
+		}
+		g_22f4 = 0;
+		return time;
+	}
+
+	// 23:3eec - a random award: one in six each of a treasure, an extra ball, the bumpers, a fathom, a map piece,
+	// else the pending awards
+	float RandomAward(float time)
+	{
+		switch (Rand15() * 6 / 0x8000)
+		{
+		case 0: return TreasureAward(time);
+		case 1: return ExtraBallAward(time);
+		case 2: return BumperAward(time);
+		case 3: return FathomAward(time);
+		case 4: return MapPieceAward(time);
+		default: return PendingAwards(time);
+		}
 	}
 
 	void State1(MessageCode, TPinballComponent*) {}  // TODO(23:b949)
