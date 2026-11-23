@@ -2171,6 +2171,337 @@ namespace
 	}
 
 	// ---- rule functions not translated yet ----
+	// 23:3c73 - the map mission picked (mode_timer's MessageField 1-8) starts, by the skill shot's helpers
+	void StartPicked()
+	{
+		switch (Field(mode_timer))
+		{
+		case 1: SkillMission(4, "H", 1.0f); break;   // 23:0b38
+		case 2: SkillMission(8, "I", 2.0f); break;   // 23:0c4a
+		case 3: SkillMission(7, "333", 2.0f); break; // 23:0bff
+		case 4: SkillMission(5, "J", 2.0f); break;   // 23:0b83
+		case 5: SkillMission(6, nullptr, 0.0f); break; // 23:0bce
+		case 6: SkillMission(9, nullptr, 0.0f); break; // 23:0c95
+		case 7: // 23:0cc6
+			Field(a_spot8) = 0;
+			SkillMission(10, nullptr, 0.0f);
+			break;
+		case 8: SkillMission(11, nullptr, 0.0f); break; // 23:0d04
+		default:
+			break;
+		}
+	}
+
+	bool AllDropsDown() { return (Field(v_lite1) & 0x7ff) == 0x7ff; } // v_lite1's MessageField: all 11
+
+	// 23:40fc - all 11 drop targets down (in the multiball): their lights flash out, all banks up, a map piece
+	bool AllDropsMultiball()
+	{
+		if (!AllDropsDown())
+			return false;
+		Lights1to11(true);
+		Drops13Up();
+		Drops5Up();
+		Drops10Up();
+		MapPieceAward(0.0f);
+		return true;
+	}
+
+	// 23:40a9 - all 11 drop targets down (normal play): sink 8 keeps its ball (g_6520), their lights flash out, all
+	// banks up, the picked map mission starts
+	bool AllDropsNormal()
+	{
+		if (!AllDropsDown())
+			return false;
+		g_6520 = 1;
+		Lights1to11(true);
+		Drops13Up();
+		Drops5Up();
+		Drops10Up();
+		StartPicked();
+		return true;
+	}
+
+	// 23:2b32 - a magnet: one of the magnets whose light (560-565) is off at random (all off: any) is switched on
+	// with its light; the keg picture ("E") 2 s later
+	float MagnetAward(float time)
+	{
+		component_tag_base* magnets[6] = {&s_magnet1, &s_magnet2, &s_magnet3, &s_magnet4, &s_magnet5, &s_magnet6};
+		component_tag<TLight>* lights[6] = {&v_lite560, &v_lite561, &v_lite562, &v_lite563, &v_lite564, &v_lite565};
+		int candidates[6], count = 0;
+		for (int i = 0; i < 6; i++)
+			if (!LightOn(*lights[i]))
+				candidates[count++] = i;
+		if (!count)
+			for (int i = 0; i < 6; i++)
+				candidates[count++] = i;
+		auto n = candidates[Rand15() * count / 0x8000];
+		Send(*magnets[n], MessageCode::Ft1Activate, 0.0f); // FT1 75
+		Send(*lights[n], MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+		Send(keg_light_group, MessageCode::TLightGroupGetOnCount, 0.0f); // (the result unused)
+		time += 2.0f;
+		Display("E", time, 1); // ds:0x2260
+		return time;
+	}
+
+	// 23:34bf - the next of a treasure, a coin, a map piece, then extra balls (g_651e)
+	float NextAward(float time)
+	{
+		switch (g_651e)
+		{
+		case 0: time = TreasureAward(time); break;
+		case 1: time = AwardCoin(time); break;
+		case 2: time = MapPieceAward(time); break;
+		default: time = ExtraBallAward(time); break;
+		}
+		g_651e++;
+		return time;
+	}
+
+	// 23:362d - state 10: drops 10-12 (bits 4-6 of g_651c) and the spots (bits 0-3) both done: the next award
+	float State10Award(float time)
+	{
+		if ((g_651c & 0x70) == 0x70)
+			g_651c &= 0xf;
+		else if ((g_651c & 0xf) == 0xf)
+			g_651c &= 0x70;
+		else
+			return time;
+		return NextAward(time);
+	}
+
+	// The plunger blockers (and lights 504/505) for a ball in the drop target banks' award
+	void BankBlockers(float blocc)
+	{
+		Send(a_blocc, MessageCode::Ft1BlockerSetPosition, blocc);
+		Send(a_bloce, MessageCode::Ft1BlockerSetPosition, 1.0f);
+		Send(v_lite504, MessageCode::TLightResetAndTurnOn, 0.0f);
+		Send(v_lite505, MessageCode::TLightResetAndTurnOff, 0.0f);
+	}
+
+	// 23:48e3 - drop targets 5-9 (a_drop5's MessageField, 5 bits). State 6: all down, up again. State 4: all down,
+	// up again and the jackpot (the fathoms' timer restarted), 25,000; else 10,000 (tabb22). All 11 down in normal
+	// play or the multiball: their award. Else all five down: blockers c 0, f away, g 0, up again, the bank's second
+	// score (tabb24); a target: its first score (tabb22)
+	void Bank5(TPinballComponent* caller)
+	{
+		bool all = (Field(a_drop5) & 0x1f) == 0x1f;
+		switch (InfoField())
+		{
+		case 6:
+			if (all)
+				Drops5Up();
+			return;
+		case 4:
+			if (all)
+			{
+				Drops5Up();
+				auto time = CollectJackpot(0.0f);
+				Send(fathom_light_group, MessageCode::TLightGroupRestartNotifyTimer, time); // FT1 47
+				ScorePoints(caller, 25000);
+			}
+			else
+			{
+				Play(tabb22wave);
+				ScorePoints(caller, 10000);
+			}
+			return;
+		case 12:
+			if (AllDropsMultiball())
+				return;
+			break;
+		case 2:
+			if (AllDropsNormal())
+				return;
+			break;
+		default:
+			break;
+		}
+		if (!all)
+		{
+			ScoreHit(caller, 0);
+			Play(tabb22wave);
+			return;
+		}
+		Send(a_blocc, MessageCode::Ft1BlockerSetPosition, 0.0f);
+		Send(a_bloce, MessageCode::Ft1BlockerSetPosition, 1.0f);
+		Send(v_lite504, MessageCode::TLightResetAndTurnOn, 0.0f);
+		Send(v_lite505, MessageCode::TLightResetAndTurnOff, 0.0f);
+		Send(a_blocf, MessageCode::Ft1BlockerSetPosition, -1.0f);
+		Send(a_blocg, MessageCode::Ft1BlockerSetPosition, 0.0f);
+		Drops5Up();
+		ScoreHit(caller, 1);
+		Play(tabb24wave);
+	}
+
+	// 23:4dbf - drop targets 13-15 (a_drop13's, 3 bits). State 6: all down, up again. State 7: all down, the blockers
+	// back, up again, a magnet and the jackpot, 50,000; else a magnet, 25,000 (tabb87). All 11 down in normal play or
+	// the multiball: their award. Else all three: the blockers back, up again, the second score (tabb29); a target:
+	// its first score (tabb02)
+	void Bank13(TPinballComponent* caller)
+	{
+		bool all = (Field(a_drop13) & 7) == 7;
+		auto blockers = [] {
+			BankBlockers(0.0f);
+			Send(a_blocf, MessageCode::Ft1BlockerSetPosition, 0.0f);
+			Send(a_blocg, MessageCode::Ft1BlockerSetPosition, 0.0f);
+			Drops13Up();
+		};
+		switch (InfoField())
+		{
+		case 6:
+			if (all)
+				Drops13Up();
+			return;
+		case 7:
+			if (all)
+			{
+				blockers();
+				CollectJackpot(MagnetAward(0.0f));
+				ScorePoints(nullptr, 50000);
+			}
+			else
+			{
+				MagnetAward(0.0f);
+				Play(tabb87wave);
+				ScorePoints(nullptr, 25000);
+			}
+			return;
+		case 12:
+			if (AllDropsMultiball())
+				return;
+			break;
+		case 2:
+			if (AllDropsNormal())
+				return;
+			break;
+		default:
+			break;
+		}
+		if (!all)
+		{
+			ScoreHit(caller, 0);
+			Play(tabb02wave);
+			return;
+		}
+		blockers();
+		ScoreHit(caller, 1);
+		Play(tabb29wave);
+	}
+
+	// 23:5201 - drop targets 10-12 (a_drop10's, 3 bits). State 6: all down, up again. State 10: all down, their
+	// lights on (the first time, bits 4-6 of g_651c) or flashing on, up again, maybe the next award; else 30,000;
+	// tabb94. State 7: all down, up again, the second score (tabb19). All 11 down in normal play or the multiball:
+	// their award. Else all three: blockers c away, e up, f and g 0, up again, the second score (tabb19); a target:
+	// its first score (tabb07)
+	void Bank10(TPinballComponent* caller)
+	{
+		bool all = (Field(a_drop10) & 7) == 7;
+		auto second = [caller] {
+			Drops10Up();
+			ScoreHit(caller, 1);
+			Play(tabb19wave);
+		};
+		switch (InfoField())
+		{
+		case 6:
+			if (all)
+				Drops10Up();
+			return;
+		case 10:
+			if (all)
+			{
+				if (!(g_651c & 0x70))
+				{
+					g_651c |= 0x70;
+					Lights({&v_lite9, &v_lite10, &v_lite11}, MessageCode::TLightResetAndTurnOn, 0.0f);
+				}
+				else
+					Lights({&v_lite9, &v_lite10, &v_lite11}, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+				Drops10Up();
+				State10Award(0.0f);
+			}
+			else
+				ScorePoints(nullptr, 30000);
+			Play(tabb94wave);
+			return;
+		case 7:
+			if (all)
+				second();
+			else
+			{
+				Play(tabb07wave);
+				ScoreHit(caller, 0);
+			}
+			return;
+		case 12:
+			if (AllDropsMultiball())
+				return;
+			break;
+		case 2:
+			if (AllDropsNormal())
+				return;
+			break;
+		default:
+			break;
+		}
+		if (!all)
+		{
+			Play(tabb07wave);
+			ScoreHit(caller, 0);
+			return;
+		}
+		BankBlockers(-1.0f);
+		Send(a_blocf, MessageCode::Ft1BlockerSetPosition, 0.0f);
+		Send(a_blocg, MessageCode::Ft1BlockerSetPosition, 0.0f);
+		second();
+	}
+
+	// 23:4b23 ... 23:55c8 - a drop target: its bit in its bank's MessageField; in normal play and the multiball also
+	// in v_lite1's (all 11) with its light flashing on; then its bank's rule
+	void DropRule(MessageCode code, TPinballComponent* caller, component_tag_base& bank, int bit, int allBit,
+	              component_tag<TLight>& light, void (*bankRule)(TPinballComponent*))
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		Field(bank) |= bit;
+		if (InfoField() == 2 || InfoField() == 12)
+		{
+			Field(v_lite1) |= allBit;
+			Send(light, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+		}
+		bankRule(caller);
+	}
+
+	void Rule_4b23(MessageCode c, TPinballComponent* p) { DropRule(c, p, a_drop5, 1, 0x8, v_lite4, Bank5); }
+	void Rule_4ba8(MessageCode c, TPinballComponent* p) { DropRule(c, p, a_drop5, 2, 0x10, v_lite5, Bank5); }
+	void Rule_4c2d(MessageCode c, TPinballComponent* p) { DropRule(c, p, a_drop5, 4, 0x20, v_lite6, Bank5); }
+	void Rule_4cb2(MessageCode c, TPinballComponent* p) { DropRule(c, p, a_drop5, 8, 0x40, v_lite7, Bank5); }
+	void Rule_4d37(MessageCode c, TPinballComponent* p) { DropRule(c, p, a_drop5, 0x10, 0x80, v_lite8, Bank5); }
+	void Rule_5076(MessageCode c, TPinballComponent* p) { DropRule(c, p, a_drop13, 1, 1, v_lite1, Bank13); }
+	void Rule_50f7(MessageCode c, TPinballComponent* p) { DropRule(c, p, a_drop13, 2, 2, v_lite2, Bank13); }
+	void Rule_517c(MessageCode c, TPinballComponent* p) { DropRule(c, p, a_drop13, 4, 4, v_lite3, Bank13); }
+	void Rule_54b8(MessageCode c, TPinballComponent* p) { DropRule(c, p, a_drop10, 1, 0x100, v_lite9, Bank10); }
+	void Rule_5540(MessageCode c, TPinballComponent* p) { DropRule(c, p, a_drop10, 2, 0x200, v_lite10, Bank10); }
+	void Rule_55c8(MessageCode c, TPinballComponent* p) { DropRule(c, p, a_drop10, 4, 0x400, v_lite11, Bank10); }
+
+	// 23:5650 / 23:56af - the rebounders: their light on 0.1 s, their score
+	void Rule_5650(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		Send(v_lite84, MessageCode::TLightTurnOnTimed, 0.1f);
+		ScoreHit(caller, 0);
+	}
+
+	void Rule_56af(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		Send(v_lite85, MessageCode::TLightTurnOnTimed, 0.1f);
+		ScoreHit(caller, 0);
+	}
+
 	void Rule_98d7(MessageCode, TPinballComponent*) {} // TODO(23:98d7): s_oneway3
 	// 23:472d - the bumpers: in state 9 each hit 25,000 (tabb74) and every tenth the jackpot; in normal play every
 	// twelfth hit (a_bump1's MessageField) raises the bumpers' level (a_bump2's, up to 6; text 3001 with the new
@@ -2380,19 +2711,6 @@ namespace
 			break;
 		}
 	}
-	void Rule_5650(MessageCode, TPinballComponent*) {} // TODO(23:5650): a_rebo1
-	void Rule_56af(MessageCode, TPinballComponent*) {} // TODO(23:56af): a_rebo2
-	void Rule_4b23(MessageCode, TPinballComponent*) {} // TODO(23:4b23): a_drop5
-	void Rule_4ba8(MessageCode, TPinballComponent*) {} // TODO(23:4ba8): a_drop6
-	void Rule_4c2d(MessageCode, TPinballComponent*) {} // TODO(23:4c2d): a_drop7
-	void Rule_4cb2(MessageCode, TPinballComponent*) {} // TODO(23:4cb2): a_drop8
-	void Rule_4d37(MessageCode, TPinballComponent*) {} // TODO(23:4d37): a_drop9
-	void Rule_5076(MessageCode, TPinballComponent*) {} // TODO(23:5076): a_drop13
-	void Rule_50f7(MessageCode, TPinballComponent*) {} // TODO(23:50f7): a_drop14
-	void Rule_517c(MessageCode, TPinballComponent*) {} // TODO(23:517c): a_drop15
-	void Rule_54b8(MessageCode, TPinballComponent*) {} // TODO(23:54b8): a_drop10
-	void Rule_5540(MessageCode, TPinballComponent*) {} // TODO(23:5540): a_drop11
-	void Rule_55c8(MessageCode, TPinballComponent*) {} // TODO(23:55c8): a_drop12
 	void Rule_570e(MessageCode, TPinballComponent*) {} // TODO(23:570e): a_spot102
 	void Rule_59f4(MessageCode, TPinballComponent*) {} // TODO(23:59f4): a_spot11
 	void Rule_5b27(MessageCode, TPinballComponent*) {} // TODO(23:5b27): a_spot8
