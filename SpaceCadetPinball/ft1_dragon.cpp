@@ -171,6 +171,9 @@ DK_TAG(TSound, tabc55wave)
 DK_TAG(TLight, v_lite14)
 DK_TAG(TLightGroup, well_light_group)
 DK_TAG(TSink, a_sink19)
+DK_TAG(TSound, tabc51wave)
+DK_TAG(TSound, tabc10wave)
+DK_TAG(TSound, tabc04wave)
 DK_TAG(TSound, tabc34wave)
 DK_TAG(TPinballComponent, a_kout1)
 DK_TAG(TSound, tabc18wave)
@@ -3526,11 +3529,120 @@ DK_TAG(TSound, tabc58wave)
 			Play(tabc34wave);
 	}
 
+	// The tower locks: with the lock light's MessageField set (15b1 opened it) the ball is locked: tabc10, one ball
+	// fewer in play, the light on, a new ball at the plunger (FT1 1019), the sink's score and text 3010, then 15b1
+	void LockBall(TPinballComponent* caller, component_tag<TLight>& lockLight)
+	{
+		Play(tabc10wave);
+		control::TableG->MultiballCount--;
+		Send(lockLight, MessageCode::TLightResetAndTurnOn, 0.0f);
+		Send(s_plunger1, MessageCode::PlungerRelaunchBall, 0.96f); // FT1 1019
+		auto points = ScoreHit(caller, 0);
+		Display(Format(3010, points).c_str(), 2.0f, 0);
+		UpdateTowerLocks();
+	}
+
+	// In the prison quest (6) a ball in the tower comes out of sink 1 or sink 2 at random (its light flashes)
+	void PrisonOut()
+	{
+		Play(tabc51wave);
+		if (Rand15() * 2 / 0x8000)
+		{
+			Send(a_sink1, MessageCode::TSinkResetTimer, -1.0f);
+			Send(v_lite66, MessageCode::TLightFlasherStartTimed, 1.0f);
+		}
+		else
+		{
+			Send(a_sink2, MessageCode::TSinkResetTimer, -1.0f);
+			Send(v_lite65, MessageCode::TLightFlasherStartTimed, 1.0f);
+		}
+	}
+
+	// 23:6394 - a_sink15, under lock 1: prison quest PrisonOut; lock 1 open (v_lite48) locks; otherwise the ball goes
+	// on out of sink 18 and tabc04
+	void Sink15Rule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		if (InfoField() == 6)
+		{
+			PrisonOut();
+			return;
+		}
+		if (Field(v_lite48))
+		{
+			LockBall(caller, v_lite48);
+			return;
+		}
+		Send(a_sink18, MessageCode::TSinkResetTimer, -1.0f);
+		Play(tabc04wave);
+	}
+
+	// 23:658a - a_sink18, lock 1: in normal play it locks when open, otherwise the ball goes (15b1); prison quest
+	// PrisonOut; otherwise the ball goes and the tower locks start over (151e)
+	void Sink18Rule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		switch (InfoField())
+		{
+		case 2:
+			if (Field(v_lite48))
+				LockBall(caller, v_lite48);
+			else
+			{
+				Send(a_sink18, MessageCode::TSinkResetTimer, 0.0f);
+				UpdateTowerLocks();
+			}
+			return;
+		case 6:
+			PrisonOut();
+			return;
+		default:
+			Send(a_sink18, MessageCode::TSinkResetTimer, -1.0f);
+			ResetTowerLocks();
+			return;
+		}
+	}
+
+	// 23:678f - a_sink13, under lock 2: in normal play lock 2 open (v_lite49) locks; otherwise tabc04 (not in the
+	// prison quest) and the ball goes on out of sink 17
+	void Sink13Rule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		if (InfoField() == 2 && Field(v_lite49))
+		{
+			LockBall(caller, v_lite49);
+			return;
+		}
+		if (InfoField() != 6)
+			Play(tabc04wave);
+		Send(a_sink17, MessageCode::TSinkResetTimer, -1.0f);
+	}
+
+	// 23:68ec - a_sink17, lock 2: in normal play it locks when open, otherwise the ball goes (15b1); otherwise the
+	// ball goes and the tower locks start over
+	void Sink17Rule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		if (InfoField() == 2)
+		{
+			if (Field(v_lite49))
+				LockBall(caller, v_lite49);
+			else
+			{
+				Send(a_sink17, MessageCode::TSinkResetTimer, 0.0f);
+				UpdateTowerLocks();
+			}
+			return;
+		}
+		Send(a_sink17, MessageCode::TSinkResetTimer, 0.0f);
+		ResetTowerLocks();
+	}
+
 	// ---- rule functions not translated yet (their components do nothing yet) ----
-	void Rule_6394(MessageCode, TPinballComponent*) {} // TODO(23:6394): a_sink15
-	void Rule_658a(MessageCode, TPinballComponent*) {} // TODO(23:658a): a_sink18
-	void Rule_678f(MessageCode, TPinballComponent*) {} // TODO(23:678f): a_sink13
-	void Rule_68ec(MessageCode, TPinballComponent*) {} // TODO(23:68ec): a_sink17
 	void Rule_6a49(MessageCode, TPinballComponent*) {} // TODO(23:6a49): a_sink9
 	void Rule_6c5c(MessageCode, TPinballComponent*) {} // TODO(23:6c5c): a_sink10
 	void Rule_6ea6(MessageCode, TPinballComponent*) {} // TODO(23:6ea6): v_wlite96, v_wlite97, v_wlite98, v_wlite99
@@ -3648,10 +3760,10 @@ DK_TAG(TSound, tabc58wave)
 		{RuleTags[48], {Kout1Rule, 0, nullptr}},
 		{RuleTags[49], {Kout2Rule, 0, nullptr}},
 		{RuleTags[50], {Hole118Rule, 0, nullptr}},
-		{RuleTags[51], {Rule_6394, 1, Scores51}},
-		{RuleTags[52], {Rule_658a, 1, Scores52}},
-		{RuleTags[53], {Rule_678f, 1, Scores53}},
-		{RuleTags[54], {Rule_68ec, 1, Scores54}},
+		{RuleTags[51], {Sink15Rule, 1, Scores51}},
+		{RuleTags[52], {Sink18Rule, 1, Scores52}},
+		{RuleTags[53], {Sink13Rule, 1, Scores53}},
+		{RuleTags[54], {Sink17Rule, 1, Scores54}},
 		{RuleTags[55], {Rule_6a49, 1, Scores55}},
 		{RuleTags[56], {Rule_6c5c, 1, Scores56}},
 		{RuleTags[57], {Rule_6ea6, 1, Scores57}},
