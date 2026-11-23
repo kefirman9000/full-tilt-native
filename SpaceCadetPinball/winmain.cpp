@@ -109,12 +109,14 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 
 	// SDL init
 	SDL_SetMainReady();
-	if (SDL_Init(SDL_INIT_TIMER | SDL_INIT_AUDIO | SDL_INIT_VIDEO |
-		SDL_INIT_EVENTS | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER) < 0)
+	// Sound is optional: a PC with no audio device (or a broken driver) still plays, silently
+	if (SDL_Init(SDL_INIT_TIMER | SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER) < 0)
 	{
 		pb::ShowMessageBox(SDL_MESSAGEBOX_ERROR, "Could not initialize SDL2", SDL_GetError());
 		return 1;
 	}
+	if (SDL_InitSubSystem(SDL_INIT_AUDIO) < 0)
+		printf("No audio device (%s), playing without sound\n", SDL_GetError());
 
 	pb::quickFlag = strstr(lpCmdLine, "-quick") != nullptr;
 

@@ -145,7 +145,9 @@ void selftest::Frame(float dtMilliSec)
 		static int traceFrame = 0;
 		for (auto ball : table->BallList)
 			if (ball->ActiveFlag && ++traceFrame % 6 == 0)
-				fprintf(stderr, "SHOT ball %.1f %.1f mask %d\n", ball->Position.X, ball->Position.Y, ball->CollisionMask);
+				fprintf(stderr, "SHOT ball %.1f %.1f z %.1f speed %.1f mask %d flag %d comp %s\n", ball->Position.X,
+				        ball->Position.Y, ball->Position.Z, ball->Speed, ball->CollisionMask, ball->CollisionFlag,
+				        ball->CollisionComp && ball->CollisionComp->GroupName ? ball->CollisionComp->GroupName : "-");
 	}
 
 	bool anyActive = false;

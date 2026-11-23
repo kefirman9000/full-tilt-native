@@ -90,6 +90,9 @@ void THole::Collision(TBall* ball, vector2* nextPosition, vector2* direction, fl
 		ball->Position.Y = Circle.Center.Y;
 		ball->Direction.Z = 0.0;
 		ball->CollisionDisabledFlag = true;
+		// Off any ramp it came on by (a wire ramp's end hole, Captain Hero's s_elev01/02): otherwise its height kept
+		// following the ramp's plane, so it never dropped and rolled on at wire height after the release
+		ball->CollisionFlag = 0;
 
 		// Ramp hole has no delay in FT.
 		auto captureTime = pb::FullTiltMode ? 0 : 0.5f;
