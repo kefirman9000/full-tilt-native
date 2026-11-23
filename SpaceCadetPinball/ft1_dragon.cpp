@@ -171,6 +171,8 @@ DK_TAG(TSound, tabc55wave)
 DK_TAG(TLight, v_lite14)
 DK_TAG(TLightGroup, well_light_group)
 DK_TAG(TSink, a_sink19)
+DK_TAG(TSound, tabc34wave)
+DK_TAG(TPinballComponent, a_kout1)
 DK_TAG(TSound, tabc18wave)
 DK_TAG(TSound, tabc09wave)
 DK_TAG(TSound, tabc20wave)
@@ -3430,11 +3432,101 @@ DK_TAG(TSound, tabc58wave)
 		Send(a_kout3, MessageCode::TKickoutRestartTimer, 0.0f);
 	}
 
+	// FT1 37 to the outlane kicker's lights (engine 33)
+	const MessageCode FT1GroupOffsetAnimationBackward = MessageCode::TLightGroupOffsetAnimationBackward;
+
+	// 23:5f13 - a_kick1, the outlane kicker, after it fired (FT1 70): unless v_lite37 (the kickback weapon) is lit,
+	// its lights step back and with none left lit it goes inactive; text 3009
+	void Kick1Rule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlTimerExpired)
+			return;
+		if (!LightOn(v_lite37))
+		{
+			Send(outlane_kicker_light_group, FT1GroupOffsetAnimationBackward, 0.0f);
+			if (!Send(outlane_kicker_light_group, MessageCode::TLightGroupGetOnCount, 0.0f))
+				caller->ActiveFlag = 0;
+		}
+		Display(ft1_strings::Get(3009), 2.0f, 0);
+	}
+
+	// 23:5fe4 - a_kout1: in the gargoyle quest (7) the jackpot; otherwise a random weapon, the gargoyle lights out
+	// (flashing 1 s), v_lite45 off and rock A up in 2 s. The kickout lets the ball go (FT1 64)
+	void Kout1Rule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		if (InfoField() == 7)
+			CollectJackpot(0.0f, true);
+		else
+		{
+			RandomWeapon();
+			for (auto light : {&v_lite14, &v_lite13, &v_lite12, &v_lite11})
+				Send(*light, MessageCode::TLightFlasherStartTimedThenStayOff, 1.0f);
+			Send(v_lite45, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(a_rocka, MessageCode::TBlockerEnable, 2.0f);
+		}
+		caller->Message(MessageCode::TKickoutRestartTimer, -1.0f);
+	}
+
+	// 23:6122 - a_kout2: in normal play two-ball multiball starts (state 14, the ball stays); in the gargoyle quest
+	// tabc32, one dragon egg and the ball goes; otherwise tabc32, its MessageField counts (to 3) and picks the
+	// score, and the ball goes
+	void Kout2Rule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		switch (InfoField())
+		{
+		case 2:
+			SetInfoField(14);
+			MissionEvent(FT1Event79, nullptr);
+			return;
+		case 7:
+			Play(tabc32wave);
+			AwardDragonEggs(1);
+			caller->Message(MessageCode::TKickoutRestartTimer, -1.0f);
+			return;
+		default:
+			Play(tabc32wave);
+			if (caller->MessageField < 3)
+				caller->MessageField++;
+			ScoreHit(caller, caller->MessageField);
+			Send(a_kout2, MessageCode::TKickoutRestartTimer, -1.0f);
+			return;
+		}
+	}
+
+	// 23:6241 - s_hole118. Ball in (FT1 66): during the skill shot (10) its MessageField is 2 and the skill shot
+	// handles it; in normal play with one ball the egg award (state 12) keeps it; otherwise tabc32, MessageField 1
+	// and it goes after 1 s (FT1 67). Ball out (FT1 68, ControlBallReleased): in normal play with MessageField 0,
+	// tabc34
+	void Hole118Rule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code == FT1Code66)
+		{
+			auto t = control::TableG;
+			if (InfoField() == 10)
+			{
+				caller->MessageField = 2;
+				return;
+			}
+			if (InfoField() == 2 && t->MultiballCount == 1)
+			{
+				SetInfoField(12);
+				MissionEvent(FT1Event79, nullptr);
+				return;
+			}
+			Play(tabc32wave);
+			caller->MessageField = 1;
+			caller->Message(MessageCode::Ft1HoleRelease, 1.0f);
+			return;
+		}
+		if (code == MessageCode::ControlBallReleased && InfoField() == 2 && caller->MessageField == 0)
+			Play(tabc34wave);
+	}
+
 	// ---- rule functions not translated yet (their components do nothing yet) ----
-	void Rule_5f13(MessageCode, TPinballComponent*) {} // TODO(23:5f13): a_kick1
-	void Rule_5fe4(MessageCode, TPinballComponent*) {} // TODO(23:5fe4): a_kout1
-	void Rule_6122(MessageCode, TPinballComponent*) {} // TODO(23:6122): a_kout2
-	void Rule_6241(MessageCode, TPinballComponent*) {} // TODO(23:6241): s_hole118
 	void Rule_6394(MessageCode, TPinballComponent*) {} // TODO(23:6394): a_sink15
 	void Rule_658a(MessageCode, TPinballComponent*) {} // TODO(23:658a): a_sink18
 	void Rule_678f(MessageCode, TPinballComponent*) {} // TODO(23:678f): a_sink13
@@ -3552,10 +3644,10 @@ DK_TAG(TSound, tabc58wave)
 		{RuleTags[44], {Rexit19Rule, 0, nullptr}},
 		{RuleTags[45], {Rexit18Rule, 0, nullptr}},
 		{RuleTags[46], {Flip2Rule, 0, nullptr}},
-		{RuleTags[47], {Rule_5f13, 0, nullptr}},
-		{RuleTags[48], {Rule_5fe4, 0, nullptr}},
-		{RuleTags[49], {Rule_6122, 0, nullptr}},
-		{RuleTags[50], {Rule_6241, 0, nullptr}},
+		{RuleTags[47], {Kick1Rule, 0, nullptr}},
+		{RuleTags[48], {Kout1Rule, 0, nullptr}},
+		{RuleTags[49], {Kout2Rule, 0, nullptr}},
+		{RuleTags[50], {Hole118Rule, 0, nullptr}},
 		{RuleTags[51], {Rule_6394, 1, Scores51}},
 		{RuleTags[52], {Rule_658a, 1, Scores52}},
 		{RuleTags[53], {Rule_678f, 1, Scores53}},
