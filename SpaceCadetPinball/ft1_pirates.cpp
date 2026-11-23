@@ -1131,7 +1131,102 @@ namespace
 			break;
 		}
 	}
-	void State5(MessageCode, TPinballComponent*) {}  // TODO(23:ba2b)
+	// 23:3026 - the eight wind and orbit light groups off (and the last hit moved on)
+	void WindsOff()
+	{
+		ScorePoints(nullptr, 0);
+		for (auto group : {&left_island_light_group, &right_wind_light_group, &left_orbit_light_group,
+		                   &right_orbit_light_group, &south_wind_light_group, &east_wind_1_light_group,
+		                   &east_wind_2_light_group, &west_wind_light_group})
+			Send(*group, MessageCode::TLightResetAndTurnOff, 0.0f);
+	}
+
+	// 23:3105 - the wind or orbit group g_651e (0-7, anything else 0) flashing or on
+	void WindLights(bool flash)
+	{
+		component_tag<TLightGroup>* groups[8] = {&left_orbit_light_group, &right_orbit_light_group,
+		                                         &left_island_light_group, &right_wind_light_group,
+		                                         &south_wind_light_group, &west_wind_light_group,
+		                                         &east_wind_2_light_group, &east_wind_1_light_group};
+		if (g_651e < 0 || g_651e > 7)
+			g_651e = 0;
+		Send(*groups[g_651e], flash ? MessageCode::TLightFlasherStartTimed : MessageCode::TLightResetAndTurnOn,
+		     -1.0f);
+	}
+
+	int g_3810 = 0; // the Bermuda lights' step (ds:0x3810)
+
+	// 23:ba2b - state 5, the Bermuda Triangle (text 3063, tabb5, tabb66): 200,000, the light sweep 8, the winds out;
+	// then the Bermuda lights turn (ds:0x37f0: four sets of four lights, 0.1 s a step), kickout 1 on, the wind or
+	// orbit g_651e flashes, 31.14 s (countdown text 3045). Its end: the winds and Bermuda lights out, kickout 1 off
+	void State5(MessageCode code, TPinballComponent* cmp)
+	{
+		static const int sets[4][4] = {{0, 4, 8, 12}, {1, 5, 9, -1}, {2, 6, 10, -1}, {3, 7, 11, -1}};
+		switch (code)
+		{
+		case FT1Event79:
+			MissionStart();
+			ScorePoints(nullptr, 200000);
+			Send(light_sweeps, MessageCode::Ft1LightSweepStart, 8.0f);
+			WindsOff();
+			PlayMusic(5); // g_22de
+			Play(tabb66wave);
+			Display(ft1_strings::Get(3063), -1.0f, 0);
+			break;
+		case FT1Event83:
+			Send(mode_timer, MessageCode::Ft1BlockerTimer, -1.0f);
+			MissionEvent(FT1Event82, nullptr);
+			break;
+		case FT1Event82:
+			WindsOff();
+			Send(bermuda_light_group, MessageCode::TLightGroupRestartNotifyTimer, -1.0f); // FT1 47
+			Send(bermuda_light_group, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(a_kout1, MessageCode::Ft1Deactivate, 0.0f);
+			MissionEnd();
+			Field(v_lite606)++;
+			Send(a_bloce, MessageCode::Ft1BlockerSetPosition, 0.0f);
+			Send(v_lite504, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(v_lite505, MessageCode::TLightResetAndTurnOn, 0.0f);
+			break;
+		case FT1Event80:
+		{
+			auto left = Send(mode_timer, MessageCode::Ft1TimerTimeLeft, 0.0f);
+			if (left)
+				Display(Format(3045, left / 1000).c_str(), 0.5f, 0);
+			break;
+		}
+		case MessageCode::ControlNotifyTimerExpired: // FT1 71
+			if (cmp != bermuda_light_group.GetComponent())
+				break;
+			Send(bermuda_light_group, MessageCode::TLightGroupRestartNotifyTimer, 0.1f);
+			for (auto index : sets[g_3810])
+				Send(bermuda_light_group, MessageCode::TLightGroupTurnOffAtIndex, static_cast<float>(index)); // FT1 40
+			if (++g_3810 > 3)
+				g_3810 = 0;
+			for (auto index : sets[g_3810])
+				Send(bermuda_light_group, MessageCode::TLightGroupTurnOnAtIndex, static_cast<float>(index)); // FT1 39
+			break;
+		case MessageCode::ControlTimerExpired:
+			if (dynamic_cast<TTimer*>(cmp))
+			{
+				if (cmp == mode_timer.GetComponent())
+					MissionEvent(FT1Event82, nullptr);
+			}
+			else if (dynamic_cast<TLightSweeps*>(cmp))
+			{
+				if (!g_6520)
+					ReleaseSink8(0.0f);
+				Send(bermuda_light_group, MessageCode::TLightGroupRestartNotifyTimer, 0.1f);
+				Send(a_kout1, MessageCode::Ft1Activate, 0.0f);
+				WindLights(true);
+				Send(mode_timer, MessageCode::Ft1BlockerTimer, 31.14f);
+				MissionEvent(FT1Event80, nullptr);
+			}
+			break;
+		default:
+			break;
+		}
+	}
 	void State6(MessageCode, TPinballComponent*) {}  // TODO(23:beac)
 	void State7(MessageCode, TPinballComponent*) {}  // TODO(23:adc2)
 	void State8(MessageCode, TPinballComponent*) {}  // TODO(23:a93e)
