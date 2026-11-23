@@ -3076,7 +3076,14 @@ namespace
 			Send(a_blocc, MessageCode::Ft1BlockerSetPosition, -1.0f);
 	}
 
-	void Rule_98d7(MessageCode, TPinballComponent*) {} // TODO(23:98d7): s_oneway3
+	void Rule_43b9(MessageCode code, TPinballComponent*);
+
+	// 23:98d7 - s_oneway3: a ball out with the ball saver at its first stage moves it on (as v_lite569's timer)
+	void Rule_98d7(MessageCode code, TPinballComponent*)
+	{
+		if (code == MessageCode::ControlCollision && g_6522 == 3)
+			Rule_43b9(MessageCode::ControlTimerExpired, nullptr);
+	}
 	// 23:472d - the bumpers: in state 9 each hit 25,000 (tabb74) and every tenth the jackpot; in normal play every
 	// twelfth hit (a_bump1's MessageField) raises the bumpers' level (a_bump2's, up to 6; text 3001 with the new
 	// worth, tabb17); the hit scores the level's worth (tabb16)
@@ -3295,7 +3302,8 @@ namespace
 		Send(v_lite505, MessageCode::TLightResetAndTurnOff, 0.0f);
 	}
 
-	// 23:1ce0 - a ball locked in s_hole19: one ball fewer in play, one more kept (g_6526; the second opens oneway 12);
+	// 23:1ce0 - a ball locked in s_hole19 (it drops into the lock lane below, between oneways 7 and 12): one ball fewer
+	// in play, one more kept (g_6526; the second opens oneway 12);
 	// the third starts the kept balls' multiball (state 13), otherwise tabb39 and a new ball is served
 	float LockBall(float time)
 	{
@@ -3743,12 +3751,76 @@ namespace
 
 	void Rule_95a5(MessageCode c, TPinballComponent* p) { FlipperRule(c, p); }
 	void Rule_9624(MessageCode c, TPinballComponent* p) { FlipperRule(c, p); }
-	void Rule_971d(MessageCode, TPinballComponent*) {} // TODO(23:971d): a_kick2
-	void Rule_96a3(MessageCode, TPinballComponent*) {} // TODO(23:96a3): v_lite544
-	void Rule_9813(MessageCode, TPinballComponent*) {} // TODO(23:9813): s_oneway7
+	// 23:971d - a_kick2, the kickback fired (FT1 70): blockers c 0, e up (504 on, 505 off), f 0, g away; its light
+	// flashes out; the score
+	void Rule_971d(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlTimerExpired)
+			return;
+		Send(a_blocc, MessageCode::Ft1BlockerSetPosition, 0.0f);
+		Send(a_bloce, MessageCode::Ft1BlockerSetPosition, 1.0f);
+		Send(v_lite504, MessageCode::TLightResetAndTurnOn, 0.0f);
+		Send(v_lite505, MessageCode::TLightResetAndTurnOff, 0.0f);
+		Send(a_blocf, MessageCode::Ft1BlockerSetPosition, 0.0f);
+		Send(a_blocg, MessageCode::Ft1BlockerSetPosition, -1.0f);
+		Send(v_lite544, MessageCode::TLightFlasherStartTimedThenStayOff, 1.0f);
+		ScoreHit(caller, 0);
+	}
+
+	// 23:96a3 - v_lite544's timer: once it is out, the kickback and wall 610 go off
+	void Rule_96a3(MessageCode code, TPinballComponent*)
+	{
+		if (code != MessageCode::ControlTimerExpired || LightOn(v_lite544))
+			return;
+		for (auto part : {&a_kick2, &s_bwal610})
+			if (auto comp = part->GetComponent())
+				comp->ActiveFlag = 0;
+	}
+
+	// 23:9813 - s_oneway7, a kept ball rolling out of the lock lane (not in the multiballs or tilted): one kept ball
+	// fewer, one more in play; with none left kicker 1 goes off
+	void Rule_9813(MessageCode code, TPinballComponent*)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		auto state = InfoField();
+		if (state == 12 || state == 13 || state == 17)
+			return;
+		auto t = control::TableG;
+		if (g_6526 > 0)
+		{
+			g_6526--;
+			t->MultiballCount++; // +0x146
+		}
+		if (g_6526 == 0)
+			Send(a_kick1, MessageCode::Ft1Deactivate, 0.0f); // FT1 76
+		if (g_6526 < 0)
+			g_6526 = 0;
+	}
 	void Rule_0000(MessageCode, TPinballComponent*) {} // TODO(23:0000): v_lite547, v_lite546, v_lite545
-	void Rule_9922(MessageCode, TPinballComponent*) {} // TODO(23:9922): a_sink8
-	void Rule_999c(MessageCode, TPinballComponent*) {} // TODO(23:999c): a_kout2, a_kout1
+	// 23:9922 - a_sink8: a ball in it goes out again at once (FT1 65 with 0); out (FT1 70) tabb55 except in the
+	// multiball
+	void Rule_9922(MessageCode code, TPinballComponent* caller)
+	{
+		if (code == MessageCode::ControlCollision)
+		{
+			if (caller)
+				caller->Message(MessageCode::TSinkResetTimer, 0.0f);
+		}
+		else if (code == MessageCode::ControlTimerExpired && InfoField() != 12)
+			Play(tabb55wave);
+	}
+
+	// 23:999c - a_kout1 / a_kout2: 1,000,000 (text 3015), the kickout restarts its timer (FT1 64, 1 s)
+	void Rule_999c(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		ScorePoints(nullptr, 1000000);
+		Display(ft1_strings::Get(3015), 2.0f, 0);
+		if (caller)
+			caller->Message(MessageCode::TKickoutRestartTimer, 1.0f);
+	}
 	void Rule_9a2e(MessageCode, TPinballComponent*) {} // TODO(23:9a2e): s_magnet1
 	void Rule_9aff(MessageCode, TPinballComponent*) {} // TODO(23:9aff): s_magnet2
 	void Rule_9bd0(MessageCode, TPinballComponent*) {} // TODO(23:9bd0): s_magnet3
@@ -3918,8 +3990,6 @@ bool ft1_pirates::Link(TPinballTable* table)
 		else
 			ftlog::Line(std::string("FT1 Skulduggery rules: rule component missing: ") + rule.Tag.Name);
 	TRamp::Ft1Events = true;
-	if (auto hole = dynamic_cast<THole*>(s_hole19.GetComponent()))
-		hole->Ft1Swallow = true;
 	Active = true;
 	ftlog::Line("FT1 Skulduggery: translation active (work in progress), " + std::to_string(linked) + " rule entries");
 	return Active;

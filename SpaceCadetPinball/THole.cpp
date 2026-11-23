@@ -80,14 +80,6 @@ int THole::Message(MessageCode code, float value)
 
 void THole::Collision(TBall* ball, vector2* nextPosition, vector2* direction, float distance, TEdgeSegment* edge)
 {
-	if (Ft1Swallow && !PinballTable->TiltLockFlag)
-	{
-		ball->Disable();
-		ball->CollisionComp = nullptr;
-		loader::play_sound(HardHitSoundId, ball, "THole1");
-		control::handler(MessageCode::ControlBallCaptured, this);
-		return;
-	}
 	if (!BallCapturedFlag)
 	{
 		BallCapturedSecondStage = false;
