@@ -62,10 +62,10 @@
       Villain"): offered at s_sink01 (0x406580, flippers choose: 0x406500/0x406528), started by 0x40787c,
       won via 0x407e08(1) (jackpot, reset to 500,000), lost on drain. Table texts from hero.exe's string table.
 - [x] Hero: battle timers, Evil Twin's Krypton-@ rule and Super Jackpot, mystery award, buildings (0.12.0)
-- [ ] Hero: Mr. Pling's second ball up s_ramp02 (ball +0x140 = 5); stage 7 is only a debug mode
+- [x] Hero: Mr. Pling's second ball out of s_sink13 (stage 7 is only a debug mode)
 - [x] Hero ball saver s_sink30 shut except ball save time / forcefields (was the "endless ball")
 - [x] Hero Jackpot (+0x141) and Super Jackpot (+0x149) growth and multiplier
-- [ ] Hero playfield/pop multiplier (0x405de8), Super Strength/Speed/Flight texts 3034-3036
+- [x] Hero pop multiplier (0x405de8) and Super Strength/Speed/Flight (0x4061f0)
 - [x] Mad Scientist: rule table + scores (points in data variables; ft2rules.py reads their starting values)
 
 ## Status 2026-11-13 (0.10.0: Alien Daze rules)

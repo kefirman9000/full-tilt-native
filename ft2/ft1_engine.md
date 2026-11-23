@@ -22,7 +22,7 @@ idiom) and paired with this engine's handler of the same component:
 - Light groups 28-50 = this engine's 24-46 (+4). Component group 52 = 48.
 - Popup/solo targets 53/54 = Disable/Enable. Blockers 55/56 = Disable/Enable (see blockers below), 57-60 extra.
 - Gates 62/63, kickout 64, sink 65 (reset timer).
-- To the rules: 61 blocker timeout (this engine: ControlTimerExpired), 67 ball captured, 68 released, 70 timer
+- To the rules: 61 blocker arrived (this engine: Ft1BlockerArrived), 67 ball captured, 68 released, 70 timer
   expired, 71 notify timer, 73 spinner loop, 74 collision, 75/76 multiplier, 77 "last hit moved on" (rules only).
 - Flipper [1, 2, 1009, 1010, 1011, 1022, 1024, 1026]: 1009 Resume, 1010 LooseFocus, 1011 SetTiltLock, 1022 GameOver,
   1024 PlayerChanged (this engine 1020), 1026 Reset (1024).
@@ -62,10 +62,11 @@ the timeout tells the rules 61. Implemented in TBlocker (Ft1 mode, Full Tilt 1 t
 (15:3d94): GameOver / Reset / tilt go straight to the initial frame; 55/56 move frame by frame (15:3cd3, one step per
 delay) to -1 / the last frame, starting after `value` seconds when it is positive, with sounds +0x98 / +0x96; 58 the
 same to round(value); 57 straight there; 59/60 straight to the last frame / none with the sounds; 69 a timer that
-tells the rules 70. At the target the stepper tells the rules 61 (this engine: ControlTimerExpired).
+tells the rules 70 (this engine: ControlTimerExpired, as timers do). At the target the stepper tells the rules 61
+(this engine: Ft1BlockerArrived).
 Not done: 57's check for a ball in the way (15:1a68 / 15:0ab1 defer the move).
 This engine's codes: Ft1BlockerSetPosition (57), Ft1BlockerMoveTo (58), Ft1BlockerShowLast (59), Ft1BlockerHide (60),
-Ft1BlockerTimer (69), Ft1TimerExpired (70).
+Ft1BlockerTimer (69), Ft1BlockerArrived (61).
 
 ## Dragon's Keep segment 23
 126 functions: 62 rule functions (75 components) and 64 helpers. 0x06cf scores a hit, 0x072c a given score, 0x0778

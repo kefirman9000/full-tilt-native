@@ -164,6 +164,23 @@ namespace
 	DK_TAG(TLight, v_lite65)
 	DK_TAG(TLight, v_lite66)
 	DK_TAG(TSound, tabc50wave)
+DK_TAG(TSound, tabc53wave)
+DK_TAG(TSound, tabc55wave)
+DK_TAG(TLight, v_lite14)
+DK_TAG(TLightGroup, well_light_group)
+DK_TAG(TSink, a_sink19)
+DK_TAG(TPinballComponent, s_oneway2)
+DK_TAG(TLight, v_lite58)
+DK_TAG(TLight, v_lite59)
+DK_TAG(TLight, v_lite60)
+DK_TAG(TLight, v_lite61)
+DK_TAG(TLight, v_lite62)
+DK_TAG(TLight, v_lite77)
+DK_TAG(TLight, v_lite78)
+DK_TAG(TLight, v_lite79)
+DK_TAG(TSound, tabc24wave)
+DK_TAG(TSound, tabc57wave)
+DK_TAG(TSound, tabc58wave)
 	DK_TAG(TLightGroup, prison_window_light_group)
 	DK_TAG(TLightGroup, watch_window_light_group)
 	DK_TAG(TLightGroup, gate_window_light_group)
@@ -779,6 +796,8 @@ namespace
 	// g_2246.. (tabc7 g_225e is the table's own; a missing one falls back to it); here they are this engine's tracks
 	enum MusicTrack { MusicMain = 7, MusicTrack1 = 1, MusicTrack2 = 2, MusicTrack4 = 4, MusicTrack5 = 5,
 	                  MusicTrack6 = 6 };
+	const MessageCode FT1GroupAnimationBackward = MessageCode::TLightGroupAnimationBackward; // FT1 30
+	const MessageCode FT1GroupReset = MessageCode::TLightGroupReset;                         // FT1 38
 	int MusicPlaying = 0;
 
 	void PlayMusic(int track) // 12:1396
@@ -1148,17 +1167,91 @@ namespace
 			code = FT1Event80;
 		MissionDispatch(state, code, cmp);
 	}
-	// TODO(23:44c9 / 23:436f / 23:4215): blocker rules
-	void BlocfRule(MessageCode, TPinballComponent*)
+	// 23:4215 / 23:436f - the center post (light v_lite38) and a_bloce (v_lite39): 56 raises it for its first
+	// duration (the light flashes 2 s and stays on), then the light flashes out over the second; 55 or the end lowers
+	// it. The blocker's MessageField: 0 down, 1 up, 2 going.
+	void RaisedBlockerRule(MessageCode code, TPinballComponent* caller, component_tag<TLight>& light)
 	{
+		auto blocker = dynamic_cast<TBlocker*>(caller);
+		if (!blocker)
+			return;
+		switch (code)
+		{
+		case MessageCode::TBlockerEnable: // FT1 56
+			blocker->MessageField = 1;
+			blocker->Message(MessageCode::TBlockerEnable, 0.0f);
+			blocker->Message(MessageCode::Ft1BlockerTimer, static_cast<float>(blocker->InitialDuration));
+			Send(light, MessageCode::TLightFlasherStartTimedThenStayOn, 2.0f);
+			break;
+		case MessageCode::TBlockerDisable: // FT1 55
+			blocker->MessageField = 0;
+			blocker->Message(MessageCode::TBlockerDisable, 0.0f);
+			Send(light, MessageCode::TLightResetAndTurnOff, 0.0f);
+			break;
+		case MessageCode::ControlTimerExpired: // FT1 70
+			if (blocker->MessageField == 1)
+			{
+				blocker->MessageField = 2;
+				blocker->Message(MessageCode::Ft1BlockerTimer, static_cast<float>(blocker->ExtendedDuration));
+				Send(light, MessageCode::TLightFlasherStartTimedThenStayOff,
+				     static_cast<float>(blocker->ExtendedDuration));
+			}
+			else
+			{
+				blocker->MessageField = 0;
+				blocker->Message(MessageCode::TBlockerDisable, 0.0f);
+			}
+			break;
+		default:
+			break;
+		}
 	}
 
-	void BloceRule(MessageCode, TPinballComponent*)
+	void CenterPostRule(MessageCode code, TPinballComponent* caller) // 23:4215
 	{
+		RaisedBlockerRule(code, caller, v_lite38);
 	}
 
-	void CenterPostRule(MessageCode, TPinballComponent*)
+	void BloceRule(MessageCode code, TPinballComponent* caller) // 23:436f
 	{
+		RaisedBlockerRule(code, caller, v_lite39);
+	}
+
+	// 23:44c9 - a_blocf, the other way round (light v_lite32): 55 lowers it for its first duration (the light on for
+	// that long), then the light flashes for the second; then it comes back up. 56 brings it straight back.
+	void BlocfRule(MessageCode code, TPinballComponent* caller)
+	{
+		auto blocker = dynamic_cast<TBlocker*>(caller);
+		if (!blocker)
+			return;
+		switch (code)
+		{
+		case MessageCode::TBlockerDisable: // FT1 55
+			blocker->MessageField = 1;
+			blocker->Message(MessageCode::TBlockerDisable, 0.0f);
+			blocker->Message(MessageCode::Ft1BlockerTimer, static_cast<float>(blocker->InitialDuration));
+			Send(v_lite32, MessageCode::TLightTurnOnTimed, static_cast<float>(blocker->InitialDuration));
+			break;
+		case MessageCode::ControlTimerExpired: // FT1 70
+			if (blocker->MessageField == 1)
+			{
+				blocker->MessageField = 2;
+				blocker->Message(MessageCode::Ft1BlockerTimer, static_cast<float>(blocker->ExtendedDuration));
+				Send(v_lite32, MessageCode::TLightFlasherStartTimed, static_cast<float>(blocker->ExtendedDuration));
+				break;
+			}
+			blocker->MessageField = 0;
+			blocker->Message(MessageCode::TBlockerEnable, 0.0f);
+			break;
+		case MessageCode::TBlockerEnable: // FT1 56
+			blocker->Message(MessageCode::Ft1BlockerTimer, -1.0f);
+			Send(v_lite32, MessageCode::TLightResetAndTurnOff, 0.0f);
+			blocker->MessageField = 0;
+			blocker->Message(MessageCode::TBlockerEnable, 0.0f);
+			break;
+		default:
+			break;
+		}
 	}
 
 	// FT1 code 66: a hole (s_hole118) has the ball. TODO(66): confirm against the FT1 hole; here THole's
@@ -1696,11 +1789,418 @@ namespace
 		}
 	}
 
+	// 23:978f - state 7, the gargoyles (text 3036, music tabc5): both rock blockers drop and their spot targets go down;
+	// v_lite45/46 flash; the gargoyle spots light from their rules; text 3035 counts down
+	void Mission7(MessageCode code, TPinballComponent* cmp)
+	{
+		if (code == FT1Event79)
+		{
+			Send(light_sweeps, FT1LightSweepStart, 3.0f);
+			Send(gargoyle_spot_light_group, MessageCode::TLightResetAndTurnOff, 0.0f);
+			if (InfoField() == 2)
+				Send(v_lite46, MessageCode::TLightFlasherStartTimed, -1.0f);
+			Send(a_rockb, MessageCode::TBlockerDisable, 0.0f);
+			Send(a_spot14, MessageCode::TPopupTargetDisable, 0.0f);
+			Send(v_lite45, MessageCode::TLightFlasherStartTimed, -1.0f);
+			Send(a_rocka, MessageCode::TBlockerDisable, 0.0f);
+			Send(a_spot10, MessageCode::TPopupTargetDisable, 0.0f);
+			ScorePoints(nullptr, 100000);
+			InfoClear();
+			Display(ft1_strings::Get(3036), -1.0f, 0);
+			Send(v_lite46, MessageCode::TLightFlasherStartTimed, -1.0f);
+			Send(v_lite45, MessageCode::TLightFlasherStartTimed, -1.0f);
+			Play(tabc53wave);
+			PlayMusic(MusicTrack5);
+			return;
+		}
+		if (code == FT1Event83 || code == FT1Event82)
+		{
+			if (code == FT1Event83)
+			{
+				SetInfoField(2);
+				Send(mode_timer, MessageCode::Ft1BlockerTimer, -1.0f);
+			}
+			ClearLettersAndLocks();
+			Send(gargoyle_spot_light_group, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(gargoyle_spot_light_group, FT1GroupReset, 0.0f);
+			Send(gargoyle_spot_light_group, FT1LightResetOverride, 0.0f);
+			Send(v_lite46, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(a_rockb, MessageCode::TBlockerEnable, 0.0f);
+			Send(v_lite45, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(a_rocka, MessageCode::TBlockerEnable, 0.0f);
+			CompleteQuest();
+			return;
+		}
+		if (code == FT1Event81)
+		{
+			Send(v_lite46, MessageCode::TLightFlasherStartTimed, -1.0f);
+			Send(v_lite45, MessageCode::TLightFlasherStartTimed, -1.0f);
+			Play(tabc53wave);
+			Send(gargoyle_spot_light_group, FT1LightResetOverride, 0.0f);
+			Send(mode_timer, MessageCode::Ft1BlockerTimer, 15.0f);
+			if (TextQueued())
+				return;
+		}
+		if (code == FT1Event81 || code == FT1Event80)
+		{
+			Countdown(3035);
+			return;
+		}
+		if (code == MessageCode::ControlTimerExpired && cmp)
+		{
+			if (cmp == light_sweeps.GetComponent())
+			{
+				ResetTowerAndLetters();
+				Send(v_lite14, MessageCode::TLightResetAndTurnOn, 0.0f);
+				Send(gargoyle_spot_light_group, FT1GroupAnimationBackward, 0.1f);
+				ReleaseTo(a_sink18.GetComponent(), 0.0f);
+				Send(mode_timer, MessageCode::Ft1BlockerTimer, 30.65f);
+				MissionEvent(FT1Event80, nullptr);
+			}
+			else if (cmp == mode_timer.GetComponent())
+			{
+				Send(v_lite46, MessageCode::TLightResetAndTurnOff, 0.0f);
+				Send(v_lite45, MessageCode::TLightResetAndTurnOff, 0.0f);
+				Send(gargoyle_spot_light_group, FT1LightOverrideOff, 0.0f);
+				Field(mode_timer) = InfoField();
+				SetState(3);
+			}
+		}
+	}
+
+	// 23:9c76 - state 8, the well and the spell (text 3038, music tabc6): the well and spell lights flash, their rules
+	// count the shots; the ball comes out of sink 4; text 3037 counts down
+	void Mission8(MessageCode code, TPinballComponent* cmp)
+	{
+		if (code == FT1Event79)
+		{
+			Send(light_sweeps, FT1LightSweepStart, 4.0f);
+			ScorePoints(nullptr, 100000);
+			InfoClear();
+			Display(ft1_strings::Get(3038), -1.0f, 0);
+			Send(well_light_group, MessageCode::TLightFlasherStartTimed, -1.0f);
+			Send(spell_spot_light_group, MessageCode::TLightFlasherStartTimed, -1.0f);
+			Play(tabc55wave);
+			PlayMusic(MusicTrack6);
+			return;
+		}
+		if (code == FT1Event83 || code == FT1Event82)
+		{
+			if (code == FT1Event83)
+			{
+				SetInfoField(2);
+				Send(mode_timer, MessageCode::Ft1BlockerTimer, -1.0f);
+			}
+			ClearLettersAndLocks();
+			CompleteQuest();
+			return;
+		}
+		if (code == FT1Event81)
+		{
+			Play(tabc55wave);
+			Send(well_light_group, MessageCode::TLightFlasherStartTimed, -1.0f);
+			Send(spell_spot_light_group, MessageCode::TLightFlasherStartTimed, -1.0f);
+			Send(mode_timer, MessageCode::Ft1BlockerTimer, 15.0f);
+			if (TextQueued())
+				return;
+		}
+		if (code == FT1Event81 || code == FT1Event80)
+		{
+			Countdown(3037);
+			return;
+		}
+		if (code == MessageCode::ControlTimerExpired && cmp)
+		{
+			if (cmp == light_sweeps.GetComponent())
+			{
+				ResetTowerAndLetters();
+				ReleaseTo(a_sink4.GetComponent(), 0.0f);
+				Send(mode_timer, MessageCode::Ft1BlockerTimer, 30.69f);
+				MissionEvent(FT1Event80, nullptr);
+			}
+			else if (cmp == mode_timer.GetComponent())
+			{
+				Send(well_light_group, MessageCode::TLightResetAndTurnOff, 0.0f);
+				Send(spell_spot_light_group, MessageCode::TLightResetAndTurnOff, 0.0f);
+				Field(mode_timer) = InfoField();
+				Send(well_light_group, FT1LightOverrideOff, 0.0f);
+				SetState(3);
+			}
+		}
+	}
+
+	// FT1 84 / 85: TODO - sent by a ramp (a_ramp107) when the ball goes onto / off it (the battle's timer waits while
+	// the ball is on it); not mapped yet, so the battle never waits
+	const MessageCode FT1Code84 = static_cast<MessageCode>(2084);
+	const MessageCode FT1Code85 = static_cast<MessageCode>(2085);
+
+	int g_5ff0 = 0; // the battle's light sweep is running
+	int g_5fee = 0; // the ball is on a_ramp107
+	int g_5fec = 0; // the battle's seconds: 30 + 5 per weapon and armor piece
+
+	// ds:0x352e - the dragon's fire, from its mouth down the table, indexed by v_lite113's MessageField
+	component_tag<TLight>* FireLights[] = {&v_lite113, &v_lite114, &v_lite115, &v_lite58, &v_lite59,
+	                                       &v_lite60, &v_lite61, &v_lite62};
+
+	// 23:9fae - state 9, the dragon (text 3048, wave tabc57): after the light sweep the dragon wakes and the jaw opens;
+	// the battle lasts g_5fec seconds (the timer only starts at s_oneway2 while the ball saver runs). The weapons
+	// (kickback, center post, gate blocker) and armor lit when it starts add time and come up; each lit multiplier
+	// light (33-36), v_lite28 and v_lite29 take a hit off the dragon's eight (v_lite114's MessageField, counted down
+	// by a_sink19's rule). a_sink19 with the last hit slays it: the mouth shows its pictures, then the super jackpot,
+	// 1,500,000, the jackpot, multiplier x5, all weapons and armor. Bumpers, targets, kickouts and sinks 1 and 2 add to
+	// the super jackpot meanwhile.
+	void Mission9(MessageCode code, TPinballComponent* cmp)
+	{
+		auto t = control::TableG;
+		switch (code)
+		{
+		case FT1Event79:
+		{
+			g_5ff0 = 1;
+			Send(light_sweeps, FT1LightSweepStart, 5.0f);
+			SetActive(a_sink18, false);
+			SetActive(a_sink17, false);
+			g_5fee = 0;
+			g_5fec = 30;
+			if (LightOn(v_lite37))
+			{
+				g_5fec += 5;
+				EnableKickback(false);
+				Play(tabc24wave);
+			}
+			if (LightOn(v_lite38))
+			{
+				g_5fec += 5;
+				CenterPostRule(MessageCode::TBlockerEnable, a_center_post.GetComponent());
+			}
+			if (LightOn(v_lite39))
+			{
+				g_5fec += 5;
+				BloceRule(MessageCode::TBlockerEnable, a_bloce.GetComponent());
+			}
+			if (LightOn(v_lite31))
+				g_5fec += 5;
+			if (LightOn(v_lite32))
+				g_5fec += 5;
+			Field(v_lite114) = 8;
+			for (auto light : {&v_lite33, &v_lite34, &v_lite35, &v_lite36, &v_lite28, &v_lite29})
+				if (LightOn(*light))
+					Field(v_lite114)--;
+			bool keep = InfoField() == 6 || InfoField() == 13;
+			if (!keep)
+			{
+				Send(v_lite47, MessageCode::TLightResetAndTurnOff, 0.0f);
+				Send(a_dvtraa, MessageCode::TGateEnable, 0.0f);
+				Send(a_dvtrab, MessageCode::TGateDisable, 0.0f);
+			}
+			Send(a_dvtrba, MessageCode::TGateDisable, 0.0f);
+			Send(a_dvtrbb, MessageCode::TGateEnable, 0.0f);
+			Send(a_dvtrca, MessageCode::TGateDisable, 0.0f);
+			Send(a_dvtrcb, MessageCode::TGateEnable, 0.0f);
+			if (!(InfoField() == 6 || InfoField() == 13))
+			{
+				Send(v_lite125, MessageCode::TLightResetAndTurnOff, 0.0f);
+				Send(v_lite126, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+				Send(a_dvtrda, MessageCode::TGateEnable, 0.0f);
+				Send(a_dvtrdb, MessageCode::TGateDisable, 0.0f);
+			}
+			ScorePoints(nullptr, 500000);
+			Display(ft1_strings::Get(3048), -1.0f, 0);
+			Send(v_lite29, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			Send(v_lite30, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			SetActive(a_kout3, true);
+			Play(tabc57wave);
+			return;
+		}
+		case MessageCode::SetTiltLock: // FT1 1011: the armor goes, then as a drain
+			ResetArmor();
+			[[fallthrough]];
+		case FT1Event83:
+			SetInfoField(2);
+			Send(mode_timer, MessageCode::Ft1BlockerTimer, -1.0f);
+			[[fallthrough]];
+		case FT1Event82:
+			SwordStep(3);
+			for (auto light : {&v_lite71, &v_lite72, &v_lite73, &v_lite74, &v_lite75})
+				Send(*light, MessageCode::TLightResetAndTurnOff, 0.0f);
+			ClearLettersAndLocks();
+			DragonSleeps(true);
+			Send(v_lite77, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(v_lite78, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(v_lite79, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(v_lite76, MessageCode::TLightResetAndTurnOn, 0.0f);
+			CompleteQuest();
+			return;
+		case FT1Code85:
+			if (cmp == a_ramp107.GetComponent())
+				g_5fee = 0;
+			return;
+		case FT1Code84:
+			if (cmp == a_ramp107.GetComponent())
+				g_5fee = 1;
+			return;
+		case FT1Event81:
+			Play(tabc57wave);
+			Send(mode_timer, MessageCode::Ft1BlockerTimer, static_cast<float>(g_5fec) / 2.0f);
+			Send(v_lite29, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			Send(v_lite30, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			SetActive(a_kout3, true);
+			DragonWakes();
+			if (TextQueued())
+				return;
+			[[fallthrough]];
+		case FT1Event80:
+		{
+			auto left = TimeLeftMs(mode_timer);
+			if (left)
+				Display(Format(3047, left / 1000).c_str(), 0.5f, 0);
+			return;
+		}
+		case MessageCode::ControlCollision: // FT1 74, by the part's type
+			if (!cmp)
+				return;
+			if (dynamic_cast<TBumper*>(cmp)) // 1005
+				AddSuperJackpot(50000);
+			else if (dynamic_cast<TSoloTarget*>(cmp)) // 1019
+				AddSuperJackpot(100000);
+			else if (dynamic_cast<TKickout*>(cmp)) // 1012
+				AddSuperJackpot(750000);
+			else if (dynamic_cast<TSink*>(cmp)) // 1017
+			{
+				if (cmp == a_sink19.GetComponent())
+				{
+					if (Field(v_lite114) == 1) // the last hit: the dragon is slain
+					{
+						if (t->LightGroup)
+							t->LightGroup->Message(FT1LightOverrideOn, 0.0f);
+						DragonSleeps(false);
+						Send(mode_timer, MessageCode::Ft1BlockerTimer, -1.0f);
+						Field(dragon_mouth_light_group) = 0;
+						Send(dragon_mouth_light_group, FT1GroupRestartNotify, 0.0001f);
+						InfoClear();
+					}
+					g_5fee = 0;
+				}
+				else if (cmp == a_sink1.GetComponent() || cmp == a_sink2.GetComponent())
+					AddSuperJackpot(500000);
+			}
+			else if (dynamic_cast<TOneway*>(cmp)) // 1016
+			{
+				if (!g_5ff0 && cmp == s_oneway2.GetComponent() && g_5fe0 == 3)
+				{
+					Send(mode_timer, MessageCode::Ft1BlockerTimer, static_cast<float>(g_5fec));
+					Mission9(FT1Event80, nullptr);
+				}
+			}
+			return;
+		case MessageCode::ControlNotifyTimerExpired: // FT1 71
+			if (cmp == dragon_fire_light_group.GetComponent())
+			{
+				// the fire runs down the eight lights and back
+				auto& index = Field(v_lite113);
+				auto fire = [&](MessageCode lightCode)
+				{
+					if (index >= 0 && index < 8)
+						Send(*FireLights[index], lightCode, 0.0f);
+				};
+				if (g_226e > 0)
+				{
+					index++;
+					if (index == 0)
+					{
+						Play(tabc58wave);
+						fire(MessageCode::TLightResetAndTurnOn);
+					}
+					else if (index >= 1 && index <= 7)
+						fire(MessageCode::TLightResetAndTurnOn);
+					else if (index == 8)
+						g_226e = -1;
+				}
+				else
+				{
+					index--;
+					if (index == -1)
+						g_226e = 1;
+					else
+						fire(MessageCode::TLightResetAndTurnOff);
+				}
+				Send(dragon_fire_light_group, FT1GroupRestartNotify, index >= 6 && index <= 8 ? 0.012f : 0.123f);
+			}
+			else if (cmp == dragon_mouth_light_group.GetComponent())
+			{
+				// the slain dragon's pictures (picture font ',' '-' '.' '/' '0'..'3', then none), 0.4 s each
+				auto step = Field(dragon_mouth_light_group)++;
+				if (step >= 0 && step <= 8)
+				{
+					static const char* pictures[] = {",", "-", ".", "/", "0", "1", "2", "3", ""};
+					Display(pictures[step], -1.0f, 1);
+					Send(dragon_mouth_light_group, FT1GroupRestartNotify, 0.4f);
+				}
+				else if (step == 9)
+				{
+					if (t->LightGroup)
+						t->LightGroup->Message(FT1LightResetOverride, 0.0f);
+					auto added = SpecialAddScore(cmp, SuperJackpot);
+					Display(Format(3050, added).c_str(), -1.0f, 0);
+					ScorePoints(cmp, 1500000);
+					CollectJackpot(0.0f, false);
+					for (auto light : {&v_lite33, &v_lite34, &v_lite35, &v_lite36})
+						Send(*light, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+					Multiplier = 5;
+					EnableKickback(false);
+					CenterPostRule(MessageCode::TBlockerEnable, a_center_post.GetComponent());
+					BloceRule(MessageCode::TBlockerEnable, a_bloce.GetComponent());
+					Send(v_lite28, MessageCode::TLightTurnOnTimed, 30.0f);
+					Send(v_lite29, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+					Send(v_lite30, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+					SetActive(a_kout3, true);
+					Send(v_lite31, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+					BlocfRule(MessageCode::TBlockerDisable, a_blocf.GetComponent());
+					Mission9(FT1Event82, nullptr);
+					Send(a_sink16, MessageCode::TSinkResetTimer, -1.0f);
+					Send(dragon_letter_light_group, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+					AllGems();
+				}
+			}
+			return;
+		case MessageCode::Ft1BlockerArrived: // FT1 61: the jaw is open, the fire starts
+			if (g_2274 && cmp == a_jaw.GetComponent())
+			{
+				SetActive(a_ramp107, true);
+				SetActive(s_bwal170, true);
+				Send(dragon_fire_light_group, FT1GroupRestartNotify, 0.123f);
+			}
+			return;
+		case MessageCode::ControlTimerExpired: // FT1 70
+			if (cmp == light_sweeps.GetComponent())
+			{
+				g_5ff0 = 0;
+				ResetTowerAndLetters();
+				DragonWakes();
+				if (g_5fe0 == 3)
+					return; // the timer starts at s_oneway2
+				Send(mode_timer, MessageCode::Ft1BlockerTimer, static_cast<float>(g_5fec));
+				MissionEvent(FT1Event80, nullptr);
+			}
+			else if (cmp == mode_timer.GetComponent())
+			{
+				if (g_5fee)
+				{
+					Send(mode_timer, MessageCode::Ft1BlockerTimer, 0.05f);
+					return;
+				}
+				Field(mode_timer) = InfoField();
+				DragonSleeps(false);
+				SetState(3);
+			}
+			return;
+		default:
+			return;
+		}
+	}
+
 	// ---- mission handlers not translated yet ----
 	void Mission0(MessageCode, TPinballComponent*) {}
-	void Mission7(MessageCode, TPinballComponent*) {}
-	void Mission8(MessageCode, TPinballComponent*) {}
-	void Mission9(MessageCode, TPinballComponent*) {}
 	void Mission11(MessageCode, TPinballComponent*) {}
 	void Mission12(MessageCode, TPinballComponent*) {}
 	void Mission13(MessageCode, TPinballComponent*) {}

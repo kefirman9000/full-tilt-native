@@ -43,6 +43,11 @@ TBlocker::TBlocker(TPinballTable* table, int groupIndex) : TCollisionComponent(t
 			}
 		if (auto delay = loader::query_float_attribute(groupIndex, 0, 903))
 			StepDelay = delay[0];
+		if (auto durations = loader::query_float_attribute(groupIndex, 0, 407)) // +0x74 / +0x76
+		{
+			InitialDuration = static_cast<int>(durations[0]);
+			ExtendedDuration = static_cast<int>(durations[1]);
+		}
 		if (auto initial = loader::query_float_attribute(groupIndex, 0, 409))
 			InitialFrame = static_cast<int>(std::lround(initial[0]));
 		ActiveFlag = 1; // the frames' own flags decide which wall is there
@@ -85,7 +90,7 @@ void TBlocker::Ft1Step(int timerId, void* caller)
 	blocker->MoveTimer = 0;
 	if (blocker->TargetFrame == blocker->Frame)
 	{
-		control::handler(MessageCode::ControlTimerExpired, blocker);
+		control::handler(MessageCode::Ft1BlockerArrived, blocker);
 		return;
 	}
 	auto next = blocker->TargetFrame > blocker->Frame ? blocker->Frame + 1 : blocker->Frame - 1;
@@ -97,7 +102,7 @@ void TBlocker::Ft1RuleTimer(int timerId, void* caller)
 {
 	auto blocker = static_cast<TBlocker*>(caller);
 	blocker->RuleTimer = 0;
-	control::handler(MessageCode::Ft1TimerExpired, blocker);
+	control::handler(MessageCode::ControlTimerExpired, blocker); // FT1 70, as from a timer
 }
 
 int TBlocker::Message(MessageCode code, float value)

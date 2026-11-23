@@ -88,8 +88,8 @@ enum class MessageCode
 	Ft1BlockerMoveTo = 2058,      // FT1 58: frame by frame to round(value)
 	Ft1BlockerShowLast = 2059,    // FT1 59: straight to the last frame, with the raise sound
 	Ft1BlockerHide = 2060,        // FT1 60: straight to no frame, with the lower sound
-	Ft1BlockerTimer = 2069,       // FT1 69: tell the rules Ft1TimerExpired after `value` seconds
-	Ft1TimerExpired = 2070,       // FT1 70 from a blocker's timer (69)
+	Ft1BlockerTimer = 2069,       // FT1 69: tell the rules ControlTimerExpired (FT1 70) after `value` seconds
+	Ft1BlockerArrived = 2061,     // FT1 61 to the rules: a blocker reached the frame it was moving to
 	Ft1TimerTimeLeft = 2072,      // FT1 72 to a timer: returns the milliseconds left
 
 	TGateDisable = 53,
