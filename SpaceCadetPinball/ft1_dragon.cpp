@@ -171,6 +171,16 @@ DK_TAG(TSound, tabc55wave)
 DK_TAG(TLight, v_lite14)
 DK_TAG(TLightGroup, well_light_group)
 DK_TAG(TSink, a_sink19)
+DK_TAG(TLight, v_lite11)
+DK_TAG(TLight, v_lite12)
+DK_TAG(TLight, v_lite13)
+DK_TAG(TLight, v_lite55)
+DK_TAG(TLight, v_lite56)
+DK_TAG(TSound, tabc08wave)
+DK_TAG(TSound, tabc96wave)
+DK_TAG(TLight, v_lite19)
+DK_TAG(TLight, v_lite20)
+DK_TAG(TLight, v_lite21)
 DK_TAG(TSound, tabc03wave)
 DK_TAG(TSound, tabc05wave)
 DK_TAG(TSound, tabc07wave)
@@ -2839,17 +2849,174 @@ DK_TAG(TSound, tabc58wave)
 	void Spot2Rule(MessageCode code, TPinballComponent* caller) { ThreeSpot(code, caller, v_lite9); }
 	void Spot1Rule(MessageCode code, TPinballComponent* caller) { ThreeSpot(code, caller, v_lite10); }
 
+	// 23:36fa - after a gargoyle spot (lights 11-14): all four lit go out (flashing 1 s), the B and C diverters
+	// switch, lights 55/56 light, both rock blockers come up with their lights off; in normal play gem v_lite25 lights
+	// and text 3004 shows unless that was the last gem (always shows otherwise); tabc08 and the second score except in
+	// the gem quest. Otherwise tabc08 and the spot's score
+	void GargoyleSpots(TPinballComponent* caller)
+	{
+		if (LightOn(v_lite14) && LightOn(v_lite13) && LightOn(v_lite12) && LightOn(v_lite11))
+		{
+			for (auto light : {&v_lite14, &v_lite13, &v_lite12, &v_lite11})
+				Send(*light, MessageCode::TLightFlasherStartTimedThenStayOff, 1.0f);
+			Send(a_dvtrba, MessageCode::TGateDisable, 0.0f);
+			Send(a_dvtrbb, MessageCode::TGateEnable, 0.0f);
+			Send(a_dvtrca, MessageCode::TGateDisable, 0.0f);
+			Send(a_dvtrcb, MessageCode::TGateEnable, 0.0f);
+			Send(v_lite56, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			Send(v_lite55, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			Send(v_lite46, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(a_rockb, MessageCode::TBlockerEnable, 0.0f);
+			Send(v_lite45, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(a_rocka, MessageCode::TBlockerEnable, 0.0f);
+			bool show = true;
+			if (InfoField() == 2)
+			{
+				Send(v_lite25, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+				show = !AllGems();
+			}
+			if (show)
+				Display(ft1_strings::Get(3004), 2.0f, 0);
+			if (InfoField() == 4)
+				return;
+			Play(tabc08wave);
+			ScoreHit(caller, 1);
+			return;
+		}
+		if (InfoField() == 4)
+			return;
+		Play(tabc08wave);
+		ScoreHit(caller, 0);
+	}
+
+	// 23:39f7 - a_spot10: rock A drops (v_lite45 flashes), the spot goes down, v_lite14 lights
+	void Spot10Rule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		Send(v_lite45, MessageCode::TLightFlasherStartTimed, -1.0f);
+		Send(a_rocka, MessageCode::TBlockerDisable, 0.0f);
+		Send(a_spot10, MessageCode::TPopupTargetDisable, 0.0f);
+		Send(v_lite14, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+		GargoyleSpots(caller);
+	}
+
+	// 23:3b77 - a_spot14: rock B drops (v_lite46 flashes in normal play), the spot goes down, v_lite12 lights
+	void Spot14Rule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		if (InfoField() == 2)
+			Send(v_lite46, MessageCode::TLightFlasherStartTimed, -1.0f);
+		Send(a_rockb, MessageCode::TBlockerDisable, 0.0f);
+		Send(a_spot14, MessageCode::TPopupTargetDisable, 0.0f);
+		Send(v_lite12, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+		GargoyleSpots(caller);
+	}
+
+	// 23:3a9f / 23:3c2e - a_spot8 / a_spot12, the gargoyles: in their quest (state 7) the light flashes, jackpot
+	// +250,000 and 100,000; otherwise the light (13 / 11) lights and GargoyleSpots
+	void GargoyleSpot(MessageCode code, TPinballComponent* caller, component_tag<TLight>& light)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		if (InfoField() == 7)
+		{
+			Send(light, MessageCode::TLightFlasherStartTimed, 0.5f);
+			AddJackpot(250000);
+			ScorePoints(caller, 100000);
+			return;
+		}
+		Send(light, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+		GargoyleSpots(caller);
+	}
+
+	void Spot8Rule(MessageCode code, TPinballComponent* caller) { GargoyleSpot(code, caller, v_lite13); }
+	void Spot12Rule(MessageCode code, TPinballComponent* caller) { GargoyleSpot(code, caller, v_lite11); }
+
+	// 23:3d06 - a_spot27: with v_lite57 lit it goes out and gives an extra ball; otherwise tabc96, v_lite21 flashes, in
+	// normal play the next quest is picked and named (texts 3071-3075), and the spot's score
+	void Spot27Rule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		if (LightOn(v_lite57))
+		{
+			Send(v_lite57, MessageCode::TLightResetAndTurnOff, 0.0f);
+			AddExtraBall(5.0f);
+			return;
+		}
+		Play(tabc96wave);
+		Send(v_lite21, MessageCode::TLightFlasherStartTimed, 1.0f);
+		if (InfoField() == 2)
+		{
+			auto quest = QuestStep19df();
+			if (quest >= 4 && quest <= 8)
+				Display(ft1_strings::Get(3071 + quest - 4), 2.0f, 0);
+		}
+		ScoreHit(caller, 0);
+	}
+
+	// 23:3eba / 3f93 / 406c - the sword spots 19, 26, 28 in normal play, while their light (16, 17, 18) flashes: the
+	// sword picture, the sword moves on (2, 1) with the fire flashing and the spot's score; the last (28) puts the
+	// sword away, ends the quest light and starts the dragon battle (state 9)
+	bool SwordSpotReady(MessageCode code, component_tag<TLight>& light)
+	{
+		if (code != MessageCode::ControlCollision || InfoField() != 2)
+			return false;
+		if (!Flashing(light))
+			return false;
+		Display("!", 2.0f, 1); // ds:0x21ce
+		return true;
+	}
+
+	void Spot19Rule(MessageCode code, TPinballComponent* caller)
+	{
+		if (!SwordSpotReady(code, v_lite16))
+			return;
+		SwordStep(2);
+		Send(dragon_fire_light_group, MessageCode::TLightFlasherStartTimed, 2.0f);
+		ScoreHit(caller, 0);
+	}
+
+	void Spot26Rule(MessageCode code, TPinballComponent* caller)
+	{
+		if (!SwordSpotReady(code, v_lite17))
+			return;
+		SwordStep(1);
+		Send(dragon_fire_light_group, MessageCode::TLightFlasherStartTimed, 2.0f);
+		ScoreHit(caller, 0);
+	}
+
+	void Spot28Rule(MessageCode code, TPinballComponent*)
+	{
+		if (!SwordSpotReady(code, v_lite18))
+			return;
+		SwordStep(-1);
+		ClearQuestLight();
+		Send(v_lite76, MessageCode::TLightFlasherStartTimed, -1.0f);
+		SetInfoField(9);
+		MissionEvent(FT1Event79, nullptr);
+	}
+
+	// 23:4157 / 23:41b6 - a_spot30 / a_spot31: v_lite20 / v_lite19 flash 2 s, the spot's score
+	void Spot30Rule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		Send(v_lite20, MessageCode::TLightFlasherStartTimed, 2.0f);
+		ScoreHit(caller, 0);
+	}
+
+	void Spot31Rule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		Send(v_lite19, MessageCode::TLightFlasherStartTimed, 2.0f);
+		ScoreHit(caller, 0);
+	}
+
 	// ---- rule functions not translated yet (their components do nothing yet) ----
-	void Rule_39f7(MessageCode, TPinballComponent*) {} // TODO(23:39f7): a_spot10
-	void Rule_3a9f(MessageCode, TPinballComponent*) {} // TODO(23:3a9f): a_spot8
-	void Rule_3b77(MessageCode, TPinballComponent*) {} // TODO(23:3b77): a_spot14
-	void Rule_3c2e(MessageCode, TPinballComponent*) {} // TODO(23:3c2e): a_spot12
-	void Rule_3d06(MessageCode, TPinballComponent*) {} // TODO(23:3d06): a_spot27
-	void Rule_3eba(MessageCode, TPinballComponent*) {} // TODO(23:3eba): a_spot19
-	void Rule_3f93(MessageCode, TPinballComponent*) {} // TODO(23:3f93): a_spot26
-	void Rule_406c(MessageCode, TPinballComponent*) {} // TODO(23:406c): a_spot28
-	void Rule_4157(MessageCode, TPinballComponent*) {} // TODO(23:4157): a_spot30
-	void Rule_41b6(MessageCode, TPinballComponent*) {} // TODO(23:41b6): a_spot31
 	void Rule_4931(MessageCode, TPinballComponent*) {} // TODO(23:4931): a_sink1
 	void Rule_4afc(MessageCode, TPinballComponent*) {} // TODO(23:4afc): a_sink2
 	void Rule_4c97(MessageCode, TPinballComponent*) {} // TODO(23:4c97): a_sink4
@@ -2958,16 +3125,16 @@ DK_TAG(TSound, tabc58wave)
 		{RuleTags[15], {Spot3Rule, 2, Scores15}},
 		{RuleTags[16], {Spot2Rule, 2, Scores16}},
 		{RuleTags[17], {Spot1Rule, 2, Scores17}},
-		{RuleTags[18], {Rule_39f7, 2, Scores18}},
-		{RuleTags[19], {Rule_3a9f, 2, Scores19}},
-		{RuleTags[20], {Rule_3b77, 2, Scores20}},
-		{RuleTags[21], {Rule_3c2e, 2, Scores21}},
-		{RuleTags[22], {Rule_3d06, 1, Scores22}},
-		{RuleTags[23], {Rule_3eba, 1, Scores23}},
-		{RuleTags[24], {Rule_3f93, 1, Scores24}},
-		{RuleTags[25], {Rule_406c, 0, nullptr}},
-		{RuleTags[26], {Rule_4157, 1, Scores26}},
-		{RuleTags[27], {Rule_41b6, 1, Scores27}},
+		{RuleTags[18], {Spot10Rule, 2, Scores18}},
+		{RuleTags[19], {Spot8Rule, 2, Scores19}},
+		{RuleTags[20], {Spot14Rule, 2, Scores20}},
+		{RuleTags[21], {Spot12Rule, 2, Scores21}},
+		{RuleTags[22], {Spot27Rule, 1, Scores22}},
+		{RuleTags[23], {Spot19Rule, 1, Scores23}},
+		{RuleTags[24], {Spot26Rule, 1, Scores24}},
+		{RuleTags[25], {Spot28Rule, 0, nullptr}},
+		{RuleTags[26], {Spot30Rule, 1, Scores26}},
+		{RuleTags[27], {Spot31Rule, 1, Scores27}},
 		{RuleTags[28], {CenterPostRule, 0, nullptr}},
 		{RuleTags[29], {Rule_4931, 1, Scores29}},
 		{RuleTags[30], {Rule_4afc, 1, Scores30}},
