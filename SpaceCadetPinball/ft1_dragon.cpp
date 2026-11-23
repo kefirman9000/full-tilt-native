@@ -3683,11 +3683,131 @@ DK_TAG(TSound, tabc58wave)
 	void Sink9Rule(MessageCode code, TPinballComponent* caller) { Lock3Sink(code, caller, false); }
 	void Sink10Rule(MessageCode code, TPinballComponent* caller) { Lock3Sink(code, caller, true); }
 
+	// 23:6ea6 - the window lights' wire targets v_wlite96-99: their score
+	void WindowTargetRule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code == MessageCode::ControlCollision)
+			ScoreHit(caller, 0);
+	}
+
+	// 23:6eea - s_trip5 / s_trip6, the prison windows. Multiball: 100,000. Prison quest: tabc51; by the windows lit
+	// 250,000 / 500,000 (text 3008) / the jackpot / v_lite57 lit (text 3034), and one more window. The prison
+	// hurry-up: the score by text 3008. Otherwise (in normal play only while lock 1 is closed, with tabc04) the score
+	// by the windows lit (text 3008) and one more window; all lit, they go out
+	void PrisonTripRule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		auto windows = [&]() { return Send(prison_window_light_group, MessageCode::TLightGroupGetOnCount, 0.0f); };
+		auto showScore = [&](int points) { Display(Format(3008, points).c_str(), 2.0f, 0); };
+		switch (InfoField())
+		{
+		case 13:
+			ScorePoints(caller, 100000);
+			return;
+		case 6:
+			Play(tabc51wave);
+			switch (windows())
+			{
+			case 0:
+				showScore(ScorePoints(caller, 250000));
+				break;
+			case 1:
+				showScore(ScorePoints(caller, 500000));
+				break;
+			case 2:
+				CollectJackpot(0.0f, true);
+				break;
+			default:
+				Send(v_lite57, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+				Display(ft1_strings::Get(3034), 2.0f, 0);
+				break;
+			}
+			Send(prison_window_light_group, MessageCode::TLightGroupResetAndTurnOn, 1.0f);
+			return;
+		case 3:
+			if (Field(mode_timer) == 6)
+			{
+				showScore(ScoreHit(caller, 0));
+				return;
+			}
+			break;
+		case 2:
+			if (Field(v_lite48))
+				return;
+			Play(tabc04wave);
+			break;
+		default:
+			break;
+		}
+		auto lit = windows();
+		showScore(ScoreHit(caller, lit));
+		if (lit + 1 == Send(prison_window_light_group, MessageCode::TLightGroupGetLightCount, 0.0f))
+		{
+			Send(prison_window_light_group, MessageCode::TLightTurnOff, 0.0f);
+			Send(prison_window_light_group, MessageCode::TLightFlasherStartTimedThenStayOff, 1.0f);
+		}
+		else
+			Send(prison_window_light_group, MessageCode::TLightGroupResetAndTurnOn, 1.0f);
+	}
+
+	// 23:71e4 / 23:73e6 - s_trip3/4 (watch windows, lock 2) and s_trip8/9 (gate windows, lock 3). Multiball:
+	// 100,000. Prison quest (and its hurry-up): the score by text 3008 (tabc51 in the quest). In normal play nothing
+	// while the lock is open. Otherwise (the watch windows with tabc04) the score by the windows lit (text 3008) and
+	// one more window; all lit, they go out
+	void WindowTrip(MessageCode code, TPinballComponent* caller, component_tag<TLightGroup>& group,
+	                component_tag<TLight>& lockLight, bool sound)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		auto showScore = [&](int points) { Display(Format(3008, points).c_str(), 2.0f, 0); };
+		switch (InfoField())
+		{
+		case 13:
+			ScorePoints(caller, 100000);
+			return;
+		case 6:
+			Play(tabc51wave);
+			showScore(ScoreHit(caller, 0));
+			return;
+		case 3:
+			if (Field(mode_timer) == 6)
+			{
+				showScore(ScoreHit(caller, 0));
+				return;
+			}
+			break;
+		case 2:
+			if (Field(lockLight))
+				return;
+			break;
+		default:
+			break;
+		}
+		if (sound)
+			Play(tabc04wave);
+		auto lit = Send(group, MessageCode::TLightGroupGetOnCount, 0.0f);
+		showScore(ScoreHit(caller, lit));
+		if (lit + 1 == Send(group, MessageCode::TLightGroupGetLightCount, 0.0f))
+		{
+			Send(group, MessageCode::TLightTurnOff, 0.0f);
+			Send(group, MessageCode::TLightFlasherStartTimedThenStayOff, 1.0f);
+		}
+		else
+			Send(group, MessageCode::TLightGroupResetAndTurnOn, 1.0f);
+	}
+
+	void WatchTripRule(MessageCode code, TPinballComponent* caller)
+	{
+		WindowTrip(code, caller, watch_window_light_group, v_lite49, true);
+	}
+
+	void GateTripRule(MessageCode code, TPinballComponent* caller)
+	{
+		WindowTrip(code, caller, gate_window_light_group, v_lite50, false);
+	}
+
 	// ---- rule functions not translated yet (their components do nothing yet) ----
-	void Rule_6ea6(MessageCode, TPinballComponent*) {} // TODO(23:6ea6): v_wlite96, v_wlite97, v_wlite98, v_wlite99
-	void Rule_6eea(MessageCode, TPinballComponent*) {} // TODO(23:6eea): s_trip6, s_trip5
-	void Rule_71e4(MessageCode, TPinballComponent*) {} // TODO(23:71e4): s_trip3, s_trip4
-	void Rule_73e6(MessageCode, TPinballComponent*) {} // TODO(23:73e6): s_trip8, s_trip9
 	void Rule_75d3(MessageCode, TPinballComponent*) {} // TODO(23:75d3): a_kout3
 	void Rule_7617(MessageCode, TPinballComponent*) {} // TODO(23:7617): a_sink19
 	void Rule_109f(MessageCode, TPinballComponent*) {} // TODO(23:109f): a_rocka
@@ -3805,16 +3925,16 @@ DK_TAG(TSound, tabc58wave)
 		{RuleTags[54], {Sink17Rule, 1, Scores54}},
 		{RuleTags[55], {Sink9Rule, 1, Scores55}},
 		{RuleTags[56], {Sink10Rule, 1, Scores56}},
-		{RuleTags[57], {Rule_6ea6, 1, Scores57}},
-		{RuleTags[58], {Rule_6ea6, 1, Scores58}},
-		{RuleTags[59], {Rule_6ea6, 1, Scores59}},
-		{RuleTags[60], {Rule_6ea6, 1, Scores60}},
-		{RuleTags[61], {Rule_6eea, 4, Scores61}},
-		{RuleTags[62], {Rule_6eea, 4, Scores62}},
-		{RuleTags[63], {Rule_71e4, 3, Scores63}},
-		{RuleTags[64], {Rule_71e4, 3, Scores64}},
-		{RuleTags[65], {Rule_73e6, 2, Scores65}},
-		{RuleTags[66], {Rule_73e6, 2, Scores66}},
+		{RuleTags[57], {WindowTargetRule, 1, Scores57}},
+		{RuleTags[58], {WindowTargetRule, 1, Scores58}},
+		{RuleTags[59], {WindowTargetRule, 1, Scores59}},
+		{RuleTags[60], {WindowTargetRule, 1, Scores60}},
+		{RuleTags[61], {PrisonTripRule, 4, Scores61}},
+		{RuleTags[62], {PrisonTripRule, 4, Scores62}},
+		{RuleTags[63], {WatchTripRule, 3, Scores63}},
+		{RuleTags[64], {WatchTripRule, 3, Scores64}},
+		{RuleTags[65], {GateTripRule, 2, Scores65}},
+		{RuleTags[66], {GateTripRule, 2, Scores66}},
 		{RuleTags[67], {BloceRule, 0, nullptr}},
 		{RuleTags[68], {BlocfRule, 0, nullptr}},
 		{RuleTags[69], {Rule_75d3, 0, nullptr}},
