@@ -151,7 +151,7 @@ bool ft1_control::Link(TPinballTable* table)
 		if (!ft1_strings::Load(exe))
 			ftlog::Line("FT1 rules: DRAGON.EXE not found next to DRAGON.DAT; table messages will be missing");
 		if (ft1_dragon::Wanted())
-			return ft1_dragon::Link(table); // development: the full translation (ft1_dragon.h)
+			return ft1_dragon::Link(table); // the full translation of DRAGON.EXE's rules (ft1_dragon.h)
 		Active = LinkRules(dragon::rules, dragon::used);
 	}
 	if (Active)

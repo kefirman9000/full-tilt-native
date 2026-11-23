@@ -4070,7 +4070,7 @@ DK_TAG(TSound, tabc58wave)
 
 bool ft1_dragon::Wanted()
 {
-	return pb::DevDebug && getenv("FT1_DRAGON_FULL");
+	return !getenv("FT1_DRAGON_OLD"); // FT1_DRAGON_OLD=1: the earlier recovered rules instead
 }
 
 bool ft1_dragon::Link(TPinballTable* table)

@@ -48,10 +48,10 @@
 - [x] Glow limited to lights; music on its own thread (no stall on toggle); upstream timer::kill(callback) bug fixed
 - [x] Marble Drop marbles as ball styles (tables/_MarbleDrop, imported by the launcher)
 - [x] Dragon's Keep: every rule function and quest handler of DRAGON.EXE segment 23 translated
-      (SpaceCadetPinball/ft1_dragon.cpp, behind FT2_DEBUG=1 FT1_DRAGON_FULL=1 until it has been played through);
+      (SpaceCadetPinball/ft1_dragon.cpp, on by default; FT1_DRAGON_OLD=1 for the earlier rules);
       engine parts added for it: FT1 blockers, light sweeps (1038), holes that keep the ball, ramp events 84-86.
-- [ ] Dragon's Keep: the info box's own messages (0115) and timed texts (0000/00db), the picture font, then on by
-      default. Then Skulduggery (PIRATES.EXE) the same way.
+- [ ] Dragon's Keep: the info box's own messages (0115) and timed texts (0000/00db), the picture font.
+- [ ] Skulduggery (PIRATES.EXE, 179 functions in segment 23) translated the same way.
 - [ ] Skulduggery's cannon (a_cannon, 4-frame blocker) and launcher have no rules yet; launcher has no art in the data.
 
 ## Status 2026-11-03 (Captain Hero rules, first pass)

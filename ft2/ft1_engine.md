@@ -72,7 +72,7 @@ Ft1BlockerTimer (69), Ft1BlockerArrived (61).
 126 functions: 62 rule functions (75 components) and 64 helpers. 0x06cf scores a hit, 0x072c a given score, 0x0778
 is SpecialAddScore, 0x0657 the rules' message handler (the mission system 0xc5d6 hears every message first), 0xc716
 dispatches to about fifteen quest handlers (0x7da7 ... 0xc5a9, the largest 0x9fae, 3,767 bytes). The translation is in
-`SpaceCadetPinball/ft1_dragon.cpp`, off unless FT2_DEBUG=1 and FT1_DRAGON_FULL=1.
+`SpaceCadetPinball/ft1_dragon.cpp`, on by default (FT1_DRAGON_OLD=1 for the earlier rules).
 
 Translated: every rule function (all 75 rule table entries, linked by 0595's table at ds:2a34), every quest handler
 (states 0-15 and the rest) and the helpers they call. Still open: 0115 / 0000 / 00db (the info box's own messages and
