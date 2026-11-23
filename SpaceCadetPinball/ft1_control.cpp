@@ -11,6 +11,7 @@
 #include "pch.h"
 #include "ft1_control.h"
 #include "ft1_dragon.h"
+#include "ft1_pirates.h"
 
 #include "control.h"
 #include "ft1_strings.h"
@@ -154,6 +155,13 @@ bool ft1_control::Link(TPinballTable* table)
 			return ft1_dragon::Link(table); // the full translation of DRAGON.EXE's rules (ft1_dragon.h)
 		Active = LinkRules(dragon::rules, dragon::used);
 	}
+	if (IsTable("PIRATES.DAT") && ft1_pirates::Wanted())
+	{
+		auto exe = pb::make_path_name("PIRATES.EXE");
+		if (!ft1_strings::Load(exe))
+			ftlog::Line("FT1 rules: PIRATES.EXE not found next to PIRATES.DAT; table messages will be missing");
+		return ft1_pirates::Link(table); // development: the translation of PIRATES.EXE's rules (ft1_pirates.h)
+	}
 	if (Active)
 		ftlog::Line("FT1 rules: " + std::to_string(Ported) + " components use recovered rules");
 	return Active;
@@ -162,6 +170,7 @@ bool ft1_control::Link(TPinballTable* table)
 void ft1_control::Clear()
 {
 	ft1_dragon::Clear();
+	ft1_pirates::Clear();
 	Active = false;
 	Ported = 0;
 	LastHit = nullptr;
@@ -169,7 +178,7 @@ void ft1_control::Clear()
 
 bool ft1_control::Handle(MessageCode code, TPinballComponent* cmp)
 {
-	if (ft1_dragon::Handle(code, cmp))
+	if (ft1_dragon::Handle(code, cmp) || ft1_pirates::Handle(code, cmp))
 		return true;
 	if (!Active || !cmp || !cmp->Control)
 		return false;

@@ -58,6 +58,8 @@ set(SOURCE_FILES
         SpaceCadetPinball/ft1_strings.cpp
         SpaceCadetPinball/ft1_control.cpp
         SpaceCadetPinball/ft1_dragon.cpp
+        SpaceCadetPinball/ft1_pirates.cpp
+        SpaceCadetPinball/ft1_pirates.h
         SpaceCadetPinball/ft1_control.h
         SpaceCadetPinball/ft1_dragon.h
         SpaceCadetPinball/ft1_strings.h

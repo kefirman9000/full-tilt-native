@@ -2,6 +2,7 @@
 #include "control.h"
 #include "ft1_control.h"
 #include "ft1_dragon.h"
+#include "ft1_pirates.h"
 #include "ft2_control.h"
 
 #include "midi.h"
@@ -2969,7 +2970,7 @@ void control::BallDrainControl(MessageCode code, TPinballComponent* caller)
 
 void control::table_control_handler(MessageCode code)
 {
-	if (pb::FT2Table && ft1_dragon::TableHandler(code))
+	if (pb::FT2Table && (ft1_dragon::TableHandler(code) || ft1_pirates::TableHandler(code)))
 		return;
 	if (pb::FT2Table)
 	{
