@@ -3346,15 +3346,91 @@ DK_TAG(TSound, tabc58wave)
 		Display(text.c_str(), 2.0f, 0);
 	}
 
+	// FT1 36 to the outlane kicker's lights (engine 32)
+	const MessageCode FT1GroupOffsetAnimationForward = MessageCode::TLightGroupOffsetAnimationForward;
+
+	// 23:5a62 - a_roll7: its score, tabc24, the kicker's lights, the outlane kicker on; v_lite47 on and the A
+	// diverter set
+	void Roll7Rule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		ScoreHit(caller, 0);
+		Play(tabc24wave);
+		Send(outlane_kicker_light_group, FT1GroupOffsetAnimationForward, 0.0f);
+		if (a_kick1.GetComponent())
+			a_kick1.GetComponent()->ActiveFlag = 1;
+		Send(v_lite47, MessageCode::TLightResetAndTurnOn, 0.0f);
+		Send(a_dvtraa, MessageCode::TGateDisable, 0.0f);
+		Send(a_dvtrab, MessageCode::TGateEnable, 0.0f);
+	}
+
+	// 23:5b25 / 23:5b69 - a_roll5 / a_roll2: their score
+	void RollScoreRule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code == MessageCode::ControlCollision)
+			ScoreHit(caller, 0);
+	}
+
+	// 23:5bad / 23:5c74 - a_roll6 / a_roll1: with v_lite56 / v_lite55 lit, tabc24, the kicker's lights, the outlane
+	// kicker on, the light out (flashing 1 s); their score
+	void KickerRoll(MessageCode code, TPinballComponent* caller, component_tag<TLight>& light)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		if (LightOn(light))
+		{
+			Play(tabc24wave);
+			Send(outlane_kicker_light_group, FT1GroupOffsetAnimationForward, 0.0f);
+			if (a_kick1.GetComponent())
+				a_kick1.GetComponent()->ActiveFlag = 1;
+			Send(light, MessageCode::TLightFlasherStartTimedThenStayOff, 1.0f);
+		}
+		ScoreHit(caller, 0);
+	}
+
+	void Roll6Rule(MessageCode code, TPinballComponent* caller) { KickerRoll(code, caller, v_lite56); }
+	void Roll1Rule(MessageCode code, TPinballComponent* caller) { KickerRoll(code, caller, v_lite55); }
+
+	// 23:5d3b / 23:5db7 - the ramp exits s_rexit19 / s_rexit18 (FT1 85): two / one dragon eggs; in normal play the
+	// C / B diverter goes back
+	void Rexit19Rule(MessageCode code, TPinballComponent*)
+	{
+		if (code != FT1Code85)
+			return;
+		AwardDragonEggs(2);
+		if (InfoField() != 2)
+			return;
+		Send(a_dvtrca, MessageCode::TGateEnable, 0.0f);
+		Send(a_dvtrcb, MessageCode::TGateDisable, 0.0f);
+	}
+
+	void Rexit18Rule(MessageCode code, TPinballComponent*)
+	{
+		if (code != FT1Code85)
+			return;
+		AwardDragonEggs(1);
+		if (InfoField() != 2)
+			return;
+		Send(a_dvtrba, MessageCode::TGateEnable, 0.0f);
+		Send(a_dvtrbb, MessageCode::TGateDisable, 0.0f);
+	}
+
+	// 23:5e33 - a_flip2 pressed (FT1 1) while a_kout3 holds the ball (its MessageField 1): the kickout fires (FT1 64);
+	// lights 29 and 30 flash 1 s (during the dragon battle, state 9) or go out after 1 s
+	void Flip2Rule(MessageCode code, TPinballComponent*)
+	{
+		if (code != MessageCode::TFlipperExtend || Field(a_kout3) != 1)
+			return;
+		Field(a_kout3) = 0;
+		auto lightCode = InfoField() == 9 ? MessageCode::TLightFlasherStartTimed
+		                                  : MessageCode::TLightFlasherStartTimedThenStayOff;
+		Send(v_lite29, lightCode, 1.0f);
+		Send(v_lite30, lightCode, 1.0f);
+		Send(a_kout3, MessageCode::TKickoutRestartTimer, 0.0f);
+	}
+
 	// ---- rule functions not translated yet (their components do nothing yet) ----
-	void Rule_5a62(MessageCode, TPinballComponent*) {} // TODO(23:5a62): a_roll7
-	void Rule_5b25(MessageCode, TPinballComponent*) {} // TODO(23:5b25): a_roll5
-	void Rule_5b69(MessageCode, TPinballComponent*) {} // TODO(23:5b69): a_roll2
-	void Rule_5bad(MessageCode, TPinballComponent*) {} // TODO(23:5bad): a_roll6
-	void Rule_5c74(MessageCode, TPinballComponent*) {} // TODO(23:5c74): a_roll1
-	void Rule_5d3b(MessageCode, TPinballComponent*) {} // TODO(23:5d3b): s_rexit19
-	void Rule_5db7(MessageCode, TPinballComponent*) {} // TODO(23:5db7): s_rexit18
-	void Rule_5e33(MessageCode, TPinballComponent*) {} // TODO(23:5e33): a_flip2
 	void Rule_5f13(MessageCode, TPinballComponent*) {} // TODO(23:5f13): a_kick1
 	void Rule_5fe4(MessageCode, TPinballComponent*) {} // TODO(23:5fe4): a_kout1
 	void Rule_6122(MessageCode, TPinballComponent*) {} // TODO(23:6122): a_kout2
@@ -3468,14 +3544,14 @@ DK_TAG(TSound, tabc58wave)
 		{RuleTags[36], {Trip12Rule, 4, Scores36}},
 		{RuleTags[37], {Trip12Rule, 4, Scores37}},
 		{RuleTags[38], {Trip12Rule, 0, nullptr}},
-		{RuleTags[39], {Rule_5a62, 1, Scores39}},
-		{RuleTags[40], {Rule_5b25, 1, Scores40}},
-		{RuleTags[41], {Rule_5b69, 1, Scores41}},
-		{RuleTags[42], {Rule_5bad, 1, Scores42}},
-		{RuleTags[43], {Rule_5c74, 1, Scores43}},
-		{RuleTags[44], {Rule_5d3b, 0, nullptr}},
-		{RuleTags[45], {Rule_5db7, 0, nullptr}},
-		{RuleTags[46], {Rule_5e33, 0, nullptr}},
+		{RuleTags[39], {Roll7Rule, 1, Scores39}},
+		{RuleTags[40], {RollScoreRule, 1, Scores40}},
+		{RuleTags[41], {RollScoreRule, 1, Scores41}},
+		{RuleTags[42], {Roll6Rule, 1, Scores42}},
+		{RuleTags[43], {Roll1Rule, 1, Scores43}},
+		{RuleTags[44], {Rexit19Rule, 0, nullptr}},
+		{RuleTags[45], {Rexit18Rule, 0, nullptr}},
+		{RuleTags[46], {Flip2Rule, 0, nullptr}},
 		{RuleTags[47], {Rule_5f13, 0, nullptr}},
 		{RuleTags[48], {Rule_5fe4, 0, nullptr}},
 		{RuleTags[49], {Rule_6122, 0, nullptr}},
