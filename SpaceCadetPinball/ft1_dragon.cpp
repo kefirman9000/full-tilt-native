@@ -171,6 +171,7 @@ DK_TAG(TSound, tabc55wave)
 DK_TAG(TLight, v_lite14)
 DK_TAG(TLightGroup, well_light_group)
 DK_TAG(TSink, a_sink19)
+DK_TAG(TPinballComponent, a_sink10)
 DK_TAG(TSound, tabc51wave)
 DK_TAG(TSound, tabc10wave)
 DK_TAG(TSound, tabc04wave)
@@ -3531,12 +3532,14 @@ DK_TAG(TSound, tabc58wave)
 
 	// The tower locks: with the lock light's MessageField set (15b1 opened it) the ball is locked: tabc10, one ball
 	// fewer in play, the light on, a new ball at the plunger (FT1 1019), the sink's score and text 3010, then 15b1
-	void LockBall(TPinballComponent* caller, component_tag<TLight>& lockLight)
+	// (lock 3, sinks 9 and 10, serves no new ball)
+	void LockBall(TPinballComponent* caller, component_tag<TLight>& lockLight, bool newBall = true)
 	{
 		Play(tabc10wave);
 		control::TableG->MultiballCount--;
 		Send(lockLight, MessageCode::TLightResetAndTurnOn, 0.0f);
-		Send(s_plunger1, MessageCode::PlungerRelaunchBall, 0.96f); // FT1 1019
+		if (newBall)
+			Send(s_plunger1, MessageCode::PlungerRelaunchBall, 0.96f); // FT1 1019
 		auto points = ScoreHit(caller, 0);
 		Display(Format(3010, points).c_str(), 2.0f, 0);
 		UpdateTowerLocks();
@@ -3642,9 +3645,45 @@ DK_TAG(TSound, tabc58wave)
 		ResetTowerLocks();
 	}
 
+	// 23:6a49 / 23:6c5c - a_sink9 / a_sink10, lock 3: in normal play with lock 3 open (v_lite50) the ball is locked
+	// (no new ball); in the prison quest it goes on; otherwise tabc04, the A (sink 9) or D (sink 10) diverter back
+	// unless a quest uses them, and the ball goes on out of sink 16
+	void Lock3Sink(MessageCode code, TPinballComponent* caller, bool sink10)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		if (InfoField() == 2 && Field(v_lite50))
+		{
+			LockBall(caller, v_lite50, false);
+			return;
+		}
+		if (InfoField() != 6)
+		{
+			Play(tabc04wave);
+			if (InfoField() != 13)
+			{
+				if (!sink10)
+				{
+					Send(v_lite47, MessageCode::TLightResetAndTurnOff, 0.0f);
+					Send(a_dvtraa, MessageCode::TGateEnable, 0.0f);
+					Send(a_dvtrab, MessageCode::TGateDisable, 0.0f);
+				}
+				else
+				{
+					Send(v_lite125, MessageCode::TLightResetAndTurnOff, 0.0f);
+					Send(v_lite126, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+					Send(a_dvtrda, MessageCode::TGateEnable, 0.0f);
+					Send(a_dvtrdb, MessageCode::TGateDisable, 0.0f);
+				}
+			}
+		}
+		Send(a_sink16, MessageCode::TSinkResetTimer, -1.0f);
+	}
+
+	void Sink9Rule(MessageCode code, TPinballComponent* caller) { Lock3Sink(code, caller, false); }
+	void Sink10Rule(MessageCode code, TPinballComponent* caller) { Lock3Sink(code, caller, true); }
+
 	// ---- rule functions not translated yet (their components do nothing yet) ----
-	void Rule_6a49(MessageCode, TPinballComponent*) {} // TODO(23:6a49): a_sink9
-	void Rule_6c5c(MessageCode, TPinballComponent*) {} // TODO(23:6c5c): a_sink10
 	void Rule_6ea6(MessageCode, TPinballComponent*) {} // TODO(23:6ea6): v_wlite96, v_wlite97, v_wlite98, v_wlite99
 	void Rule_6eea(MessageCode, TPinballComponent*) {} // TODO(23:6eea): s_trip6, s_trip5
 	void Rule_71e4(MessageCode, TPinballComponent*) {} // TODO(23:71e4): s_trip3, s_trip4
@@ -3764,8 +3803,8 @@ DK_TAG(TSound, tabc58wave)
 		{RuleTags[52], {Sink18Rule, 1, Scores52}},
 		{RuleTags[53], {Sink13Rule, 1, Scores53}},
 		{RuleTags[54], {Sink17Rule, 1, Scores54}},
-		{RuleTags[55], {Rule_6a49, 1, Scores55}},
-		{RuleTags[56], {Rule_6c5c, 1, Scores56}},
+		{RuleTags[55], {Sink9Rule, 1, Scores55}},
+		{RuleTags[56], {Sink10Rule, 1, Scores56}},
 		{RuleTags[57], {Rule_6ea6, 1, Scores57}},
 		{RuleTags[58], {Rule_6ea6, 1, Scores58}},
 		{RuleTags[59], {Rule_6ea6, 1, Scores59}},
