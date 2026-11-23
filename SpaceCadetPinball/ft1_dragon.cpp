@@ -1139,7 +1139,6 @@ DK_TAG(TSound, tabc58wave)
 		}
 	}
 
-	// ---- not translated yet ----
 	// The mission handlers, one per info box state (23:c716's table at cs:c883)
 	void Mission0(MessageCode code, TPinballComponent* cmp);  // 23:c4c7
 	void Mission2(MessageCode code, TPinballComponent* cmp);  // 23:7f7d
@@ -1418,7 +1417,6 @@ DK_TAG(TSound, tabc58wave)
 	// Full Tilt 1 events between the mission handlers
 	const MessageCode FT1Event81 = static_cast<MessageCode>(2081); // a paused quest goes on
 	const MessageCode FT1Event82 = static_cast<MessageCode>(2082); // a quest is over
-	// FT1 code 86 from a ramp: the ramp made. TODO(86): here TRamp's ControlCollision is passed on as 86
 	const MessageCode FT1Code86 = MessageCode::Ft1RampExit3; // FT1 86: a ramp made (TRamp::Ft1Events)
 	const MessageCode FT1LightSweepStart = MessageCode::Ft1LightSweepStart; // FT1 27 to light_sweeps (type 1038)
 
@@ -3807,13 +3805,126 @@ DK_TAG(TSound, tabc58wave)
 		WindowTrip(code, caller, gate_window_light_group, v_lite50, false);
 	}
 
-	// ---- rule functions not translated yet (their components do nothing yet) ----
-	void Rule_75d3(MessageCode, TPinballComponent*) {} // TODO(23:75d3): a_kout3
-	void Rule_7617(MessageCode, TPinballComponent*) {} // TODO(23:7617): a_sink19
-	void Rule_109f(MessageCode, TPinballComponent*) {} // TODO(23:109f): a_rocka
-	void Rule_10f8(MessageCode, TPinballComponent*) {} // TODO(23:10f8): a_rockb
-	void Rule_79db(MessageCode, TPinballComponent*) {} // TODO(23:79db): v_lite37
-	void Rule_7a8d(MessageCode, TPinballComponent*) {} // TODO(23:7a8d): v_lite29
+	// 23:75d3 - a_kout3 has the ball: its MessageField 1 (the right flipper fires it)
+	void Kout3Rule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code == MessageCode::ControlCollision)
+			caller->MessageField = 1;
+	}
+
+	// 23:7617 - a_sink19, the dragon's mouth. Outside the battle the ball comes out of sink 1. In the battle a hit
+	// (v_lite114's MessageField counts down; none left: tabc56, the battle handler slays it): the timer gets
+	// left/1000 + 15 s, the ball comes out of a random sink (4, 1, 2, 18, 17, 16) after 3 s, and by the fire lights
+	// lit: 100,000 / 1,000,000 (tabc13, text 3008), with 3 lit one in five the jackpot, with 4 one in ten v_lite57
+	// (tabc35, text 3002), with more one in ten an extra ball, else 100,000; the sword picture and text 3049 with the
+	// hits left
+	void Sink19Rule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		if (InfoField() != 9)
+		{
+			Send(a_sink1, MessageCode::TSinkResetTimer, 0.0f);
+			return;
+		}
+		auto& hits = Field(v_lite114);
+		hits--;
+		if (hits == 0)
+		{
+			Play(tabc56wave);
+			return;
+		}
+		auto left = Send(mode_timer, MessageCode::Ft1TimerTimeLeft, 0.0f);
+		Send(mode_timer, MessageCode::Ft1BlockerTimer, static_cast<float>(left) / 1000.0f + 15.0f);
+		component_tag_base* sinks[] = {&a_sink4, &a_sink1, &a_sink2, &a_sink18, &a_sink17, &a_sink16};
+		auto which = Rand15() * 6 / 0x8000;
+		if (auto sink = sinks[which > 5 ? 5 : which]->GetComponent())
+			sink->Message(MessageCode::TSinkResetTimer, 3.0f);
+		int points = 0;
+		switch (Send(dragon_fire_light_group, MessageCode::TLightGroupGetOnCount, 0.0f))
+		{
+		case 0:
+		case 1:
+			points = 100000;
+			break;
+		case 2:
+			points = 1000000;
+			break;
+		case 3:
+			if (Rand15() * 5 / 0x8000 == 0)
+				CollectJackpot(0.0f, true);
+			else
+				points = 100000;
+			break;
+		case 4:
+			if (Rand15() * 10 / 0x8000 == 0)
+			{
+				Play(tabc35wave);
+				Display(ft1_strings::Get(3002), 2.0f, 0);
+				Send(v_lite57, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			}
+			else
+				points = 100000;
+			break;
+		default:
+			if (Rand15() * 10 / 0x8000 == 0)
+				AddExtraBall(0.0f);
+			else
+				points = 100000;
+			break;
+		}
+		if (points)
+		{
+			Play(tabc13wave);
+			Display(Format(3008, ScorePoints(caller, points)).c_str(), 2.0f, 0);
+		}
+		Display("!", 3.5f, 1); // ds:0x21ce
+		Display(Format(3049, hits).c_str(), 5.0f, 0);
+	}
+
+	// 23:109f / 23:10f8 - rock A / rock B arrived (FT1 61) at a frame (+0x70 not -1): its spot target comes up
+	// (FT1 54)
+	void RockRule(MessageCode code, TPinballComponent* caller, component_tag_base& spot)
+	{
+		if (code != MessageCode::Ft1BlockerArrived)
+			return;
+		auto blocker = dynamic_cast<TBlocker*>(caller);
+		if (blocker && blocker->Frame != -1)
+			if (auto target = spot.GetComponent())
+				target->Message(MessageCode::TPopupTargetEnable, 0.0f);
+	}
+
+	void RockaRule(MessageCode code, TPinballComponent* caller) { RockRule(code, caller, a_spot10); }
+	void RockbRule(MessageCode code, TPinballComponent* caller) { RockRule(code, caller, a_spot14); }
+
+	// 23:79db - v_lite37 (the kickback) when its time is up (70): on for 53 s, then flashing out over 5 s, then its
+	// count starts again
+	void Lite37Rule(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlTimerExpired)
+			return;
+		switch (caller->MessageField++)
+		{
+		case 0:
+			caller->Message(MessageCode::TLightTurnOnTimed, 53.0f);
+			break;
+		case 1:
+			caller->Message(MessageCode::TLightFlasherStartTimedThenStayOff, 5.0f);
+			break;
+		default:
+			caller->MessageField = 0;
+			break;
+		}
+	}
+
+	// 23:7a8d - v_lite29 when its time is up (70): still lit, kickout 3 is active again
+	void Lite29Rule(MessageCode code, TPinballComponent*)
+	{
+		if (code != MessageCode::ControlTimerExpired || !LightOn(v_lite29))
+			return;
+		if (auto kout = a_kout3.GetComponent())
+			kout->ActiveFlag = 1;
+	}
 
 	// ds:0x2a34 - the rule table (23:0595 links it): each component's rule function and scores
 	const int Scores4[] = {1500};
@@ -3937,12 +4048,12 @@ DK_TAG(TSound, tabc58wave)
 		{RuleTags[66], {GateTripRule, 2, Scores66}},
 		{RuleTags[67], {BloceRule, 0, nullptr}},
 		{RuleTags[68], {BlocfRule, 0, nullptr}},
-		{RuleTags[69], {Rule_75d3, 0, nullptr}},
-		{RuleTags[70], {Rule_7617, 0, nullptr}},
-		{RuleTags[71], {Rule_109f, 0, nullptr}},
-		{RuleTags[72], {Rule_10f8, 0, nullptr}},
-		{RuleTags[73], {Rule_79db, 0, nullptr}},
-		{RuleTags[74], {Rule_7a8d, 0, nullptr}},
+		{RuleTags[69], {Kout3Rule, 0, nullptr}},
+		{RuleTags[70], {Sink19Rule, 0, nullptr}},
+		{RuleTags[71], {RockaRule, 0, nullptr}},
+		{RuleTags[72], {RockbRule, 0, nullptr}},
+		{RuleTags[73], {Lite37Rule, 0, nullptr}},
+		{RuleTags[74], {Lite29Rule, 0, nullptr}},
 	};
 
 	// 23:0657 - the rules' message handler (control::handler): the mission system hears every message first, then the
@@ -3986,8 +4097,8 @@ bool ft1_dragon::Link(TPinballTable* table)
 	TRamp::Ft1Events = true;
 	ftlog::Line("FT1 Dragon's Keep: " + std::to_string(linked) + " components linked to their rules");
 	Active = true;
-	ftlog::Line("FT1 Dragon's Keep: full translation active (work in progress), " + std::to_string(Translated) +
-	            " rule functions");
+	Translated = linked;
+	ftlog::Line("FT1 Dragon's Keep: full translation active, " + std::to_string(Translated) + " rule entries");
 	return Active;
 }
 
