@@ -449,6 +449,18 @@ namespace
 		return added;
 	}
 
+	// Music (12:1396 plays, 12:10fe the one playing): FT1 1015 loads tabb1-6 (g_22ce = tabb1 the main tune, g_22d2..
+	// g_22e2 tabb2-6, g_22e6 = tabb5 again; a missing one falls back to tabb1); here this engine's tracks
+	const int MusicMain = 1;
+	int MusicPlaying = 0;
+
+	void PlayMusic(int track)
+	{
+		if (!midi::play_ft2_track(track))
+			midi::play_ft2_track(MusicMain);
+		MusicPlaying = track;
+	}
+
 	// ---- table messages (23:06e7) ----
 	int g_6522 = 0, g_22f2 = 0, g_22f6 = 0, g_6528 = 0, g_652a = 1, g_652c = -1, g_652e = -1, g_6530 = 0,
 	    g_6534 = 0, g_6538 = 0, g_6526 = 0;
@@ -482,7 +494,8 @@ namespace
 			g_6538 = 0;
 			Helper211c();
 			Helper21be();
-			midi::play_ft2_track(7); // FT1 1015 loads tabb1-7; the main tune (g_22ce)
+			if (MusicPlaying != MusicMain)
+				PlayMusic(MusicMain); // g_22ce
 			g_6526 = 0;
 			g_6518 = nullptr;
 			if (auto kick = a_kick2.GetComponent())
@@ -503,7 +516,6 @@ namespace
 	// ---- helpers not translated yet ----
 	void Helper211c() {} // TODO(23:211c)
 	void Helper21be() {} // TODO(23:21be)
-	void Helper0ad6() {} // TODO(23:0ad6)
 
 	// ---- the mission system ----
 	// The info box's MessageField is the state: 0 game over, 1 ..., 2 normal play, 3 ..., 4-11 the eight map piece
@@ -593,9 +605,133 @@ namespace
 	}
 
 	// The handlers, one per state (23:d8a5's table at cs:da5d)
+	int g_6520 = 0; // the skill shot is on
+	int g_22f4 = 0;
+
+	void StartState(int state) // the info box gets the state, the mission system event 79
+	{
+		SetInfoField(state);
+		MissionEvent(FT1Event79, nullptr);
+	}
+
+	void SkillLightOn() { Send(v_lite606, MessageCode::TLightFlasherStartTimed, -1.0f); } // 23:0a7f
+	void SkillLightOff() { Send(v_lite606, MessageCode::TLightResetAndTurnOff, 0.0f); }   // 23:0aac
+
+	void Helper0ad6() // 23:0ad6 - the skill shot (state 3)
+	{
+		SkillLightOff();
+		StartState(3);
+	}
+
+	void NormalPlay() // 23:0b07
+	{
+		SkillLightOff();
+		StartState(2);
+	}
+
+	// 23:0b38 / 0b83 / 0bce / 0bff / 0c4a - a skill shot that starts a map mission (the picture of it first)
+	void SkillMission(int state, const char* picture, float time)
+	{
+		SkillLightOn();
+		if (picture)
+			Display(picture, time, 1);
+		StartState(state);
+	}
+
+	// ds:0x37b0: the coins' worth by the coin lights lit
+	const int CoinValue[8] = {0, 50000, 100000, 200000, 400000, 800000, 1600000, 125000};
+
+	// 23:0e93 - a coin: one more coin light, its worth (text 3003), the coin picture; returns `time` plus the time
+	// the pictures take
+	float AwardCoin(float time)
+	{
+		Send(coin_light_group, MessageCode::TLightGroupResetAndTurnOn, 1.0f);
+		auto lit = Send(coin_light_group, MessageCode::TLightGroupGetOnCount, 1.0f);
+		auto points = ScorePoints(nullptr, CoinValue[std::max(0, std::min(7, lit))]);
+		auto text = Format(3003, points);
+		time += g_22f4 ? 0.25f : 2.0f;
+		Display("D", time, 1); // ds:0x225e
+		time += g_22f4 ? 0.25f : 2.0f;
+		Display(text.c_str(), time, 0);
+		Play(tabb84wave);
+		return time;
+	}
+
+	float RandomAward(float time) // 23:3eec
+	{
+		(void)time;
+		return time; // TODO(23:3eec): one of 2627, 11cb, 2f86, 1ea3, 12ed, else 3d4c
+	}
+
 	void State1(MessageCode, TPinballComponent*) {}  // TODO(23:b949)
-	void State2(MessageCode, TPinballComponent*) {}  // TODO(23:a27d)
-	void State3(MessageCode, TPinballComponent*) {}  // TODO(23:a319)
+
+	// 23:a27d - state 2, normal play: the main tune; event 80 shows text 3076
+	void State2(MessageCode code, TPinballComponent*)
+	{
+		if (code == FT1Event79)
+		{
+			g_6520 = 0;
+			if (MusicPlaying != MusicMain)
+				PlayMusic(MusicMain); // g_22ce
+		}
+		else if (code == FT1Event80)
+			Display(ft1_strings::Get(3076), -1.0f, 0);
+	}
+
+	// 23:a319 - state 3, the skill shot: the blockers at the plunger set, v_lite505 on; a picture wheel turns
+	// (s_launcher1's MessageField 0-8, one step per 0.2 s, picture strings ds:0x21ce); when the ball passes
+	// s_oneway3 the wheel's position is the award
+	void State3(MessageCode code, TPinballComponent* cmp)
+	{
+		static const char* wheel[9] = {"$&(),.2", "\"$&'*,.", "0\"$%(*,", "20\"#&(*", ".20!$&(", ",.2/\"$&",
+		                               "*,.10\"$", "(*,-20\"", "&(*+.20"};
+		switch (code)
+		{
+		case FT1Event79:
+			g_6520 = 1;
+			g_6524 = 0;
+			Send(a_blocc, MessageCode::Ft1BlockerSetPosition, -1.0f); // FT1 57
+			Send(a_bloce, MessageCode::Ft1BlockerSetPosition, 0.0f);
+			Send(v_lite504, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(v_lite505, MessageCode::TLightResetAndTurnOn, 0.0f);
+			Send(a_blocf, MessageCode::Ft1BlockerSetPosition, 0.0f);
+			Send(a_blocg, MessageCode::Ft1BlockerSetPosition, -1.0f);
+			break;
+		case FT1Event80:
+		{
+			auto& n = Field(s_launcher1);
+			n = n + 1 == 9 ? 0 : n + 1;
+			Display(wheel[n], 0.2f, 1);
+			break;
+		}
+		case MessageCode::ControlCollision:
+			if (cmp != s_oneway3.GetComponent())
+				break;
+			InfoClear();
+			switch (Field(s_launcher1))
+			{
+			case 0:
+				RandomAward(0.0f);
+				NormalPlay();
+				break;
+			case 1:
+			case 2:
+			case 8:
+				AwardCoin(0.0f);
+				NormalPlay();
+				break;
+			case 3: SkillMission(5, "J", 2.0f); break;   // 23:0b83
+			case 4: SkillMission(4, "H", 1.0f); break;   // 23:0b38
+			case 5: SkillMission(8, "I", 2.0f); break;   // 23:0c4a
+			case 6: SkillMission(7, "333", 2.0f); break; // 23:0bff
+			case 7: SkillMission(6, nullptr, 0.0f); break; // 23:0bce
+			default: break;
+			}
+			break;
+		default:
+			break;
+		}
+	}
 	void State4(MessageCode, TPinballComponent*) {}  // TODO(23:a54c)
 	void State5(MessageCode, TPinballComponent*) {}  // TODO(23:ba2b)
 	void State6(MessageCode, TPinballComponent*) {}  // TODO(23:beac)
