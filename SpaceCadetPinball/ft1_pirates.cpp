@@ -19,6 +19,7 @@
 #include "TPinballComponent.h"
 #include "TPinballTable.h"
 #include "TSink.h"
+#include "TRollover.h"
 #include "TPopupTarget.h"
 #include "TSoloTarget.h"
 #include "THole.h"
@@ -1227,7 +1228,169 @@ namespace
 			break;
 		}
 	}
-	void State6(MessageCode, TPinballComponent*) {}  // TODO(23:beac)
+	// 23:239e - the jackpot: tabb85 (time >= 0), its picture ("G") 2 s later, the jackpot (+0x132) scored
+	float CollectJackpot(float time)
+	{
+		if (time >= 0.0f)
+			Play(tabb85wave);
+		else
+			time = -time;
+		time += 2.0f;
+		Display("G", time, 1); // ds:0x2264
+		SpecialAddScore(nullptr, control::TableG->JackpotScore);
+		return time;
+	}
+
+	// 23:1248 - text 3065 2 s later, v_lite529 lit
+	float Award1248(float time)
+	{
+		time += 2.0f;
+		Display(ft1_strings::Get(3065), time, 0);
+		Send(v_lite529, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+		return time;
+	}
+
+	int g_6588 = 8;      // the popup targets needed
+	int g_658a = 10000;  // each one's worth
+	std::string g_6548; // the countdown text (3046-3049)
+
+	// 23:beac - state 6, the popup targets (tabb6, tabb67): 300,000, the light sweep 9, all drop targets up, lights
+	// 1-11 and v_lite778 flash, kickout 2 on. The winds and orbits lit pick how many popup targets are needed and
+	// what each is worth (up to 5 lit: 8 x 10,000, text 3046; 6-10: 7 x 25,000, 3047; 11-15: 6 x 50,000, 3048; more:
+	// 5 x 100,000, 3049); text 3067; 24.14 s. Each popup target its worth and the count picture ("K" x n); the last
+	// one the jackpot. Rollover 6 lights v_lite569 for 10 s. A ball in sink 17, 15 or 14 ends it (text 3050, 1248)
+	void State6(MessageCode code, TPinballComponent* cmp)
+	{
+		static const char* counts[9] = {"", "K", "KK", "KKK", "KKKK", "KKKKK", "KKKKKK", "KKKKKKK", "KKKKKKKK"};
+		switch (code)
+		{
+		case FT1Event79:
+		{
+			MissionStart();
+			ScorePoints(nullptr, 300000);
+			Send(light_sweeps, MessageCode::Ft1LightSweepStart, 9.0f);
+			PlayMusic(6); // g_22e2
+			Play(tabb67wave);
+			Send(a_blocc, MessageCode::Ft1BlockerSetPosition, 0.0f);
+			Send(a_blocf, MessageCode::Ft1BlockerSetPosition, -1.0f);
+			Send(a_blocg, MessageCode::Ft1BlockerSetPosition, 0.0f);
+			Drops13Up();
+			Drops5Up();
+			Drops10Up();
+			Send(v_lite778, MessageCode::TLightFlasherStartTimed, -1.0f);
+			Send(a_kout2, MessageCode::Ft1Activate, 0.0f);
+			Lights({&v_lite1, &v_lite2, &v_lite3, &v_lite4, &v_lite5, &v_lite6, &v_lite7, &v_lite8, &v_lite9,
+			        &v_lite10, &v_lite11}, MessageCode::TLightFlasherStartTimed, -1.0f);
+			int lit = 0;
+			for (auto group : {&left_island_light_group, &right_wind_light_group, &left_orbit_light_group,
+			                   &right_orbit_light_group, &south_wind_light_group, &east_wind_1_light_group,
+			                   &east_wind_2_light_group, &west_wind_light_group})
+				lit += Send(*group, MessageCode::TLightGroupGetOnCount, 0.0f);
+			int text;
+			if (lit <= 5)
+			{
+				g_6588 = 8;
+				g_658a = 10000;
+				text = 3046;
+			}
+			else if (lit <= 10)
+			{
+				g_6588 = 7;
+				g_658a = 25000;
+				text = 3047;
+			}
+			else if (lit <= 15)
+			{
+				g_6588 = 6;
+				g_658a = 50000;
+				text = 3048;
+			}
+			else
+			{
+				g_6588 = 5;
+				g_658a = 100000;
+				text = 3049;
+			}
+			g_6548 = ft1_strings::Get(text);
+			Display(ft1_strings::Get(3067), -1.0f, 0);
+			break;
+		}
+		case FT1Event83:
+			Send(mode_timer, MessageCode::Ft1BlockerTimer, -1.0f);
+			MissionEvent(FT1Event82, nullptr);
+			break;
+		case FT1Event82:
+			Send(v_lite778, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(a_kout2, MessageCode::Ft1Deactivate, 0.0f);
+			MissionEnd();
+			Field(v_lite606)++;
+			Send(a_bloce, MessageCode::Ft1BlockerSetPosition, 0.0f);
+			Send(v_lite504, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(v_lite505, MessageCode::TLightResetAndTurnOn, 0.0f);
+			break;
+		case FT1Event80:
+		{
+			auto left = Send(mode_timer, MessageCode::Ft1TimerTimeLeft, 0.0f);
+			if (left)
+			{
+				char buffer[256];
+				snprintf(buffer, sizeof buffer, g_6548.c_str(), left / 1000);
+				Display(buffer, 0.5f, 0);
+			}
+			break;
+		}
+		case MessageCode::ControlCollision:
+			if (dynamic_cast<TPopupTarget*>(cmp)) // 1006
+			{
+				if (++g_651c == g_6588)
+				{
+					CollectJackpot(0.0f);
+					g_651c = 0;
+					break;
+				}
+				Play(tabb68wave);
+				ScorePoints(cmp, g_658a);
+				Display(counts[std::max(0, std::min(8, g_651c))], 2.0f, 1); // ds:0x227c + n * 9
+			}
+			else if (dynamic_cast<TRollover*>(cmp)) // 1015
+			{
+				if (cmp == a_roll6.GetComponent())
+				{
+					g_6522 = 2;
+					Send(v_lite569, MessageCode::TLightTurnOnTimed, 10.0f);
+				}
+			}
+			else if (dynamic_cast<TSink*>(cmp)) // 1017
+			{
+				if (cmp == a_sink17.GetComponent() || cmp == a_sink15.GetComponent() || cmp == a_sink14.GetComponent())
+				{
+					Display(ft1_strings::Get(3050), 2.0f, 0);
+					State6(FT1Event83, cmp);
+					Award1248(2.0f);
+				}
+			}
+			break;
+		case MessageCode::ControlTimerExpired:
+			if (dynamic_cast<TTimer*>(cmp))
+			{
+				if (cmp == mode_timer.GetComponent())
+				{
+					Send(v_lite778, MessageCode::TLightResetAndTurnOff, 0.0f);
+					MissionEvent(FT1Event82, nullptr);
+				}
+			}
+			else if (dynamic_cast<TLightSweeps*>(cmp))
+			{
+				if (!g_6520)
+					ReleaseSink8(0.0f);
+				Send(mode_timer, MessageCode::Ft1BlockerTimer, 24.14f);
+				MissionEvent(FT1Event80, nullptr);
+			}
+			break;
+		default:
+			break;
+		}
+	}
 	void State7(MessageCode, TPinballComponent*) {}  // TODO(23:adc2)
 	void State8(MessageCode, TPinballComponent*) {}  // TODO(23:a93e)
 	void State9(MessageCode, TPinballComponent*) {}  // TODO(23:c5cc)
