@@ -87,11 +87,11 @@ Modes: 1 Quake, 2 Mad Scientist, 3 Mystman, 4 Slime Man, 5 Mr. Pling (`MODE_ELAS
 - Super Jackpot multiball: three balls added at the holes (see Evil Twin above).
 - Building mark: cleared after 4 s or the next hit (original: engine code not read).
 - Pop repairs on "half the hits": unclear condition in 0x4023c8.
-- Mr. Pling: walls switch on with the battle (original: a second ball goes up s_ramp02 first).
+- Mr. Pling: the second ball comes out of s_sink13 (0x40787c case 5: s_sink13 ejects, balls in play +1, the
+  ball mark 5); his walls switch on with the battle rather than when that ball reaches him.
 - Texts: battle prompts, "RAMP COMBO", the side panel lines and the bonus line are this port's wording; the
   original shows its own texts (ids in this file) in its own display boxes.
 
 ## Not ported yet
-- Mr. Pling's second ball travelling up s_ramp02 into him; the walls simply switch on with the battle.
 - The countdown and capture texts in their own display boxes (the port uses the info text and side panel).
 - Table multiplier in the bonus (table +0x12d), Quake's light bars and Slime Man's slime patches (pictures only).

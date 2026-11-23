@@ -538,6 +538,8 @@ namespace
 	const char* const MysteryFallback[6] = {"50,000", "100,000", "1 Million", "All Buildings Repaired!",
 	                                        "Max Bumpers!", "EXTRA BALL!!!"};
 
+	void add_ball_at_sink(const char* name);
+
 	struct HeroBattles
 	{
 		int Battle = 0; // 0 none, else 1..6
@@ -762,7 +764,11 @@ namespace
 		if (hb.Battle == 3)
 			hb.HenchmanTimer = timer::set(4.0f, nullptr, henchman_arrives);
 		if (hb.Battle == 5)
-			set_pling(true); // APPROXIMATION: the original first sends a second ball up s_ramp02 into Mr. Pling
+		{
+			// 0x40787c case 5: s_sink13 sends out a second ball (balls in play +1) that goes up s_ramp02 into him
+			add_ball_at_sink("s_sink13");
+			set_pling(true); // APPROXIMATION: his walls switch on at once (originally the marked ball reaches him)
+		}
 	}
 
 	void show_choice()
