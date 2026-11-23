@@ -19,6 +19,8 @@
 #include "TPinballComponent.h"
 #include "TPinballTable.h"
 #include "TSink.h"
+#include "TPopupTarget.h"
+#include "TSoloTarget.h"
 #include "THole.h"
 #include "TRamp.h"
 #include "TSound.h"
@@ -503,8 +505,183 @@ namespace
 	void Helper21be() {} // TODO(23:21be)
 	void Helper0ad6() {} // TODO(23:0ad6)
 
-	// ---- the mission system (23:d7e3) ----
-	void MissionEvent(MessageCode, TPinballComponent*) {} // TODO(23:d7e3)
+	// ---- the mission system ----
+	// The info box's MessageField is the state: 0 game over, 1 ..., 2 normal play, 3 ..., 4-11 the eight map piece
+	// missions (their lights 552-559), 12, 13, 16, 17 (tilt) ...; mode_timer's MessageField holds the map mission
+	// picked next (1-8).
+	int g_6524 = 0; // popup targets hit
+
+	// 23:0d97 - jackpot (+0x132) up, at most 10,000,000
+	void AddJackpot(int points)
+	{
+		auto t = control::TableG;
+		t->JackpotScore = std::min(t->JackpotScore + points, 10000000);
+	}
+
+	// ds:0x37dc: the state of each map mission, in the order of their lights 552-559
+	const int MapMissionState[8] = {4, 8, 7, 5, 6, 9, 10, 11};
+	component_tag<TLight>* const MapLights[8] = {&v_lite552, &v_lite553, &v_lite554, &v_lite555,
+	                                             &v_lite556, &v_lite557, &v_lite558, &v_lite559};
+
+	// 23:37f2 - the map mission picked next (mode_timer's MessageField 1-8): its light out, none picked
+	void ClearPicked()
+	{
+		auto picked = Field(mode_timer);
+		if (picked >= 1 && picked <= 8)
+			Send(*MapLights[picked - 1], MessageCode::TLightResetAndTurnOff, 0.0f);
+		Field(mode_timer) = 0;
+	}
+
+	void MissionLight(int state, bool start);
+
+	// 23:37b9 - map mission n (0-7) is picked: its light flashes
+	void Pick(int n)
+	{
+		if (n >= 8)
+			return;
+		MissionLight(MapMissionState[n], true);
+		Field(mode_timer) = n + 1;
+	}
+
+	// 23:3919 - pick the next map mission at random among the lights 552-558 still off (all map pieces lit: 7);
+	// none left: the one flashing stays picked
+	int PickNext()
+	{
+		int n = 7;
+		if (Send(map_piece_light_group, MessageCode::TLightGroupGetOnCount, 0.0f) !=
+			Send(map_piece_light_group, MessageCode::TLightGroupGetLightCount, 0.0f))
+		{
+			int candidates[7], count = 0;
+			for (int i = 0; i < 7; i++)
+				if (!LightOn(*MapLights[i]))
+					candidates[count++] = i;
+			if (!count)
+			{
+				for (int i = 0; i < 8; i++)
+					if (MapLights[i]->Component && MapLights[i]->Component->FlasherOnFlag)
+						return i;
+				n = 7;
+			}
+			else
+				n = candidates[Rand15() * count / 0x8000];
+		}
+		ClearPicked();
+		Pick(n);
+		return n;
+	}
+
+	// 23:3676 - a map mission's light: flashing when it starts, on when it is done (state 2: pick the next one)
+	void MissionLight(int state, bool start)
+	{
+		auto code = start ? MessageCode::TLightFlasherStartTimed : MessageCode::TLightResetAndTurnOn;
+		ClearPicked();
+		switch (state)
+		{
+		case 2:
+			PickNext();
+			break;
+		case 4: Send(v_lite552, code, -1.0f); break;
+		case 5: Send(v_lite555, code, -1.0f); break;
+		case 6: Send(v_lite556, code, -1.0f); break;
+		case 7: Send(v_lite554, code, -1.0f); break;
+		case 8: Send(v_lite553, code, -1.0f); break;
+		case 9: Send(v_lite557, code, -1.0f); break;
+		case 10: Send(v_lite558, code, -1.0f); break;
+		case 11: Send(v_lite559, code, -1.0f); break;
+		default: break;
+		}
+	}
+
+	// The handlers, one per state (23:d8a5's table at cs:da5d)
+	void State1(MessageCode, TPinballComponent*) {}  // TODO(23:b949)
+	void State2(MessageCode, TPinballComponent*) {}  // TODO(23:a27d)
+	void State3(MessageCode, TPinballComponent*) {}  // TODO(23:a319)
+	void State4(MessageCode, TPinballComponent*) {}  // TODO(23:a54c)
+	void State5(MessageCode, TPinballComponent*) {}  // TODO(23:ba2b)
+	void State6(MessageCode, TPinballComponent*) {}  // TODO(23:beac)
+	void State7(MessageCode, TPinballComponent*) {}  // TODO(23:adc2)
+	void State8(MessageCode, TPinballComponent*) {}  // TODO(23:a93e)
+	void State9(MessageCode, TPinballComponent*) {}  // TODO(23:c5cc)
+	void State10(MessageCode, TPinballComponent*) {} // TODO(23:c84b)
+	void State11(MessageCode, TPinballComponent*) {} // TODO(23:cd08)
+	void State12(MessageCode, TPinballComponent*) {} // TODO(23:d2b8)
+	void State13(MessageCode, TPinballComponent*) {} // TODO(23:d414)
+	void State16(MessageCode, TPinballComponent*) {} // TODO(23:b27e)
+	void State17(MessageCode, TPinballComponent*) {} // TODO(23:d63c)
+
+	// 23:d7b6 - any other state: back to normal play
+	void StateOther(MessageCode, TPinballComponent*)
+	{
+		SetInfoField(2);
+		MissionEvent(FT1Event79, nullptr);
+	}
+
+	// 23:d8a5 - event 79 lights the state's map mission (flashing), event 82 ends it (map missions: jackpot
+	// +750,000, the light on, the next one picked); then the state's handler
+	void Dispatch(int state, MessageCode code, TPinballComponent* cmp)
+	{
+		if (code == FT1Event79)
+			MissionLight(state, true);
+		else if (code == FT1Event82)
+		{
+			if (state >= 4 && state <= 11)
+				AddJackpot(750000);
+			MissionLight(state, false);
+			PickNext();
+		}
+		switch (state)
+		{
+		case 0: break;
+		case 1: State1(code, cmp); break;
+		case 2: State2(code, cmp); break;
+		case 3: State3(code, cmp); break;
+		case 4: State4(code, cmp); break;
+		case 5: State5(code, cmp); break;
+		case 6: State6(code, cmp); break;
+		case 7: State7(code, cmp); break;
+		case 8: State8(code, cmp); break;
+		case 9: State9(code, cmp); break;
+		case 10: State10(code, cmp); break;
+		case 11: State11(code, cmp); break;
+		case 12: State12(code, cmp); break;
+		case 13: State13(code, cmp); break;
+		case 16: State16(code, cmp); break;
+		case 17: State17(code, cmp); break;
+		default: StateOther(code, cmp); break;
+		}
+	}
+
+	// 23:d7e3 - the mission system hears every message: popup targets (count in g_6524) and solo targets add
+	// 20,000 to the jackpot, sinks 40,000; the info box's own timer with nothing queued (+0x4e) is event 80; after
+	// event 82 back to normal play
+	bool TextQueued() { return false; } // TODO(+0x4e): this engine's text box has no queue flag
+
+	void MissionEvent(MessageCode code, TPinballComponent* cmp)
+	{
+		if (!info_text_box.Component)
+			return;
+		if (cmp)
+		{
+			if (dynamic_cast<TPopupTarget*>(cmp)) // 1006
+			{
+				g_6524++;
+				AddJackpot(20000);
+			}
+			else if (dynamic_cast<TSoloTarget*>(cmp)) // 1019
+				AddJackpot(20000);
+			else if (dynamic_cast<TSink*>(cmp)) // 1017
+				AddJackpot(40000);
+		}
+		auto state = InfoField();
+		if (code == MessageCode::ControlTimerExpired && cmp == info_text_box.GetComponent() && !TextQueued())
+			code = FT1Event80;
+		Dispatch(state, code, cmp);
+		if (code == FT1Event82)
+		{
+			SetInfoField(2);
+			MissionEvent(FT1Event79, nullptr);
+		}
+	}
 
 	// ---- rule functions not translated yet ----
 	void Rule_98d7(MessageCode, TPinballComponent*) {} // TODO(23:98d7): s_oneway3
