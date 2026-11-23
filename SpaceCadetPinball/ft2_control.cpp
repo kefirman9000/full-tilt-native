@@ -16,6 +16,8 @@
 #include "TLightGroup.h"
 #include "translations.h"
 #include "TBumper.h"
+#include "zdrv.h"
+#include "render.h"
 #include "TDrain.h"
 #include "TFlagSpinner.h"
 #include "TGate.h"
@@ -214,6 +216,70 @@ namespace
 		return false;
 	}
 
+	// ---- Captain Hero's slingshots (hero.exe 0x402a74, 0x4029e4 / 0x402a2c, light sets 0x441a10 / 0x441a28) ----
+	// Each slingshot's picture is six lights, exactly one of them on (0x401260): 1of 1on 2of 2on 3of 3on. A hit moves
+	// to the next one (the "on" picture of the look it had) and 0.2 s later to the one after that (the next look at
+	// rest), so the slingshot flashes and changes its look on every hit. Hits during those 0.2 s only score.
+	struct SlingPictures
+	{
+		const char* Lights[6];
+		int Index;
+		bool Armed;
+		int Timer;
+	};
+	SlingPictures Slings[2] = {
+		{{"lslng1of", "lslng1on", "lslng2of", "lslng2on", "lslng3of", "lslng3on"}, 0, true, 0},
+		{{"rslng1of", "rslng1on", "rslng2of", "rslng2on", "rslng3of", "rslng3on"}, 0, true, 0},
+	};
+
+	void sling_show(SlingPictures& sling)
+	{
+		for (int i = 0; i < 6; i++)
+			for (auto part : table()->ComponentList)
+				if (part->GroupName && strcmp(part->GroupName, sling.Lights[i]) == 0)
+				{
+					part->Message(i == sling.Index ? MessageCode::TLightResetAndTurnOn : MessageCode::TLightResetAndTurnOff,
+					              0.0f);
+					break;
+				}
+	}
+
+	void slings_show_now(int, void*) // 0x40159c
+	{
+		for (auto& sling : Slings)
+			sling_show(sling);
+	}
+
+	// A moment later: the table puts every light out after the rules hear a new game, a reset or the end of a light
+	// show
+	void slings_show()
+	{
+		if (table_key() == "HERO.DAT")
+			timer::set(0.05f, nullptr, slings_show_now);
+	}
+
+	void sling_rest(int, void* which)
+	{
+		auto& sling = Slings[reinterpret_cast<intptr_t>(which)];
+		sling.Timer = 0;
+		sling.Index = (sling.Index + 1) % 6;
+		sling_show(sling);
+		sling.Armed = true;
+	}
+
+	void sling_hit(int which)
+	{
+		auto& sling = Slings[which];
+		if (!sling.Armed)
+			return;
+		sling.Index = (sling.Index + 1) % 6;
+		sling_show(sling);
+		if (sling.Timer)
+			timer::kill(sling.Timer);
+		sling.Timer = timer::set(0.2f, reinterpret_cast<void*>(static_cast<intptr_t>(which)), sling_rest);
+		sling.Armed = false;
+	}
+
 	std::string set_key(TPinballComponent* part)
 	{
 		std::string name = part->GroupName ? part->GroupName : "";
@@ -341,6 +407,7 @@ namespace
 		rs.FlashTimer = 0;
 		if (!rs.AttractTimer && table()->LightGroup)
 			table()->LightGroup->Message(MessageCode::TLightGroupReset, 0.0);
+		slings_show(); // the light show put the slingshots' pictures out too
 	}
 
 	void light_show(float seconds)
@@ -373,6 +440,7 @@ namespace
 			if (table()->LightGroup)
 				table()->LightGroup->Message(MessageCode::TLightGroupReset, 0.0);
 		}
+		slings_show();
 	}
 
 	void reset_bank(int, void* caller)
@@ -1158,6 +1226,10 @@ namespace
 	int hero_hit(TPinballComponent* caller, int points)
 	{
 		auto now = pb::time_ticks;
+		if (named(caller, {"a_rebo01"}))
+			sling_hit(0);
+		else if (named(caller, {"a_rebo02"}))
+			sling_hit(1);
 
 		// buildings first: the trigger is not a hit of its own
 		const char* triggers[BuildingCount] = {"btrig01", "btrig02", "btrig03", "btrig04", "btrig05",
@@ -1929,6 +2001,12 @@ static void raise_blockers()
 
 void ft2_control::table_handler(MessageCode code)
 {
+	static TPinballTable* shownFor = nullptr;
+	if (shownFor != table())
+	{
+		shownFor = table();
+		slings_show(); // the slingshots' pictures from the start (Captain Hero)
+	}
 	if (!table())
 		return;
 	build_sets();
@@ -1972,7 +2050,10 @@ void ft2_control::table_handler(MessageCode code)
 			powers_reset();
 		hb = HeroBattles{};
 		if (is_hero())
+		{
 			set_pling(false);
+			slings_show();
+		}
 		if (pb::DevDebug && getenv("FT2_BATTLE") && is_hero()) // development: start a battle at once
 		{
 			start_battle(std::max(0, std::min(VillainCount - 1, atoi(getenv("FT2_BATTLE")) - 1)));
