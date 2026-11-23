@@ -2502,6 +2502,183 @@ namespace
 		ScoreHit(caller, 0);
 	}
 
+	// 23:570e - a_spot102: in normal play the next map mission is picked (its text 3068-3075, 2 s); in a map
+	// mission (4-11) 1/1000 of its time left plus 10 s more on the clock; v_lite607 flashes 1 s, the first score
+	void Rule_570e(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		auto state = InfoField();
+		if (state == 2)
+		{
+			auto n = PickNext();
+			Display(ft1_strings::Get(n >= 0 && n <= 6 ? 3068 + n : 3075), 2.0f, 0);
+			ScoreHit(caller, 0);
+			Send(v_lite607, MessageCode::TLightFlasherStartTimed, 1.0f);
+			return;
+		}
+		if (state >= 4 && state <= 11)
+		{
+			auto left = Send(mode_timer, MessageCode::Ft1TimerTimeLeft, 0.0f);
+			if (left > 0)
+				Send(mode_timer, MessageCode::Ft1BlockerTimer, static_cast<float>(left) / 1000.0f + 10.0f);
+		}
+		Send(v_lite607, MessageCode::TLightFlasherStartTimed, 1.0f);
+		ScoreHit(caller, 0);
+	}
+
+	// 23:59a2 - spots 11, 8, 9, 10 all lit (a_spot11's MessageField): cleared, the second score, the multiball;
+	// else the first score
+	void Spots(TPinballComponent* caller)
+	{
+		if ((Field(a_spot11) & 0xf) == 0xf)
+		{
+			Field(a_spot11) = 0;
+			ScoreHit(caller, 1);
+			StartMultiball();
+		}
+		else
+			ScoreHit(caller, 0);
+	}
+
+	// 23:351b - state 10's spots: v_lite550's MessageField all four (as the original has it): cleared, lights
+	// 548-551 flash; else 30,000
+	float State10Spots(float time)
+	{
+		if ((Field(v_lite550) & 0xf) == 0xf)
+		{
+			Field(v_lite550) = 0;
+			Lights({&v_lite551, &v_lite550, &v_lite549, &v_lite548}, MessageCode::TLightResetTimed, 0.0f);
+			Lights({&v_lite551, &v_lite550, &v_lite549, &v_lite548}, MessageCode::TLightFlasherStartTimed, 1.0f);
+		}
+		else
+			ScorePoints(nullptr, 30000);
+		return time;
+	}
+
+	// 23:59f4 / 5b27 / 5c6a / 5d9d - spots 11, 8, 9, 10 (bits 1, 2, 4, 8; lights 551-548): in normal play their bit
+	// in a_spot11's MessageField and their light, then all four checked (tabb23); in state 10 their bit in g_651c,
+	// maybe the next award (tabb94); else tabb23 and the first score
+	void SpotRule(MessageCode code, TPinballComponent* caller, int bit, component_tag<TLight>& light, bool soundFirst)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		switch (InfoField())
+		{
+		case 2:
+			if (soundFirst)
+				Play(tabb23wave);
+			Field(a_spot11) |= bit;
+			Send(light, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			Spots(caller);
+			if (!soundFirst)
+				Play(tabb23wave);
+			break;
+		case 10:
+			g_651c |= bit;
+			Send(light, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			if (bit == 8)
+				Field(a_spot8) |= 8; // as the original has it
+			State10Award(State10Spots(0.0f));
+			Play(tabb94wave);
+			break;
+		default:
+			Play(tabb23wave);
+			ScoreHit(caller, 0);
+			break;
+		}
+	}
+
+	void Rule_59f4(MessageCode c, TPinballComponent* p) { SpotRule(c, p, 1, v_lite551, false); }
+	void Rule_5b27(MessageCode c, TPinballComponent* p) { SpotRule(c, p, 2, v_lite550, true); }
+	void Rule_5c6a(MessageCode c, TPinballComponent* p) { SpotRule(c, p, 4, v_lite549, false); }
+	void Rule_5d9d(MessageCode c, TPinballComponent* p) { SpotRule(c, p, 8, v_lite548, false); }
+
+	// 23:5eda - spots 4 and 5 both lit (v_lite522's MessageField): blocker f away, cleared, their lights flash out,
+	// the second score; else the first; tabb02
+	void Spots45(TPinballComponent* caller)
+	{
+		if ((Field(v_lite522) & 3) == 3)
+		{
+			Send(a_blocf, MessageCode::Ft1BlockerSetPosition, -1.0f);
+			Field(v_lite522) = 0;
+			Send(v_lite522, MessageCode::TLightFlasherStartTimedThenStayOff, 1.0f);
+			Send(v_lite779, MessageCode::TLightFlasherStartTimedThenStayOff, 1.0f);
+			ScoreHit(caller, 1);
+		}
+		else
+			ScoreHit(caller, 0);
+		Play(tabb02wave);
+	}
+
+	// 23:5f7f / 5fe2 - spots 4 and 5: their bit and light (v_lite522 / v_lite779), then both checked
+	void Rule_5f7f(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		Field(v_lite522) |= 1;
+		Send(v_lite522, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+		Spots45(caller);
+	}
+
+	void Rule_5fe2(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		Field(v_lite522) |= 2;
+		Send(v_lite779, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+		Spots45(caller);
+	}
+
+	// 23:6049 - a_spot6, three hits (its MessageField, lights 530-532): in state 7 the third lights them all
+	// flashing out and a bumper award (tabb61); in normal play the third starts state 13 (the kept balls'
+	// multiball); each other hit tabb02 and the first score
+	void Rule_6049(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		auto state = InfoField();
+		if (state != 7 && state != 2)
+			return;
+		auto& hits = Field(a_spot6);
+		if (hits == 0 || hits == 1)
+		{
+			Play(tabb02wave);
+			hits++;
+			ScoreHit(caller, 0);
+			if (state == 7)
+			{
+				if (hits == 1)
+				{
+					Send(v_lite530, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+					Send(v_lite531, MessageCode::TLightResetAndTurnOff, 0.0f);
+				}
+				else
+				{
+					Send(v_lite530, MessageCode::TLightResetAndTurnOn, 0.0f);
+					Send(v_lite531, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+				}
+				Send(v_lite532, MessageCode::TLightResetAndTurnOff, 0.0f);
+			}
+			else
+				Send(hits == 1 ? v_lite530 : v_lite531, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			return;
+		}
+		if (state == 7)
+		{
+			Play(tabb61wave);
+			Lights530(true);
+			BumperAward(0.0f);
+			ScoreHit(caller, 0);
+		}
+		else
+		{
+			hits = 0;
+			ScoreHit(caller, 0);
+			SkillMission(13, nullptr, 0.0f); // 23:0d66
+		}
+	}
+
 	void Rule_98d7(MessageCode, TPinballComponent*) {} // TODO(23:98d7): s_oneway3
 	// 23:472d - the bumpers: in state 9 each hit 25,000 (tabb74) and every tenth the jackpot; in normal play every
 	// twelfth hit (a_bump1's MessageField) raises the bumpers' level (a_bump2's, up to 6; text 3001 with the new
@@ -2711,14 +2888,6 @@ namespace
 			break;
 		}
 	}
-	void Rule_570e(MessageCode, TPinballComponent*) {} // TODO(23:570e): a_spot102
-	void Rule_59f4(MessageCode, TPinballComponent*) {} // TODO(23:59f4): a_spot11
-	void Rule_5b27(MessageCode, TPinballComponent*) {} // TODO(23:5b27): a_spot8
-	void Rule_5c6a(MessageCode, TPinballComponent*) {} // TODO(23:5c6a): a_spot9
-	void Rule_5d9d(MessageCode, TPinballComponent*) {} // TODO(23:5d9d): a_spot10
-	void Rule_5f7f(MessageCode, TPinballComponent*) {} // TODO(23:5f7f): a_spot4
-	void Rule_5fe2(MessageCode, TPinballComponent*) {} // TODO(23:5fe2): a_spot5
-	void Rule_6049(MessageCode, TPinballComponent*) {} // TODO(23:6049): a_spot6
 	void Rule_62f4(MessageCode, TPinballComponent*) {} // TODO(23:62f4): a_sink17
 	void Rule_65a6(MessageCode, TPinballComponent*) {} // TODO(23:65a6): a_sink15
 	void Rule_6873(MessageCode, TPinballComponent*) {} // TODO(23:6873): a_sink14
