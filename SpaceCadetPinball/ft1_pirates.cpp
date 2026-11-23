@@ -25,6 +25,8 @@
 #include "TRamp.h"
 #include "TSound.h"
 #include "TTextBox.h"
+#include "TTimer.h"
+#include "TLightSweeps.h"
 #include "high_score.h"
 
 namespace
@@ -602,6 +604,144 @@ namespace
 		}
 	}
 
+	// ---- light and drop target helpers ----
+	void Lights(std::initializer_list<component_tag<TLight>*> lights, MessageCode code, float value)
+	{
+		for (auto light : lights)
+			Send(*light, code, value);
+	}
+
+	// 23:1004 - lights 524-527: flashing out over 1 s (and v_lite524's MessageField cleared) or off
+	void Lights524(bool flash)
+	{
+		if (flash)
+			Field(v_lite524) = 0;
+		Lights({&v_lite524, &v_lite525, &v_lite526, &v_lite527},
+		       flash ? MessageCode::TLightFlasherStartTimedThenStayOff : MessageCode::TLightResetAndTurnOff,
+		       flash ? 1.0f : 0.0f);
+	}
+
+	// 23:1423 - lights 1-11 (the drop targets' lights) the same, v_lite1's MessageField cleared
+	void Lights1to11(bool flash)
+	{
+		if (flash)
+			Field(v_lite1) = 0;
+		Lights({&v_lite1, &v_lite2, &v_lite3, &v_lite4, &v_lite5, &v_lite6, &v_lite7, &v_lite8, &v_lite9, &v_lite10,
+		        &v_lite11},
+		       flash ? MessageCode::TLightFlasherStartTimedThenStayOff : MessageCode::TLightResetAndTurnOff,
+		       flash ? 1.0f : 0.0f);
+	}
+
+	// 23:333a - lights 551-548 the same (a_spot11's MessageField cleared when n is 1)
+	void Lights548(int n)
+	{
+		if (n == 1)
+			Field(a_spot11) = 0;
+		Lights({&v_lite551, &v_lite550, &v_lite549, &v_lite548},
+		       n ? MessageCode::TLightFlasherStartTimedThenStayOff : MessageCode::TLightResetAndTurnOff,
+		       n ? 1.0f : 0.0f);
+	}
+
+	// 23:10c2 / 23:33f9 - lights 524-527 / 551-548 by the bits of v_lite524's / a_spot11's MessageField
+	void BitLights(int bits, std::initializer_list<component_tag<TLight>*> lights)
+	{
+		int bit = 1;
+		for (auto light : lights)
+		{
+			Send(*light, bits & bit ? MessageCode::TLightResetAndTurnOn : MessageCode::TLightResetAndTurnOff, 0.0f);
+			bit <<= 1;
+		}
+	}
+
+	void Bits524() { BitLights(Field(v_lite524), {&v_lite524, &v_lite525, &v_lite526, &v_lite527}); }
+	void Bits548() { BitLights(Field(a_spot11), {&v_lite551, &v_lite550, &v_lite549, &v_lite548}); }
+
+	// 23:1ff6 / 23:2ea5 / 23:32d7 - a bank of drop targets back up (FT1 54), its first one's MessageField cleared
+	void DropsUp(std::initializer_list<component_tag_base*> drops)
+	{
+		Field(**drops.begin()) = 0;
+		for (auto drop : drops)
+			Send(*drop, MessageCode::TPopupTargetEnable, 0.0f);
+	}
+
+	void Drops5Up() { DropsUp({&a_drop5, &a_drop6, &a_drop7, &a_drop8, &a_drop9}); }
+	void Drops13Up() { DropsUp({&a_drop13, &a_drop14, &a_drop15}); }
+	void Drops10Up() { DropsUp({&a_drop10, &a_drop11, &a_drop12}); }
+
+	// 23:1597 - the drop targets as v_lite1's MessageField keeps them (bit per target: 13-15 bits 0-2, 5-9 bits
+	// 3-7, 10-12 bits 8-10): a target down lights its light (1-11) and is marked in its bank's first MessageField;
+	// a whole bank down comes back up with its lights on
+	void RestoreBank(int mask, int firstBit, std::initializer_list<component_tag<TLight>*> lights,
+	                 std::initializer_list<component_tag_base*> drops)
+	{
+		auto& field = Field(**drops.begin());
+		field = 0;
+		int count = static_cast<int>(drops.size());
+		int all = ((1 << count) - 1) << firstBit;
+		auto light = lights.begin();
+		auto drop = drops.begin();
+		for (int i = 0; i < count; i++, ++light, ++drop)
+		{
+			if ((mask & all) == all)
+			{
+				Send(**light, MessageCode::TLightResetAndTurnOn, 0.0f);
+				Send(**drop, MessageCode::TPopupTargetEnable, 0.0f);
+			}
+			else if (mask & 1 << (firstBit + i))
+			{
+				Send(**light, MessageCode::TLightResetAndTurnOn, 0.0f);
+				Send(**drop, MessageCode::TPopupTargetDisable, 0.0f); // FT1 53
+				field |= 1 << i;
+			}
+			else
+			{
+				Send(**light, MessageCode::TLightResetAndTurnOff, 0.0f);
+				Send(**drop, MessageCode::TPopupTargetEnable, 0.0f);
+			}
+		}
+	}
+
+	void RestoreDrops()
+	{
+		auto mask = Field(v_lite1);
+		RestoreBank(mask, 0, {&v_lite1, &v_lite2, &v_lite3}, {&a_drop13, &a_drop14, &a_drop15});
+		RestoreBank(mask, 3, {&v_lite4, &v_lite5, &v_lite6, &v_lite7, &v_lite8},
+		            {&a_drop5, &a_drop6, &a_drop7, &a_drop8, &a_drop9});
+		RestoreBank(mask, 8, {&v_lite9, &v_lite10, &v_lite11}, {&a_drop10, &a_drop11, &a_drop12});
+	}
+
+	void ReleaseSink8(float time) { Send(a_sink8, MessageCode::TSinkResetTimer, time); } // 23:0dcd
+
+	int g_651c = 0, g_651e = 0;
+
+	// 23:a193 - a map mission starts: lights 524-527 and 1-11 off, a_bloce up after 1 s, v_lite504 on, v_lite505
+	// off, lights 548-551 off (not in state 12)
+	void MissionStart()
+	{
+		g_651c = 0;
+		g_651e = 0;
+		Lights524(false);
+		Lights1to11(false);
+		Send(a_bloce, MessageCode::Ft1BlockerSetPosition, 1.0f); // FT1 57
+		Send(v_lite504, MessageCode::TLightResetAndTurnOn, 0.0f);
+		Send(v_lite505, MessageCode::TLightResetAndTurnOff, 0.0f);
+		if (InfoField() != 12)
+			Lights548(0);
+	}
+
+	// 23:a223 - a map mission ends: everything as the player had it
+	void MissionEnd()
+	{
+		Bits524();
+		RestoreDrops();
+		Bits548();
+		Drops5Up();
+		Drops13Up();
+		Drops10Up();
+		Send(v_lite520, MessageCode::TLightResetAndTurnOff, 0.0f);
+		Send(v_lite521, MessageCode::TLightResetAndTurnOff, 0.0f);
+	}
+
 	// The handlers, one per state (23:d8a5's table at cs:da5d)
 	int g_6520 = 0; // the skill shot is on
 	int g_22f4 = 0;
@@ -905,7 +1045,92 @@ namespace
 			break;
 		}
 	}
-	void State4(MessageCode, TPinballComponent*) {}  // TODO(23:a54c)
+	// The map missions' countdown: event 80 shows the time left (text 3016, 0.5 s); mode_timer running out ends it
+	// (event 82); the light sweep done starts it (sink 8 lets its ball go unless the skill shot is on)
+	void Countdown()
+	{
+		auto left = Send(mode_timer, MessageCode::Ft1TimerTimeLeft, 0.0f);
+		if (left)
+			Display(Format(3016, left / 1000).c_str(), 0.5f, 0);
+	}
+
+	bool MissionTimers(MessageCode code, TPinballComponent* cmp, float seconds)
+	{
+		if (code == FT1Event80)
+		{
+			Countdown();
+			return true;
+		}
+		if (code != MessageCode::ControlTimerExpired || !cmp)
+			return false;
+		if (dynamic_cast<TTimer*>(cmp)) // 1032
+		{
+			if (cmp == mode_timer.GetComponent())
+				MissionEvent(FT1Event82, nullptr);
+			return true;
+		}
+		if (dynamic_cast<TLightSweeps*>(cmp)) // 1038
+		{
+			if (!g_6520)
+				ReleaseSink8(0.0f);
+			Send(mode_timer, MessageCode::Ft1BlockerTimer, seconds);
+			MissionEvent(FT1Event80, nullptr);
+			return true;
+		}
+		return false;
+	}
+
+	// 23:a54c - state 4, the first map mission (text 3060, tabb2): the light sweep 0, drops 5-9 up, the plunger
+	// blockers set, 200,000, lights 4-8 and 567 flash; 29.38 s from the end of the sweep. The fathom lights'
+	// timer shows text 3017 with tabb26. Drained: the timer stops and it ends. Its end: v_lite567 off, drops 5-9
+	// up, the player's lights back, v_lite606 counts, a_bloce down, v_lite504 off, v_lite505 on
+	void State4(MessageCode code, TPinballComponent* cmp)
+	{
+		switch (code)
+		{
+		case FT1Event79:
+			MissionStart();
+			g_651c = 1;
+			Send(light_sweeps, MessageCode::Ft1LightSweepStart, 0.0f);
+			Drops5Up();
+			Send(a_blocc, MessageCode::Ft1BlockerSetPosition, -1.0f);
+			Send(a_bloce, MessageCode::Ft1BlockerSetPosition, 1.0f);
+			Send(v_lite504, MessageCode::TLightResetAndTurnOn, 0.0f);
+			Send(v_lite505, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(a_blocf, MessageCode::Ft1BlockerSetPosition, 0.0f);
+			Send(a_blocg, MessageCode::Ft1BlockerSetPosition, 0.0f);
+			ScorePoints(nullptr, 200000);
+			Display(ft1_strings::Get(3060), -1.0f, 0);
+			Lights({&v_lite4, &v_lite5, &v_lite6, &v_lite7, &v_lite8, &v_lite567},
+			       MessageCode::TLightFlasherStartTimed, -1.0f);
+			PlayMusic(2); // g_22d2
+			Play(tabb58wave);
+			break;
+		case FT1Event83:
+			Send(mode_timer, MessageCode::Ft1BlockerTimer, -1.0f);
+			MissionEvent(FT1Event82, nullptr);
+			break;
+		case FT1Event82:
+			Send(v_lite567, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Drops5Up();
+			MissionEnd();
+			Field(v_lite606)++;
+			Send(a_bloce, MessageCode::Ft1BlockerSetPosition, 0.0f);
+			Send(v_lite504, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(v_lite505, MessageCode::TLightResetAndTurnOn, 0.0f);
+			break;
+		case MessageCode::ControlNotifyTimerExpired: // FT1 71
+			if (cmp == fathom_light_group.GetComponent())
+			{
+				Display(ft1_strings::Get(3017), 2.0f, 0);
+				Play(tabb26wave);
+			}
+			break;
+		default:
+			MissionTimers(code, cmp, 29.38f);
+			break;
+		}
+	}
 	void State5(MessageCode, TPinballComponent*) {}  // TODO(23:ba2b)
 	void State6(MessageCode, TPinballComponent*) {}  // TODO(23:beac)
 	void State7(MessageCode, TPinballComponent*) {}  // TODO(23:adc2)
