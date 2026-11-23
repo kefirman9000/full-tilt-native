@@ -7,6 +7,7 @@
 #include "ft2_mad.h"
 
 #include "pb.h"
+#include "midi.h"
 #include "TBall.h"
 #include "table_art.h"
 #include "loader.h"
@@ -730,6 +731,7 @@ namespace
 		if (pb::DevDebug)
 			printf("FT2DBG battle start %d %s\n", index + 1, VillainNames[index]);
 		hb.Battle = index + 1;
+		midi::play_ft2_track(hb.Battle + 1); // 0x40787c: each battle has its music, tabf2-tabf7
 		hb.Progress = 0;
 		for (auto& down : hb.QuakeDown)
 			down = false;
@@ -811,6 +813,7 @@ namespace
 		if (hb.Battle == 5)
 			set_pling(false);
 		hb.Battle = 0;
+		midi::play_ft2_track(1); // no battle: tabf1
 		hb.Progress = 0;
 		hero_kill(hb.BattleTimer);
 		hb.BattleEnds = 0;

@@ -6,6 +6,10 @@
 
 **Game data is not included.** Copy your original game folders into `Put game files here` and start `FullTiltPinball.exe`: tables are found and sorted automatically.
 
+**New in 0.12.2**
+- Captain Hero changes music with each battle (tabf2-tabf7, from hero.exe 0x40787c) and goes back to the table
+  music when the battle ends.
+
 **New in 0.12.1: music changes with the mode**
 - Alien Daze plays each mission's own music (tabe2-tabe6) and goes back to the table music after it, as the
   original does. Mad Scientist does the same for its five experiments (tabd2-tabd6).

@@ -40,6 +40,8 @@ Modes: 1 Quake, 2 Mad Scientist, 3 Mystman, 4 Slime Man, 5 Mr. Pling (`MODE_ELAS
    1,000,000. The port adds three balls at the holes: an approximation until the ball source is read.
    No timer: the battle ends with the ball, and either way all villains come back (0x406b08).
 
+- Music (0x40787c): the mode's track, tabf(mode + 1); tabf1 with no battle, tabf8 for the game over mode.
+
 ## Jackpots (0x40764c)
 - Jackpot: 500,000 at the start, max 5,000,000. +5,000 for a target (0x4076d8: drop and spot targets), +10,000
   for a hole (0x407738: s_sink03/04/05/08/09/13/14/15/20). The skill shot can add 500,000.
