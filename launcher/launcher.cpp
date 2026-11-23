@@ -11,6 +11,9 @@
 #include "../SpaceCadetPinball/ft_log.h"
 
 #include <algorithm>
+#include <cfloat>
+#include <cmath>
+#include <initializer_list>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -253,6 +256,148 @@ static void ImportMarbleDrop(const fs::path& installDir, const fs::path& tablesD
 }
 
 // Next item on the same line if `width` still fits, otherwise on a new line (keeps button rows inside the window)
+// ---- Look ------------------------------------------------------------------------------------------------------
+namespace look
+{
+	const ImVec4 Bg{0.067f, 0.078f, 0.110f, 1};       // window
+	const ImVec4 Panel{0.098f, 0.114f, 0.161f, 1};    // header, footer
+	const ImVec4 Card{0.122f, 0.141f, 0.200f, 1};
+	const ImVec4 CardHover{0.161f, 0.188f, 0.267f, 1};
+	const ImVec4 Line{0.200f, 0.227f, 0.302f, 1};
+	const ImVec4 Text{0.910f, 0.925f, 0.957f, 1};
+	const ImVec4 Muted{0.553f, 0.592f, 0.675f, 1};
+	const ImVec4 Gold{0.965f, 0.737f, 0.263f, 1};
+	const ImVec4 Green{0.420f, 0.820f, 0.510f, 1};
+	const ImVec4 Amber{0.965f, 0.690f, 0.290f, 1};
+	const ImVec4 Red{0.980f, 0.420f, 0.400f, 1};
+
+	ImFont* Body = nullptr;
+	ImFont* Bold = nullptr;
+	ImFont* Title = nullptr;
+	ImFont* Small = nullptr;
+	float BuiltScale = 0;
+
+	static ImU32 U32(const ImVec4& c, float alpha = 1) { return ImGui::GetColorU32(ImVec4(c.x, c.y, c.z, c.w * alpha)); }
+
+	// A real font from the system (Segoe UI on Windows, DejaVu Sans elsewhere); ImGui's own pixel font if none
+	static ImFont* AddFont(std::initializer_list<const char*> files, float size)
+	{
+		auto& io = ImGui::GetIO();
+		std::error_code ec;
+		for (auto file : files)
+			if (fs::exists(file, ec))
+			{
+				ImFontConfig config;
+				config.OversampleH = 2;
+				config.OversampleV = 2;
+				if (auto font = io.Fonts->AddFontFromFileTTF(file, size, &config))
+					return font;
+			}
+		ImFontConfig config;
+		config.SizePixels = std::round(size);
+		return io.Fonts->AddFontDefault(&config);
+	}
+
+	static void BuildFonts(float scale, bool rebuildTexture)
+	{
+		auto& io = ImGui::GetIO();
+		io.Fonts->Clear();
+#ifdef _WIN32
+		std::string fonts = std::string(getenv("WINDIR") ? getenv("WINDIR") : "C:\\Windows") + "\\Fonts\\";
+		auto regular = fonts + "segoeui.ttf", semibold = fonts + "seguisb.ttf", bold = fonts + "segoeuib.ttf";
+		Body = AddFont({regular.c_str()}, 17 * scale);
+		Bold = AddFont({semibold.c_str(), bold.c_str()}, 19 * scale);
+		Title = AddFont({bold.c_str()}, 30 * scale);
+		Small = AddFont({regular.c_str()}, 14.5f * scale);
+#else
+		const char* regular = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
+		const char* bold = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf";
+		Body = AddFont({regular}, 16 * scale);
+		Bold = AddFont({bold}, 17.5f * scale);
+		Title = AddFont({bold}, 27 * scale);
+		Small = AddFont({regular}, 13.5f * scale);
+#endif
+		io.FontDefault = Body;
+		io.FontGlobalScale = 1;
+		BuiltScale = scale;
+		if (rebuildTexture)
+		{
+			ImGui_ImplSDLRenderer_DestroyFontsTexture();
+			ImGui_ImplSDLRenderer_CreateFontsTexture();
+		}
+	}
+
+	static void Style()
+	{
+		ImGui::StyleColorsDark();
+		auto& style = ImGui::GetStyle();
+		style.WindowPadding = {0, 0};
+		style.WindowRounding = 0;
+		style.WindowBorderSize = 0;
+		style.ChildRounding = 10;
+		style.ChildBorderSize = 0;
+		style.FrameRounding = 7;
+		style.FramePadding = {14, 7};
+		style.ItemSpacing = {10, 8};
+		style.PopupRounding = 8;
+		style.PopupBorderSize = 1;
+		style.WindowMinSize = {1, 1};
+		style.ScrollbarRounding = 6;
+		style.ScrollbarSize = 12;
+		style.GrabRounding = 6;
+		auto* c = style.Colors;
+		c[ImGuiCol_Text] = Text;
+		c[ImGuiCol_TextDisabled] = Muted;
+		c[ImGuiCol_WindowBg] = Bg;
+		c[ImGuiCol_ChildBg] = {0, 0, 0, 0};
+		c[ImGuiCol_PopupBg] = {0.110f, 0.129f, 0.180f, 0.98f};
+		c[ImGuiCol_Border] = Line;
+		c[ImGuiCol_Separator] = Line;
+		c[ImGuiCol_FrameBg] = Card;
+		c[ImGuiCol_FrameBgHovered] = CardHover;
+		c[ImGuiCol_FrameBgActive] = CardHover;
+		c[ImGuiCol_Button] = {0.165f, 0.192f, 0.267f, 1};
+		c[ImGuiCol_ButtonHovered] = {0.220f, 0.255f, 0.353f, 1};
+		c[ImGuiCol_ButtonActive] = {0.263f, 0.306f, 0.420f, 1};
+		c[ImGuiCol_Header] = {0.165f, 0.192f, 0.267f, 1};
+		c[ImGuiCol_HeaderHovered] = {0.220f, 0.255f, 0.353f, 1};
+		c[ImGuiCol_HeaderActive] = {0.263f, 0.306f, 0.420f, 1};
+		c[ImGuiCol_CheckMark] = Gold;
+		c[ImGuiCol_PlotHistogram] = Gold;
+		c[ImGuiCol_NavHighlight] = Gold;
+		c[ImGuiCol_ScrollbarBg] = {0, 0, 0, 0};
+		c[ImGuiCol_ScrollbarGrab] = Line;
+		c[ImGuiCol_ScrollbarGrabHovered] = {0.282f, 0.318f, 0.412f, 1};
+		c[ImGuiCol_ScrollbarGrabActive] = {0.341f, 0.384f, 0.494f, 1};
+	}
+
+	// A gold call-to-action button
+	static bool Primary(const char* label, ImVec2 size = {0, 0})
+	{
+		ImGui::PushStyleColor(ImGuiCol_Button, Gold);
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.80f, 0.38f, 1));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.88f, 0.64f, 0.20f, 1));
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.10f, 0.08f, 0.04f, 1));
+		bool pressed = ImGui::Button(label, size);
+		ImGui::PopStyleColor(4);
+		return pressed;
+	}
+
+	// Text with a coloured dot in front
+	static void Status(const ImVec4& color, const char* text, float wrapWidth)
+	{
+		auto pos = ImGui::GetCursorScreenPos();
+		float r = ImGui::GetFontSize() * 0.22f;
+		ImGui::GetWindowDrawList()->AddCircleFilled({pos.x + r, pos.y + ImGui::GetFontSize() * 0.55f}, r, U32(color));
+		ImGui::SetCursorScreenPos({pos.x + r * 2 + 6, pos.y});
+		ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + wrapWidth - r * 2 - 6);
+		ImGui::PushStyleColor(ImGuiCol_Text, color);
+		ImGui::TextUnformatted(text);
+		ImGui::PopStyleColor();
+		ImGui::PopTextWrapPos();
+	}
+}
+
 static void SameLineIfFits(float width)
 {
 	ImGui::SameLine();
@@ -1179,12 +1324,10 @@ int main(int, char**)
 	ImGui::CreateContext();
 	ImGui::GetIO().IniFilename = nullptr;
 	ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
-	ImGui::StyleColorsDark();
-	auto& style = ImGui::GetStyle();
-	style.FrameRounding = 6;
-	style.WindowPadding = {24, 20};
+	look::Style();
 	ImGui_ImplSDL2_InitForSDLRenderer(window, renderer);
 	ImGui_ImplSDLRenderer_Init(renderer);
+	look::BuildFonts(1.0f, false);
 
 	std::string message;
 	bool running = true;
@@ -1220,35 +1363,167 @@ int main(int, char**)
 			SDL_RaiseWindow(window);
 			LoadHighScores(tables);
 		}
+		int w, h;
+		SDL_GetRendererOutputSize(renderer, &w, &h);
+		{
+			// Fonts follow the window size (rebuilt in steps, before the frame starts)
+			float wanted = std::max(1.0f, std::min(w / 1120.0f, h / 720.0f));
+			wanted = std::round(wanted * 4) / 4;
+			if (wanted != look::BuiltScale)
+				look::BuildFonts(wanted, true);
+		}
+		const float ui = look::BuiltScale;
+		const float pad = 28 * ui;
+
 		ImGui_ImplSDLRenderer_NewFrame();
 		ImGui_ImplSDL2_NewFrame();
 		ImGui::NewFrame();
 
-		int w, h;
-		SDL_GetRendererOutputSize(renderer, &w, &h);
-		float scale = std::max(1.0f, std::min(w / 1120.0f, h / 720.0f));
-		ImGui::GetIO().FontGlobalScale = 1.4f * scale;
 		ImGui::SetNextWindowPos({0, 0});
 		ImGui::SetNextWindowSize({static_cast<float>(w), static_cast<float>(h)});
 		ImGui::Begin("library", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
 		             ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+		auto* draw = ImGui::GetWindowDrawList();
+		static bool showHidden = false;
+		int hiddenCount = 0;
+		for (auto& t : tables)
+			hiddenCount += t.Hidden ? 1 : 0;
+		if (epicbuild::Poll())
+			loadTables();
 
-		ImGui::SetWindowFontScale(1.6f);
-		ImGui::TextColored({1.0f, 0.82f, 0.3f, 1}, "FULL TILT! PINBALL");
-		ImGui::SetWindowFontScale(1.0f);
-		ImGui::TextDisabled("Table library  -  click a table or use the arrow keys and Enter.  Esc quits.");
-		ImGui::Spacing();
+		// ---- Header: the title, the actions -----------------------------------------------------------------
+		const float headerH = 84 * ui;
+		draw->AddRectFilled({0, 0}, {static_cast<float>(w), headerH}, look::U32(look::Panel));
+		draw->AddRectFilledMultiColor({0, headerH - 3 * ui}, {static_cast<float>(w), headerH}, look::U32(look::Gold),
+		                              look::U32(look::Gold, 0.0f), look::U32(look::Gold, 0.0f), look::U32(look::Gold));
+		ImGui::SetCursorPos({pad, 14 * ui});
+		ImGui::PushFont(look::Title);
+		ImGui::TextColored(look::Gold, "FULL TILT!");
+		ImGui::SameLine(0, 10 * ui);
+		ImGui::TextUnformatted("PINBALL");
+		ImGui::PopFont();
+		ImGui::SetCursorPosX(pad);
+		ImGui::PushFont(look::Small);
+		ImGui::TextDisabled("Table library  \xC2\xB7  %d table%s", static_cast<int>(tables.size() - hiddenCount),
+		                    tables.size() - hiddenCount == 1 ? "" : "s");
+		ImGui::PopFont();
+		{
+			// Right side: add games (the drop folder and scanning), more (building, problems, updates)
+			const char* addLabel = "+  Add games";
+			const char* moreLabel = "More      ";
+			float right = w - pad;
+			float bw = ButtonWidth(moreLabel) + ButtonWidth(addLabel) + ImGui::GetStyle().ItemSpacing.x;
+			ImGui::SetCursorPos({right - bw, (headerH - ImGui::GetFrameHeight()) / 2});
+			if (look::Primary(addLabel))
+				ImGui::OpenPopup("add games");
+			ImGui::SameLine();
+			if (ImGui::Button(moreLabel))
+				ImGui::OpenPopup("more");
+			{
+				// a small down arrow on the button (the font has no arrow glyph)
+				auto r = ImGui::GetItemRectMax();
+				float s = 5 * ui, cx = r.x - ImGui::GetStyle().FramePadding.x - s, cy = (ImGui::GetItemRectMin().y + r.y) / 2;
+				draw->AddTriangleFilled({cx - s, cy - s * 0.5f}, {cx + s, cy - s * 0.5f}, {cx, cy + s * 0.6f},
+				                        look::U32(look::Text));
+			}
+			ImGui::SetNextWindowSizeConstraints({340 * ui, 0}, {600 * ui, FLT_MAX});
+			if (ImGui::BeginPopup("add games"))
+			{
+				ImGui::PushFont(look::Small);
+				ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 380 * ui);
+				ImGui::TextDisabled("Copy your game folders into the drop folder, then scan. They get sorted into the library.");
+				ImGui::PopTextWrapPos();
+				ImGui::PopFont();
+				ImGui::Separator();
+				if (ImGui::MenuItem("Open the \"Put game files here\" folder"))
+					OpenFolder(dropDir);
+				if (ImGui::MenuItem("Scan for new game files"))
+					scan();
+				ImGui::EndPopup();
+			}
+			if (ImGui::BeginPopup("more"))
+			{
+				bool busy = epicbuild::running;
+				if (ImGui::MenuItem(busy && epicbuild::game == &epicbuild::Epic ? "Compiling Epic Pinball..." :
+				                    "Compile Epic Pinball tables", nullptr, false, !busy))
+				{
+					auto err = epicbuild::Start(basePath, tablesDir / "EpicPinball");
+					if (!err.empty())
+						epicbuild::status = err;
+				}
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+					ImGui::SetTooltip("Builds EpicPinball from your own Epic Pinball files (needs Python 3 and a C compiler).\n"
+					                  "It takes a few minutes; nothing from the game is uploaded or shared.");
+				std::error_code uec;
+				if (fs::exists(tablesDir / UltraPinballFolder / "table.ini", uec))
+				{
+					if (ImGui::MenuItem(busy && epicbuild::game == &epicbuild::Sierra ? "Compiling 3-D Ultra Pinball..." :
+					                    "Compile 3-D Ultra Pinball", nullptr, false, !busy))
+					{
+						auto err = epicbuild::Start(basePath, tablesDir / UltraPinballFolder, epicbuild::Sierra);
+						if (!err.empty())
+							epicbuild::status = err;
+					}
+					if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+						ImGui::SetTooltip("Builds UltraPinball from your own 3-D Ultra Pinball files (needs Python 3 and a C\n"
+						                  "compiler; \"Install build tools\" sets them up). Takes a minute or two; nothing from\n"
+						                  "the game is uploaded or shared.");
+				}
+				if (ImGui::MenuItem("Install build tools", nullptr, false, !busy))
+				{
+					auto err = epicbuild::StartInstall(basePath);
+					if (!err.empty())
+						epicbuild::status = err;
+				}
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+					ImGui::SetTooltip("Installs what compiling Epic Pinball and 3-D Ultra Pinball needs, for your user only: Python 3, the GCC C\n"
+					                  "compiler (WinLibs) and the capstone module. Uses winget; takes a few minutes.");
+				ImGui::Separator();
+				if (hiddenCount > 0 || showHidden)
+				{
+					char label[64];
+					std::snprintf(label, sizeof label, "Show hidden tables (%d)", hiddenCount);
+					ImGui::MenuItem(label, nullptr, &showHidden);
+				}
+				{
+					auto update = updater::Get();
+					bool checking = update.state == updater::State::Checking || update.state == updater::State::Downloading ||
+						update.state == updater::State::Installing;
+					if (ImGui::MenuItem("Check for updates", nullptr, false, !checking))
+						updater::CheckAsync();
+				}
+				if (ImGui::MenuItem("Report a problem"))
+					importReport = MakeProblemReport(basePath, tables);
+				ImGui::EndPopup();
+			}
+		}
+
+		// ---- Notices: an update, import results, errors -----------------------------------------------------
+		ImGui::SetCursorPos({pad, headerH + 16 * ui});
+		const float contentW = w - pad * 2;
+		auto notice = [&](const ImVec4& color, const std::string& text)
+		{
+			ImGui::SetCursorPosX(pad);
+			ImGui::PushTextWrapPos(pad + contentW);
+			look::Status(color, text.c_str(), contentW);
+			ImGui::PopTextWrapPos();
+		};
 		{
 			static bool dismissed = false;
 			auto update = updater::Get();
 			if (update.state == updater::State::Available && !dismissed)
 			{
-				ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.16f, 0.24f, 0.36f, 1));
-				ImGui::BeginChild("update", {0, ImGui::GetTextLineHeightWithSpacing() * 2.6f}, true);
-				ImGui::TextColored({1.0f, 0.82f, 0.3f, 1}, "Update available: %s (you have %s)", update.latestVersion.c_str(),
-				                   updater::CurrentVersion);
+				float bannerH = ImGui::GetFrameHeight() + 20 * ui;
+				auto p = ImGui::GetCursorScreenPos();
+				draw->AddRectFilled(p, {p.x + contentW, p.y + bannerH}, look::U32(look::Gold, 0.12f), 10 * ui);
+				draw->AddRect(p, {p.x + contentW, p.y + bannerH}, look::U32(look::Gold, 0.5f), 10 * ui);
+				ImGui::SetCursorScreenPos({p.x + 16 * ui, p.y + (bannerH - ImGui::GetTextLineHeight()) / 2});
+				ImGui::TextColored(look::Gold, "Update available: %s", update.latestVersion.c_str());
 				ImGui::SameLine();
-				if (ImGui::Button("Update now"))
+				ImGui::TextDisabled("(you have %s)", updater::CurrentVersion);
+				float bw = ButtonWidth("Update now") + ButtonWidth("Later") + ImGui::GetStyle().ItemSpacing.x;
+				ImGui::SetCursorScreenPos({p.x + contentW - bw - 10 * ui, p.y + 10 * ui});
+				if (look::Primary("Update now"))
 				{
 					// The stand-alone updater closes us and the game so every file can be replaced, then reopens us
 					if (updater::StartProgram(basePath, "FullTiltUpdate.exe", "--now"))
@@ -1259,99 +1534,116 @@ int main(int, char**)
 				ImGui::SameLine();
 				if (ImGui::Button("Later"))
 					dismissed = true;
-				ImGui::EndChild();
-				ImGui::PopStyleColor();
+				ImGui::SetCursorScreenPos({p.x, p.y + bannerH + 10 * ui});
 			}
 			else if (update.state == updater::State::Downloading || update.state == updater::State::Installing)
-				ImGui::TextColored({1.0f, 0.82f, 0.3f, 1}, "Updating: %s", update.message.c_str());
+				notice(look::Gold, "Updating: " + update.message);
 			else if (update.state == updater::State::Done)
 			{
 				if (updater::Restart(basePath))
 					running = false;
 				else
-					ImGui::TextColored({0.55f, 0.85f, 0.55f, 1}, "Updated. Please start FullTiltPinball.exe again.");
+					notice(look::Green, "Updated. Please start FullTiltPinball.exe again.");
 			}
 		}
-		if (ImGui::Button("Report a problem"))
-			importReport = MakeProblemReport(basePath, tables);
-		if (epicbuild::Poll())
-			loadTables();
 		if (!importReport.empty())
-			ImGui::TextColored({0.55f, 0.85f, 0.55f, 1}, "%s", importReport.c_str());
+			notice(look::Green, importReport);
 		if (!message.empty())
-			ImGui::TextColored({1, 0.45f, 0.4f, 1}, "%s", message.c_str());
-		if (tables.empty())
-			ImGui::TextWrapped("No tables yet. Click \"Open \"Put game files here\" folder\" at the bottom, copy your game "
-			                   "folders into it, then click \"Scan for new game files\".");
-		ImGui::Separator();
-		ImGui::Spacing();
-
-		// Size the cards so every table fits on screen without scrolling: try 1-5 columns, keep the biggest cards
-		static bool showHidden = false;
-		std::vector<size_t> shown;
-		int hiddenCount = 0;
-		for (size_t i = 0; i < tables.size(); i++)
+			notice(look::Red, message);
+		if (epicbuild::running)
 		{
-			hiddenCount += tables[i].Hidden ? 1 : 0;
+			// progress bar for compiling Epic Pinball or 3-D Ultra Pinball, or installing the build tools
+			char label[160];
+			std::snprintf(label, sizeof label, "%d%%  %s", static_cast<int>(epicbuild::fraction * 100 + 0.5f),
+			              epicbuild::step.c_str());
+			ImGui::SetCursorPosX(pad);
+			ImGui::ProgressBar(epicbuild::fraction, ImVec2(contentW, 0), label);
+		}
+		else if (!epicbuild::status.empty())
+		{
+			bool bad = epicbuild::status.find("failed") != std::string::npos || epicbuild::status.find("needed") != std::string::npos ||
+				epicbuild::status.rfind("No ", 0) == 0 || epicbuild::status.rfind("Could not", 0) == 0 ||
+				epicbuild::status.find("missing") != std::string::npos;
+			notice(bad ? look::Red : look::Green, epicbuild::status);
+		}
+
+		// ---- The cards ----------------------------------------------------------------------------------------
+		const float footerH = 40 * ui;
+		std::vector<size_t> shown;
+		for (size_t i = 0; i < tables.size(); i++)
 			if (!tables[i].Hidden || showHidden)
 				shown.push_back(i);
-		}
 		enum class CardAction { None, Left, Right, First, Last, Hide, Show };
 		CardAction action = CardAction::None;
 		size_t actionCard = 0;
-		float textH = ImGui::GetTextLineHeightWithSpacing() * 3 + 20;
-		// height of everything below the cards, measured on the previous frame (rows wrap on narrow windows)
-		static float measuredFooterH = 0;
-		float footerH = std::max(measuredFooterH + 8, ImGui::GetTextLineHeightWithSpacing() * 3 + ImGui::GetFrameHeightWithSpacing() * 2 + 32);
-		float availH = h - ImGui::GetCursorPosY() - footerH;
-		float availW = w - 48.0f;
+
+		float top = ImGui::GetCursorPosY() + 4 * ui;
+		float availH = h - footerH - top - 16 * ui;
+		float availW = contentW;
+		if (tables.empty())
+		{
+			ImGui::SetCursorPos({pad, top + availH * 0.35f});
+			ImGui::PushFont(look::Bold);
+			float tw = ImGui::CalcTextSize("No tables yet").x;
+			ImGui::SetCursorPosX((w - tw) / 2);
+			ImGui::TextUnformatted("No tables yet");
+			ImGui::PopFont();
+			const char* how = "Click \"+ Add games\", copy your game folders into the folder it opens, then scan.";
+			ImGui::SetCursorPosX((w - ImGui::CalcTextSize(how).x) / 2);
+			ImGui::TextDisabled("%s", how);
+		}
+
+		// Size the cards so every table fits without scrolling: try 1-6 columns, keep the biggest cards
+		const float gap = 18 * ui, inner = 10 * ui;
+		float lineBold = look::Bold->FontSize, lineBody = ImGui::GetTextLineHeight(), lineSmall = look::Small->FontSize;
+		float textH = inner + lineBold + 4 * ui + lineSmall + 8 * ui + lineSmall * 2 + 6 * ui + inner;
 		int columns = 1;
 		float imgH = 0;
-		for (int c = 1; c <= 5; c++)
+		for (int c = 1; c <= 6; c++)
 		{
 			int r = std::max(1, static_cast<int>((shown.size() + c - 1) / c));
-			float byHeight = availH / r - textH;
-			float byWidth = (availW - 24.0f * (c - 1)) / c * 0.75f - 8;
+			float cardWc = (availW - gap * (c - 1)) / c;
+			float byWidth = (cardWc - inner * 2) * 0.75f;
+			float byHeight = (availH - gap * (r - 1)) / r - textH - inner;
 			float candidate = std::min(byHeight, byWidth);
-			if (candidate > imgH)
+			if (candidate > imgH + 1)
 			{
 				imgH = candidate;
 				columns = c;
 			}
 		}
-		imgH = std::max(imgH, 60.0f);
-		float cardW = imgH * 4 / 3;
+		imgH = std::clamp(imgH, 70 * ui, 360 * ui);
+		float cardW = imgH / 0.75f + inner * 2;
+		float cardH = inner + imgH + textH;
+		int rows = std::max(1, static_cast<int>((shown.size() + columns - 1) / columns));
+		float gridW = columns * cardW + (columns - 1) * gap;
+		float gridH = rows * cardH + (rows - 1) * gap;
 		// Cards live in their own scrolling area so a big library can never push the footer off the window
-		ImGui::BeginChild("cards", {0, std::max(availH, 80.0f)}, false);
+		ImGui::SetCursorPos({pad, top});
+		ImGui::BeginChild("cards", {contentW, std::max(availH, 80 * ui)}, false);
+		float left = std::max(0.0f, (contentW - (gridH > availH ? 14 * ui : 0) - gridW) / 2);
+		float vtop = std::max(0.0f, (availH - gridH) / 2);
+		auto* cdraw = ImGui::GetWindowDrawList();
 		for (size_t k = 0; k < shown.size(); k++)
 		{
 			size_t i = shown[k];
 			auto& t = tables[i];
-			if (k % columns)
-				ImGui::SameLine(0, 24);
-			ImGui::BeginGroup();
+			int col = static_cast<int>(k % columns), row = static_cast<int>(k / columns);
+			ImGui::SetCursorPos({left + col * (cardW + gap), vtop + row * (cardH + gap)});
 			ImGui::PushID(static_cast<int>(i));
-			if (t.Hidden)
-				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.4f);
-			bool clicked;
-			if (t.Texture)
-			{
-				int tw, th;
-				SDL_QueryTexture(t.Texture, nullptr, nullptr, &tw, &th);
-				float fit = std::min(cardW / tw, imgH / th);
-				ImVec2 size{tw * fit, th * fit};
-				ImVec2 cursor = ImGui::GetCursorPos();
-				ImGui::Dummy({cardW + 8, imgH + 8});
-				ImGui::SetCursorPos({cursor.x + (cardW - size.x) / 2, cursor.y + (imgH - size.y) / 2});
-				clicked = ImGui::ImageButton("card", t.Texture, size);
-				ImGui::SetCursorPos({cursor.x, cursor.y + imgH + 12});
-			}
-			else
-				clicked = ImGui::Button(t.Name.c_str(), {cardW + 8, imgH + 8});
+			ImVec2 p0 = ImGui::GetCursorScreenPos();
+			ImVec2 p1{p0.x + cardW, p0.y + cardH};
+			bool clicked = ImGui::InvisibleButton("card", {cardW, cardH});
+			bool hovered = ImGui::IsItemHovered();
+			bool focused = ImGui::IsItemFocused();
+			bool held = ImGui::IsItemActive();
 			// right-click a card: move it or hide it
 			if (ImGui::BeginPopupContextItem("card menu"))
 			{
 				ImGui::TextDisabled("%s", t.Name.c_str());
+				ImGui::Separator();
+				if (ImGui::MenuItem("Play"))
+					clicked = true;
 				ImGui::Separator();
 				if (ImGui::MenuItem("Move left", nullptr, false, k > 0)) { action = CardAction::Left; actionCard = k; }
 				if (ImGui::MenuItem("Move right", nullptr, false, k + 1 < shown.size())) { action = CardAction::Right; actionCard = k; }
@@ -1362,8 +1654,114 @@ int main(int, char**)
 				if (t.Hidden && ImGui::MenuItem("Show this table again")) { action = CardAction::Show; actionCard = k; }
 				ImGui::EndPopup();
 			}
-			if (ImGui::IsItemHovered() && !ImGui::IsPopupOpen("card menu"))
-				ImGui::SetTooltip("Click to play. Right-click to move or hide.");
+			float alpha = t.Hidden ? 0.45f : 1.0f;
+			float lift = (hovered || focused) && !held ? 3 * ui : 0;
+			p0.y -= lift;
+			p1.y -= lift;
+			const float round = 12 * ui;
+			// shadow, card, outline
+			cdraw->AddRectFilled({p0.x + 2 * ui, p0.y + 6 * ui}, {p1.x + 2 * ui, p1.y + 8 * ui}, IM_COL32(0, 0, 0, 90), round);
+			cdraw->AddRectFilled(p0, p1, look::U32(hovered || focused ? look::CardHover : look::Card, alpha), round);
+			cdraw->AddRect(p0, p1, (hovered || focused) ? look::U32(look::Gold, 0.85f) : look::U32(look::Line, alpha), round, 0,
+			               (hovered || focused) ? 2 * ui : 1 * ui);
+			// the art, on black, fitted
+			ImVec2 a0{p0.x + inner, p0.y + inner}, a1{p1.x - inner, p0.y + inner + imgH};
+			cdraw->AddRectFilled(a0, a1, IM_COL32(6, 7, 10, static_cast<int>(255 * alpha)), round - 4 * ui);
+			if (t.Texture)
+			{
+				int tw, th;
+				SDL_QueryTexture(t.Texture, nullptr, nullptr, &tw, &th);
+				float fit = std::min((a1.x - a0.x) / tw, (a1.y - a0.y) / th);
+				ImVec2 size{tw * fit, th * fit};
+				ImVec2 i0{(a0.x + a1.x - size.x) / 2, (a0.y + a1.y - size.y) / 2};
+				cdraw->AddImageRounded(t.Texture, i0, {i0.x + size.x, i0.y + size.y}, {0, 0}, {1, 1},
+				                       IM_COL32(255, 255, 255, static_cast<int>(255 * alpha)), round - 4 * ui);
+			}
+			else
+			{
+				// no picture: the name on a plate
+				ImGui::PushFont(look::Title);
+				auto ts = ImGui::CalcTextSize(t.Name.c_str(), nullptr, false, a1.x - a0.x - 20 * ui);
+				cdraw->AddText(look::Title, look::Title->FontSize,
+				               {(a0.x + a1.x - ts.x) / 2, (a0.y + a1.y - ts.y) / 2}, look::U32(look::Gold, alpha * 0.9f),
+				               t.Name.c_str(), nullptr, a1.x - a0.x - 20 * ui);
+				ImGui::PopFont();
+			}
+			if (hovered || focused)
+			{
+				// a play badge on the art
+				float r = std::min(28 * ui, imgH * 0.16f);
+				ImVec2 c{(a0.x + a1.x) / 2, (a0.y + a1.y) / 2};
+				cdraw->AddCircleFilled(c, r, look::U32(look::Gold, 0.92f), 32);
+				cdraw->AddTriangleFilled({c.x - r * 0.32f, c.y - r * 0.45f}, {c.x - r * 0.32f, c.y + r * 0.45f},
+				                         {c.x + r * 0.52f, c.y}, IM_COL32(25, 20, 10, 255));
+			}
+			// the words
+			float x = p0.x + inner + 2 * ui, y = a1.y + inner, textW = cardW - inner * 2 - 4 * ui;
+			auto clipText = [&](ImFont* font, ImVec2 pos, ImU32 color, const std::string& text)
+			{
+				cdraw->PushClipRect(pos, {pos.x + textW, pos.y + font->FontSize * 2.2f}, true);
+				cdraw->AddText(font, font->FontSize, pos, color, text.c_str());
+				cdraw->PopClipRect();
+			};
+			clipText(look::Bold, {x, y}, look::U32(look::Text, alpha), t.Name);
+			y += lineBold + 4 * ui;
+			clipText(look::Small, {x, y}, look::U32(look::Muted, alpha), t.Game);
+			if (t.HighScore > 0)
+			{
+				std::string hs = WithCommas(t.HighScore);
+				auto hw = look::Small->CalcTextSizeA(look::Small->FontSize, FLT_MAX, 0, hs.c_str()).x;
+				if (hw < textW * 0.45f)
+					cdraw->AddText(look::Small, look::Small->FontSize, {p1.x - inner - 2 * ui - hw, y},
+					               look::U32(look::Gold, alpha), hs.c_str());
+			}
+			y += lineSmall + 8 * ui;
+			{
+				// the status: a dot and a word, the detail after it
+				std::string label = t.Status, detail;
+				ImVec4 color = look::Amber;
+				if (!t.DataFound)
+				{
+					label = "Missing";
+					detail = t.Data;
+					color = look::Red;
+				}
+				else
+				{
+					auto dash = label.find(" - ");
+					if (dash != std::string::npos)
+					{
+						detail = label.substr(dash + 3);
+						label = label.substr(0, dash);
+					}
+					if (label.rfind("Playable", 0) == 0)
+						color = look::Green;
+				}
+				float r = lineSmall * 0.2f;
+				cdraw->AddCircleFilled({x + r, y + lineSmall * 0.55f}, r, look::U32(color, alpha));
+				float lx = x + r * 2 + 6 * ui;
+				cdraw->AddText(look::Small, lineSmall, {lx, y}, look::U32(color, alpha), label.c_str());
+				if (!detail.empty())
+				{
+					float dx = lx + look::Small->CalcTextSizeA(lineSmall, FLT_MAX, 0, (label + "  ").c_str()).x;
+					cdraw->PushClipRect({x, y}, {x + textW, y + lineSmall * 2.2f}, true);
+					auto detailW = look::Small->CalcTextSizeA(lineSmall, FLT_MAX, 0, detail.c_str()).x;
+					if (dx + detailW <= x + textW)
+						cdraw->AddText(look::Small, lineSmall, {dx, y}, look::U32(look::Muted, alpha), detail.c_str());
+					else
+						cdraw->AddText(look::Small, lineSmall, {lx, y + lineSmall}, look::U32(look::Muted, alpha),
+						               detail.c_str(), nullptr, textW - (lx - x));
+					cdraw->PopClipRect();
+				}
+			}
+			if (hovered && !ImGui::IsPopupOpen("card menu"))
+			{
+				if (t.HighScore > 0)
+					ImGui::SetTooltip("Click to play. Right-click to move or hide.\nHigh score %s %s",
+					                  WithCommas(t.HighScore).c_str(), t.HighScoreName.c_str());
+				else
+					ImGui::SetTooltip("Click to play. Right-click to move or hide.");
+			}
 			if (clicked)
 			{
 				int wx, wy, ww, wh;
@@ -1376,27 +1774,15 @@ int main(int, char**)
 				if (message.empty())
 					SDL_HideWindow(window); // one window: the table takes this spot until it closes
 			}
-			ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardW);
-			ImGui::Text("%s", t.Name.c_str());
-			if (t.HighScore > 0)
-				ImGui::TextDisabled("%s  -  High score %s %s", t.Game.c_str(), WithCommas(t.HighScore).c_str(),
-				                    t.HighScoreName.c_str());
-			else
-				ImGui::TextDisabled("%s", t.Game.c_str());
-			if (!t.DataFound)
-				ImGui::TextColored({1, 0.45f, 0.4f, 1}, "Missing %s", t.Data.c_str());
-			else if (t.Status.rfind("Playable", 0) == 0)
-				ImGui::TextColored({0.55f, 0.85f, 0.55f, 1}, "%s", t.Status.c_str());
-			else
-				ImGui::TextColored({0.95f, 0.75f, 0.35f, 1}, "%s", t.Status.c_str());
-			ImGui::PopTextWrapPos();
-			if (t.Hidden)
-				ImGui::PopStyleVar();
 			ImGui::PopID();
-			ImGui::EndGroup();
+		}
+		// room below the last row so a scrolled library ends cleanly
+		if (gridH > availH)
+		{
+			ImGui::SetCursorPos({0, vtop + gridH + 8 * ui});
+			ImGui::Dummy({1, 1});
 		}
 		ImGui::EndChild();
-		float footerTop = ImGui::GetCursorPosY();
 		if (action != CardAction::None)
 		{
 			// apply after drawing; positions are among the cards on screen
@@ -1405,7 +1791,7 @@ int main(int, char**)
 			{
 				auto t = std::move(tables[from]);
 				tables.erase(tables.begin() + static_cast<long>(from));
-				tables.insert(tables.begin() + static_cast<long>(to > from ? to : to), std::move(t));
+				tables.insert(tables.begin() + static_cast<long>(to), std::move(t));
 			};
 			switch (action)
 			{
@@ -1420,128 +1806,61 @@ int main(int, char**)
 			SaveLibraryPrefs(tablesDir, tables);
 		}
 
-		ImGui::Spacing();
-		ImGui::Separator();
-		// Adding tables: these used to sit under the title; the library itself comes first now
-		if (ImGui::Button("Open \"Put game files here\" folder"))
-			OpenFolder(dropDir);
-		SameLineIfFits(ButtonWidth("Scan for new game files"));
-		if (ImGui::Button("Scan for new game files"))
-			scan();
-		SameLineIfFits(ButtonWidth("Compile Epic Pinball tables"));
+		// ---- Footer: the keys, the version -------------------------------------------------------------------
+		float footerY = h - footerH;
+		draw->AddRectFilled({0, footerY}, {static_cast<float>(w), static_cast<float>(h)}, look::U32(look::Panel));
+		draw->AddLine({0, footerY}, {static_cast<float>(w), footerY}, look::U32(look::Line));
+		ImGui::PushFont(look::Small);
+		float ty = footerY + (footerH - ImGui::GetTextLineHeight()) / 2;
+		ImGui::SetCursorPos({pad, ty});
 		{
-			bool busy = epicbuild::running;
-			if (busy)
-				ImGui::BeginDisabled();
-			bool buildingEpic = busy && epicbuild::job == epicbuild::Job::Build && epicbuild::game == &epicbuild::Epic;
-			if (ImGui::Button(buildingEpic ? "Compiling Epic Pinball..." : "Compile Epic Pinball tables"))
+			// the keys as little caps
+			struct Key { const char* key; const char* what; };
+			static const Key keys[] = {{"Space", "plunger"}, {"Z  /", "flippers"}, {"F2", "new game"}, {"F3", "pause"},
+			                           {"F4", "fullscreen"}, {"F12", "back here"}};
+			float limit = w * 0.62f;
+			for (auto& k : keys)
 			{
-				auto err = epicbuild::Start(basePath, tablesDir / "EpicPinball");
-				if (!err.empty())
-					epicbuild::status = err;
+				auto kw = ImGui::CalcTextSize(k.key).x, ww = ImGui::CalcTextSize(k.what).x;
+				if (ImGui::GetCursorPosX() + kw + ww + 30 * ui > limit)
+					break;
+				auto p = ImGui::GetCursorScreenPos();
+				draw->AddRectFilled({p.x - 5 * ui, p.y - 2 * ui}, {p.x + kw + 5 * ui, p.y + ImGui::GetTextLineHeight() + 2 * ui},
+				                    look::U32(look::Card), 4 * ui);
+				draw->AddRect({p.x - 5 * ui, p.y - 2 * ui}, {p.x + kw + 5 * ui, p.y + ImGui::GetTextLineHeight() + 2 * ui},
+				              look::U32(look::Line), 4 * ui);
+				ImGui::TextUnformatted(k.key);
+				ImGui::SameLine(0, 10 * ui);
+				ImGui::TextDisabled("%s", k.what);
+				ImGui::SameLine(0, 18 * ui);
 			}
-			if (busy)
-				ImGui::EndDisabled();
-			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-				ImGui::SetTooltip("Builds EpicPinball from your own Epic Pinball files (needs Python 3 and a C compiler).\n"
-				                  "It takes a few minutes; nothing from the game is uploaded or shared.");
-			std::error_code uec;
-			if (fs::exists(tablesDir / UltraPinballFolder / "table.ini", uec))
-			{
-				// only once 3-D Ultra Pinball has been imported
-				SameLineIfFits(ButtonWidth("Compile 3-D Ultra Pinball"));
-				if (busy)
-					ImGui::BeginDisabled();
-				bool buildingUltra = busy && epicbuild::job == epicbuild::Job::Build && epicbuild::game == &epicbuild::Sierra;
-				if (ImGui::Button(buildingUltra ? "Compiling 3-D Ultra Pinball..." : "Compile 3-D Ultra Pinball"))
-				{
-					auto err = epicbuild::Start(basePath, tablesDir / UltraPinballFolder, epicbuild::Sierra);
-					if (!err.empty())
-						epicbuild::status = err;
-				}
-				if (busy)
-					ImGui::EndDisabled();
-				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-					ImGui::SetTooltip("Builds UltraPinball from your own 3-D Ultra Pinball files (needs Python 3 and a C\n"
-					                  "compiler; \"Install build tools\" sets them up). Takes a minute or two; nothing from\n"
-					                  "the game is uploaded or shared.");
-			}
-			SameLineIfFits(ButtonWidth("Install build tools"));
-			if (busy)
-				ImGui::BeginDisabled();
-			if (ImGui::Button("Install build tools"))
-			{
-				auto err = epicbuild::StartInstall(basePath);
-				if (!err.empty())
-					epicbuild::status = err;
-			}
-			if (busy)
-				ImGui::EndDisabled();
-			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-				ImGui::SetTooltip("Installs what compiling Epic Pinball and 3-D Ultra Pinball needs, for your user only: Python 3, the GCC C\n"
-				                  "compiler (WinLibs) and the capstone module. Uses winget; takes a few minutes.");
+			ImGui::TextDisabled("(?)");
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("Full Tilt tables: F2 new game, Space plunger, Z and / or Shift flippers, F3 pause, F4 fullscreen,\n"
+				                  "F12 back here.\n"
+				                  "Epic Pinball: F11 whole table or original scrolling view, Alt+Enter fullscreen, F12 back here.\n"
+				                  "3-D Ultra Pinball: the game's own keys and mouse menus, Alt+Enter fullscreen, F12 back here.\n"
+				                  "Problems? \"More\" > \"Report a problem\", or send the .log files.");
 		}
-		if (hiddenCount > 0 || showHidden)
-		{
-			char label[64];
-			std::snprintf(label, sizeof label, "Show hidden tables (%d)", hiddenCount);
-			SameLineIfFits(ImGui::CalcTextSize(label).x + ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x);
-			ImGui::Checkbox(label, &showHidden);
-		}
-		{
-			// Keep the hint on the button row only when it fits
-			const char* hint = "Drop game folders in, they get sorted. Right-click a table to move or hide it.";
-			ImGui::SameLine();
-			if (ImGui::GetContentRegionAvail().x < ImGui::CalcTextSize(hint).x)
-				ImGui::NewLine();
-			ImGui::TextDisabled("%s", hint);
-		}
-		if (epicbuild::running)
-		{
-			// progress bar for recompiling and compiling Epic Pinball or 3-D Ultra Pinball
-			char label[160];
-			std::snprintf(label, sizeof label, "%d%%  %s", static_cast<int>(epicbuild::fraction * 100 + 0.5f),
-			              epicbuild::step.c_str());
-			ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.95f, 0.70f, 0.20f, 1));
-			ImGui::ProgressBar(epicbuild::fraction, ImVec2(-1, 0), label);
-			ImGui::PopStyleColor();
-		}
-		else if (!epicbuild::status.empty())
-		{
-			bool bad = epicbuild::status.find("failed") != std::string::npos || epicbuild::status.find("needed") != std::string::npos ||
-				epicbuild::status.rfind("No ", 0) == 0 || epicbuild::status.rfind("Could not", 0) == 0 ||
-				epicbuild::status.find("missing") != std::string::npos;
-			ImGui::PushTextWrapPos(0);
-			ImGui::TextColored(bad ? ImVec4(1, 0.45f, 0.4f, 1) : ImVec4(0.55f, 0.85f, 0.55f, 1), "%s", epicbuild::status.c_str());
-			ImGui::PopTextWrapPos();
-		}
-		ImGui::Separator();
-		ImGui::TextDisabled("F2 new game  Space plunger  Z / or Shift flippers  F3 pause  F4 fullscreen  F12 back here");
-		ImGui::TextDisabled("Epic Pinball: F11 whole table or original scrolling view, Alt+Enter fullscreen, F12 back here");
-		ImGui::TextDisabled("3-D Ultra Pinball: the game's own keys and mouse menus, Alt+Enter fullscreen, F12 back here");
 		{
 			auto update = updater::Get();
-			ImGui::TextDisabled("Version %s", updater::CurrentVersion);
-			ImGui::SameLine();
-			if (update.state != updater::State::Checking && update.state != updater::State::Downloading &&
-				update.state != updater::State::Installing && ImGui::SmallButton("Check for updates"))
-				updater::CheckAsync();
+			std::string right = std::string("Version ") + updater::CurrentVersion;
+			ImVec4 color = look::Muted;
 			if (!update.message.empty() && update.state != updater::State::Available)
 			{
-				ImGui::SameLine();
+				right = update.message + "   \xC2\xB7   " + right;
 				if (update.state == updater::State::Failed)
-					ImGui::TextColored({1, 0.45f, 0.4f, 1}, "%s", update.message.c_str());
-				else
-					ImGui::TextDisabled("%s", update.message.c_str());
+					color = look::Red;
 			}
-			ImGui::SameLine();
-			ImGui::TextDisabled("| Problems? Send the .log files");
+			float rw = ImGui::CalcTextSize(right.c_str()).x;
+			ImGui::SetCursorPos({std::max(w * 0.62f, w - pad - rw), ty});
+			ImGui::TextColored(color, "%s", right.c_str());
 		}
-		measuredFooterH = ImGui::GetCursorPosY() - footerTop;
+		ImGui::PopFont();
 		ImGui::End();
 
 		ImGui::Render();
-		SDL_SetRenderDrawColor(renderer, 18, 18, 24, 255);
+		SDL_SetRenderDrawColor(renderer, 17, 20, 28, 255);
 		SDL_RenderClear(renderer);
 		ImGui_ImplSDLRenderer_RenderDrawData(ImGui::GetDrawData());
 		SDL_RenderPresent(renderer);
