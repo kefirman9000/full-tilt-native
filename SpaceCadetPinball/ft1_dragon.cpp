@@ -170,6 +170,7 @@ DK_TAG(TSound, tabc55wave)
 DK_TAG(TLight, v_lite14)
 DK_TAG(TLightGroup, well_light_group)
 DK_TAG(TSink, a_sink19)
+DK_TAG(TSound, tabc61wave)
 DK_TAG(TSound, tabc32wave)
 DK_TAG(TSound, tabc33wave)
 DK_TAG(TLight, v_lite57)
@@ -1378,7 +1379,7 @@ DK_TAG(TSound, tabc58wave)
 	const MessageCode FT1Event82 = static_cast<MessageCode>(2082); // a quest is over
 	// FT1 code 86 from a ramp: the ramp made. TODO(86): here TRamp's ControlCollision is passed on as 86
 	const MessageCode FT1Code86 = MessageCode::Ft1RampExit3; // FT1 86: a ramp made (TRamp::Ft1Events)
-	const MessageCode FT1LightSweepStart = static_cast<MessageCode>(27); // FT1 27 to light_sweeps (type 1038)
+	const MessageCode FT1LightSweepStart = MessageCode::Ft1LightSweepStart; // FT1 27 to light_sweeps (type 1038)
 
 	// 1:1dcb (sprintf) of a table text with one number
 	std::string Format(int textId, long long value)
@@ -2347,12 +2348,155 @@ DK_TAG(TSound, tabc58wave)
 		}
 	}
 
+	// 23:b47c - state 13, multiball (text 3051): the tower's diverters set, the windows flash, three more balls out of
+	// sinks 18, 17 and 16 (1, 2, 3 s, their lights 48-50 flash), v_lite78 flashes. When the last ball but one drains
+	// it ends: the windows off, v_lite78 on, normal play (state 2), the diverters back unless a quest uses them
+	void Mission13(MessageCode code, TPinballComponent*)
+	{
+		auto t = control::TableG;
+		if (code == FT1Event79)
+		{
+			ResetTowerAndLetters();
+			Send(v_lite47, MessageCode::TLightResetAndTurnOn, 0.0f);
+			Send(a_dvtraa, MessageCode::TGateDisable, 0.0f);
+			Send(a_dvtrab, MessageCode::TGateEnable, 0.0f);
+			Send(a_dvtrba, MessageCode::TGateEnable, 0.0f);
+			Send(a_dvtrbb, MessageCode::TGateDisable, 0.0f);
+			Send(a_dvtrca, MessageCode::TGateEnable, 0.0f);
+			Send(a_dvtrcb, MessageCode::TGateDisable, 0.0f);
+			Send(v_lite125, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			Send(v_lite126, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(a_dvtrda, MessageCode::TGateDisable, 0.0f);
+			Send(a_dvtrdb, MessageCode::TGateEnable, 0.0f);
+			Send(prison_window_light_group, MessageCode::TLightFlasherStartTimed, -1.0f);
+			Send(watch_window_light_group, MessageCode::TLightFlasherStartTimed, -1.0f);
+			Send(gate_window_light_group, MessageCode::TLightFlasherStartTimed, -1.0f);
+			t->MultiballCount += 3; // +0x146
+			Send(a_sink18, MessageCode::TSinkResetTimer, 1.0f);
+			Send(v_lite48, MessageCode::TLightFlasherStartTimedThenStayOff, 1.0f);
+			Send(a_sink17, MessageCode::TSinkResetTimer, 2.0f);
+			Send(v_lite49, MessageCode::TLightFlasherStartTimedThenStayOff, 2.0f);
+			Send(a_sink16, MessageCode::TSinkResetTimer, 3.0f);
+			Send(v_lite50, MessageCode::TLightFlasherStartTimedThenStayOff, 3.0f);
+			Send(v_lite78, MessageCode::TLightFlasherStartTimed, -1.0f);
+			InfoClear();
+		}
+		if (code == FT1Event79 || code == FT1Event80)
+		{
+			Display(ft1_strings::Get(3051), -1.0f, 0);
+			return;
+		}
+		if (code == FT1Event83 && t->MultiballCount == 1)
+		{
+			ClearLettersAndLocks();
+			Send(prison_window_light_group, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(watch_window_light_group, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(gate_window_light_group, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(v_lite78, MessageCode::TLightResetAndTurnOn, 0.0f);
+			SetInfoField(2);
+			MissionEvent(FT1Event79, nullptr);
+			if (!(InfoField() == 6 || InfoField() == 13))
+			{
+				Send(v_lite47, MessageCode::TLightResetAndTurnOff, 0.0f);
+				Send(a_dvtraa, MessageCode::TGateEnable, 0.0f);
+				Send(a_dvtrab, MessageCode::TGateDisable, 0.0f);
+			}
+			if (InfoField() == 6 || InfoField() == 13)
+				return;
+			Send(v_lite125, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(v_lite126, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			Send(a_dvtrda, MessageCode::TGateEnable, 0.0f);
+			Send(a_dvtrdb, MessageCode::TGateDisable, 0.0f);
+		}
+	}
+
+	// 23:b89a - state 14, two-ball multiball (text 3062, music tabc1): one more ball out of sink 1 and the ball in
+	// a_kout2 (unless it went to s_hole118), lights 65/66 flash; it ends when one ball is left
+	void Mission14(MessageCode code, TPinballComponent*)
+	{
+		auto t = control::TableG;
+		if (code == FT1Event79)
+		{
+			ResetTowerAndLetters();
+			t->MultiballCount++;
+			Send(a_sink1, MessageCode::TSinkResetTimer, -1.0f);
+			if (!g_2270)
+				Send(a_kout2, MessageCode::TKickoutRestartTimer, -1.0f); // FT1 64
+			Send(v_lite66, MessageCode::TLightFlasherStartTimed, 1.0f);
+			Send(v_lite65, MessageCode::TLightFlasherStartTimed, 1.0f);
+			ScorePoints(nullptr, 100000);
+			Send(v_lite77, MessageCode::TLightFlasherStartTimedThenStayOn, -1.0f);
+			InfoClear();
+			Play(tabc48wave);
+			PlayMusic(MusicTrack1);
+		}
+		if (code == FT1Event79 || code == FT1Event80)
+		{
+			Display(ft1_strings::Get(3062), -1.0f, 0);
+			return;
+		}
+		if (code == FT1Event83 && t->MultiballCount == 1)
+		{
+			ClearLettersAndLocks();
+			Send(v_lite77, MessageCode::TLightResetAndTurnOn, 0.0f);
+			SetInfoField(2);
+			MissionEvent(FT1Event79, nullptr);
+			Send(v_lite63, MessageCode::TLightResetAndTurnOff, 0.0f);
+			Send(v_lite64, MessageCode::TLightResetAndTurnOff, 0.0f);
+		}
+	}
+
+	// 23:ba66 - state 15, all six gems: five-ball multiball (text 3063, wave tabc61): balls out of the plunger (unless
+	// one went to s_hole118), sinks 1, 2, 4 and 18; the gems flash; it ends when one ball is left
+	void Mission15(MessageCode code, TPinballComponent*)
+	{
+		auto t = control::TableG;
+		component_tag<TLight>* gems[] = {&v_lite22, &v_lite23, &v_lite24, &v_lite25, &v_lite26, &v_lite27};
+		if (code == FT1Event79)
+		{
+			ResetTowerAndLetters();
+			t->MultiballCount += 4;
+			if (g_2270)
+			{
+				t->MultiballCount--;
+				Send(s_plunger1, MessageCode::PlungerRelaunchBall, 0.96f); // FT1 1019
+			}
+			Send(a_sink1, MessageCode::TSinkResetTimer, -1.0f);
+			Send(v_lite66, MessageCode::TLightFlasherStartTimed, 1.0f);
+			Send(a_sink2, MessageCode::TSinkResetTimer, -1.0f);
+			Send(v_lite65, MessageCode::TLightFlasherStartTimed, 1.0f);
+			Send(a_sink4, MessageCode::TSinkResetTimer, 1.0f);
+			Send(well_light_group, MessageCode::TLightFlasherStartTimed, 1.0f);
+			Send(a_sink18, MessageCode::TSinkResetTimer, 1.0f);
+			Send(v_lite48, MessageCode::TLightFlasherStartTimedThenStayOff, 1.0f);
+			Send(dragon_letter_light_group, FT1LightResetOverride, 0.0f);
+			for (auto gem : gems)
+				Send(*gem, MessageCode::TLightTurnOn, 0.0f);
+			for (auto gem : gems)
+				Send(*gem, MessageCode::TLightFlasherStartTimed, -1.0f);
+			Send(v_lite79, MessageCode::TLightFlasherStartTimedThenStayOn, -1.0f);
+			InfoClear();
+			Play(tabc61wave);
+		}
+		if (code == FT1Event79 || code == FT1Event80)
+		{
+			Display(ft1_strings::Get(3063), -1.0f, 0);
+			return;
+		}
+		if (code == FT1Event83 && t->MultiballCount == 1)
+		{
+			ClearLettersAndLocks();
+			Send(v_lite79, MessageCode::TLightResetAndTurnOn, 0.0f);
+			for (auto gem : gems)
+				Send(*gem, MessageCode::TLightResetAndTurnOff, 0.0f);
+			SetInfoField(2);
+			MissionEvent(FT1Event79, nullptr);
+		}
+	}
+
 	// ---- mission handlers not translated yet ----
 	void Mission0(MessageCode, TPinballComponent*) {}
 	void Mission11(MessageCode, TPinballComponent*) {}
-	void Mission13(MessageCode, TPinballComponent*) {}
-	void Mission14(MessageCode, TPinballComponent*) {}
-	void Mission15(MessageCode, TPinballComponent*) {}
 	void MissionOther(MessageCode, TPinballComponent*) {}
 
 	// ---- rule functions not translated yet (their components do nothing yet) ----

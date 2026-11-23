@@ -190,6 +190,8 @@ set(SOURCE_FILES
         SpaceCadetPinball/TTextBoxMessage.cpp
         SpaceCadetPinball/TTextBoxMessage.h
         SpaceCadetPinball/TTimer.cpp
+        SpaceCadetPinball/TLightSweeps.cpp
+        SpaceCadetPinball/TLightSweeps.h
         SpaceCadetPinball/TTimer.h
         SpaceCadetPinball/TTripwire.cpp
         SpaceCadetPinball/TTripwire.h

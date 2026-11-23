@@ -27,6 +27,7 @@
 #include "TLight.h"
 #include "TLightBargraph.h"
 #include "TLightGroup.h"
+#include "TLightSweeps.h"
 #include "TLightRollover.h"
 #include "TOneway.h"
 #include "TPopupTarget.h"
@@ -193,6 +194,10 @@ TPinballTable::TPinballTable(): TPinballComponent(nullptr, -1, false)
 			case 1036:
 				if (pb::FT2Table)
 					new TWall(this, groupIndex); // accelerator: a wall with a kick
+				break;
+			case 1038:
+				if (pb::FT2Table && !pb::FT2FullScreen)
+					new TLightSweeps(this, groupIndex); // Full Tilt 1 light sweep
 				break;
 			case 1043:
 				if (pb::FT2Table)

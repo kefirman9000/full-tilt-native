@@ -89,6 +89,7 @@ enum class MessageCode
 	Ft1BlockerShowLast = 2059,    // FT1 59: straight to the last frame, with the raise sound
 	Ft1BlockerHide = 2060,        // FT1 60: straight to no frame, with the lower sound
 	Ft1BlockerTimer = 2069,       // FT1 69: tell the rules ControlTimerExpired (FT1 70) after `value` seconds
+	Ft1LightSweepStart = 2027,    // FT1 27 to light_sweeps (TLightSweeps): run sweep `value`
 	Ft1BlockerArrived = 2061,
 	Ft1HoleRelease = 2067,
 	Ft1RampEnter = 2084,          // FT1 84 to the rules: the ball came onto a ramp
