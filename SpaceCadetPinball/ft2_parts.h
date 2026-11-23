@@ -18,6 +18,12 @@ public:
 private:
 	int TargetGroup = 1;
 	float BallOffset = 0;
+	// Full Tilt 1 (16:02fa / 16:0650): two lines, one per layer. A ball on layer 1301[0] crossing the first moves to
+	// layer 1301[1] (the rules hear 86), one on 1301[1] crossing the second moves to 1301[0] (85)
+	bool Ft1 = false;
+	int Layer0 = 1, Layer1 = 1;
+	TLine* Line0 = nullptr;
+	void push_out_of_walls(TBall* ball);
 };
 
 class TFT2Diverter : public TCollisionComponent

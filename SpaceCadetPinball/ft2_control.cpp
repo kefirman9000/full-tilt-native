@@ -16,6 +16,9 @@
 #include "TLightGroup.h"
 #include "translations.h"
 #include "TBumper.h"
+#include "TCollisionComponent.h"
+#include "TLine.h"
+#include "TCircle.h"
 #include "zdrv.h"
 #include "render.h"
 #include "TDrain.h"
@@ -2083,6 +2086,48 @@ void ft2_control::table_handler(MessageCode code)
 	}
 }
 
+// No wall, ramp edge or line of the ball's layer within 8 ball radii (checked every few frames)
+static bool stray_on_layer(TPinballTable* t, TBall* ball)
+{
+	static int frame = 0;
+	if (++frame % 4)
+		return false;
+	auto reach = ball->Radius * 8.0f;
+	auto reach2 = reach * reach;
+	auto& p = ball->Position;
+	for (auto part : t->ComponentList)
+	{
+		auto comp = dynamic_cast<TCollisionComponent*>(part);
+		if (!comp)
+			continue;
+		for (auto edge : comp->EdgeList)
+		{
+			if (!(edge->CollisionGroup & ball->CollisionMask))
+				continue;
+			auto line = dynamic_cast<TLine*>(edge);
+			if (!line)
+			{
+				if (auto circle = dynamic_cast<TCircle*>(edge))
+				{
+					auto cx = circle->Circle.Center.X - p.X, cy = circle->Circle.Center.Y - p.Y;
+					auto r = std::sqrt(circle->Circle.RadiusSq) + reach;
+					if (cx * cx + cy * cy < r * r)
+						return false;
+				}
+				continue;
+			}
+			auto dx = line->X1 - line->X0, dy = line->Y1 - line->Y0;
+			auto len2 = dx * dx + dy * dy;
+			auto u = len2 > 0.0f ? ((p.X - line->X0) * dx + (p.Y - line->Y0) * dy) / len2 : 0.0f;
+			u = std::max(0.0f, std::min(1.0f, u));
+			auto ex = line->X0 + u * dx - p.X, ey = line->Y0 + u * dy - p.Y;
+			if (ex * ex + ey * ey < reach2)
+				return false;
+		}
+	}
+	return true;
+}
+
 void ft2_control::check_escaped_balls()
 {
 	auto t = pb::MainTable;
@@ -2106,6 +2151,18 @@ void ft2_control::check_escaped_balls()
 	{
 		if (!ball->ActiveFlag || ball->CollisionComp)
 			continue;
+		if (ball->CollisionMask != 1 && !ball->CollisionFlag && stray_on_layer(t, ball))
+		{
+			// A ball on a raised layer (an upper playfield, a habitrail) with none of that layer's walls anywhere
+			// near has slipped out of it (through a corner or past an exit line at speed) and would roll off the
+			// table: it drops to the main playfield where it is
+			ftlog::Line("Ball off its layer at " + std::to_string(ball->Position.X) + ", " +
+			            std::to_string(ball->Position.Y) + " (layer mask " + std::to_string(ball->CollisionMask) +
+			            "): dropped to the playfield");
+			ball->CollisionMask = 1;
+			ball->Position.Z = ball->Radius;
+			continue;
+		}
 		auto margin = ball->Radius * 4.0f;
 		auto& p = ball->Position;
 		bool outside = p.X < layer->XMin - margin || p.X > layer->XMax + margin ||

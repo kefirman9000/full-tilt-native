@@ -46,8 +46,10 @@ TKickout::TKickout(TPinballTable* table, int groupIndex, bool someFlag): TCollis
 
 	Circle.RadiusSq = visual.FloatArr[2] * visual.FloatArr[2];
 	auto zAttr = loader::query_float_attribute(groupIndex, 0, 408);
-	// FT2: some kickouts have no attribute 408 at all; default the ball Z to 0
+	// FT2: some kickouts have no attribute 408 at all (Captain Hero's magnet pockets s_kout06..10 in the open
+	// playfield): they hold the ball where it rolls, so it stays in sight instead of sinking under the playfield
 	CollisionBallSetZ = !zAttr ? 0.0f : (pb::FullTiltMode && !pb::FullTiltDemoMode ? zAttr[3] : zAttr[2]);
+	KeepBallZ = !zAttr;
 	ThrowSpeedMult2 = visual.Kicker.ThrowBallMult * 0.01f;
 	BallThrowDirection = visual.Kicker.ThrowBallDirection;
 	ThrowAngleMult = visual.Kicker.ThrowBallAngleMult;
@@ -129,7 +131,8 @@ void TKickout::Collision(TBall* ball, vector2* nextPosition, vector2* direction,
 		ball->Position.X = Circle.Center.X;
 		ball->Position.Y = Circle.Center.Y;
 		OriginalBallZ = ball->Position.Z;
-		ball->Position.Z = CollisionBallSetZ;
+		if (!KeepBallZ)
+			ball->Position.Z = CollisionBallSetZ;
 		ball->CollisionDisabledFlag = true;
 		if (pb::DevDebug)
 			printf("FT2DBG kickout %s captured ball (tick %d)\n", GroupName ? GroupName : "?", pb::time_ticks);

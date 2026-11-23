@@ -26,6 +26,7 @@ public:
 	float FieldMult;
 	circle_type Circle{};
 	float OriginalBallZ{};
+	bool KeepBallZ{}; // no ball height (attribute 408): the ball stays where it is, on the surface
 	vector3 BallThrowDirection{};
 	float ThrowAngleMult;
 	float ThrowSpeedMult1;

@@ -50,6 +50,8 @@ TBlocker::TBlocker(TPinballTable* table, int groupIndex) : TCollisionComponent(t
 		}
 		if (auto initial = loader::query_float_attribute(groupIndex, 0, 409))
 			InitialFrame = static_cast<int>(std::lround(initial[0]));
+		if (pb::DevDebug && getenv("FT1_BLOCKER_DOWN") && GroupName && !strcmp(GroupName, getenv("FT1_BLOCKER_DOWN")))
+			InitialFrame = -1; // development: start with this blocker out of the way (for test shots)
 		ActiveFlag = 1; // the frames' own flags decide which wall is there
 		Ft1SetPosition(InitialFrame);
 		if (pb::DevDebug)
