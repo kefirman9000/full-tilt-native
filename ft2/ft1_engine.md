@@ -74,8 +74,25 @@ is SpecialAddScore, 0x0657 the rules' message handler (the mission system 0xc5d6
 dispatches to about fifteen quest handlers (0x7da7 ... 0xc5a9, the largest 0x9fae, 3,767 bytes). The translation is in
 `SpaceCadetPinball/ft1_dragon.cpp`, off unless FT2_DEBUG=1 and FT1_DRAGON_FULL=1.
 
-Translated so far (21 of 126): 0657, 06cf, 072c, 0778, 0824, 08a4, 0933, 09e5, 0bdf, 0db4, 0ef0, 0fdd, 107a, 1151,
-1187, 151e, 197e, 1c81, 1eda (partly: MessageField holds a sink pointer in the original), 1f2c, 21c5.
+Translated: every rule function (all 75 rule table entries, linked by 0595's table at ds:2a34), every quest handler
+(states 0-15 and the rest) and the helpers they call. Still open: 0115 / 0000 / 00db (the info box's own messages and
+timed texts), 7afe (cheat keys), the info box's queue flag (+0x4e), the picture font, 1eda's sink pointer, and 15:1a68
+(a blocker waits for a ball in its way).
+
+## Light sweeps (type 1038, 10:3324 / 10:3979)
+light_sweeps puts the table's lights (the table's light group, attribute 501 = position) in a 15 x 25 grid over the
+table layer's bounds. 27 with value n reads sweep n's state: 1602 step time (default 0.1), 1604 light time (default the
+step), 1600 centre, 1601 outward, 1603 passes (default 1). Each step (10:3880) draws a ring around the centre (10:31be,
+a midpoint circle) and lights each light on it with 24 (temporary override) for the light time; the radius shrinks from
+the farthest corner (or grows from 0 when outward); after the last pass the rules hear 70. Implemented in TLightSweeps.
+
+## Holes and ramps
+The FT1 hole (15:6905) keeps its ball: capture tells the rules 66 (15:667b); 67 with a value lets it go after that
+many seconds (at once when <= 0), as does tilt. This engine: THole::Ft1Hold, Ft1HoleRelease (2067); the translation
+maps ControlBallCaptured from a hole to 66 and reads ControlBallReleased as 68.
+The FT1 ramp (15:7f2c) tells the rules 84 when the ball comes onto it, 74 at line 1 (not when tilted), 85 when it
+leaves by line 2 and 86 by line 3 (the shot made). This engine: TRamp::Ft1Events, Ft1RampEnter / Ft1RampExit2 /
+Ft1RampExit3 (2084-2086).
 
 Light codes: the original light handler (10:04cc) takes 0-26; 24-26 are the temporary overrides this engine already
 has for Full Tilt's Space Cadet (TLightFtTmpOverrideOn/Off/ResetOverride).

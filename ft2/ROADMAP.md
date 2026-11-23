@@ -47,9 +47,11 @@
 - [x] Dragon's Keep / Skulduggery: real ball instead of the hidden smiley (second bitmap per resolution kept as alternate)
 - [x] Glow limited to lights; music on its own thread (no stall on toggle); upstream timer::kill(callback) bug fixed
 - [x] Marble Drop marbles as ball styles (tables/_MarbleDrop, imported by the launcher)
-- [ ] Port FT1 rule functions: all of Dragon's and Pirates' rules are in code segment 23 of their exes (function
-      offsets in the dumps). Next: disassemble seg 23 (16-bit x86), starting with the launcher (s_launcher1 23:4152,
-      lights v_lite569) and drain, then lights per target so tables light up during play.
+- [x] Dragon's Keep: every rule function and quest handler of DRAGON.EXE segment 23 translated
+      (SpaceCadetPinball/ft1_dragon.cpp, behind FT2_DEBUG=1 FT1_DRAGON_FULL=1 until it has been played through);
+      engine parts added for it: FT1 blockers, light sweeps (1038), holes that keep the ball, ramp events 84-86.
+- [ ] Dragon's Keep: the info box's own messages (0115) and timed texts (0000/00db), the picture font, then on by
+      default. Then Skulduggery (PIRATES.EXE) the same way.
 - [ ] Skulduggery's cannon (a_cannon, 4-frame blocker) and launcher have no rules yet; launcher has no art in the data.
 
 ## Status 2026-11-03 (Captain Hero rules, first pass)
