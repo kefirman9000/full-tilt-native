@@ -2679,6 +2679,213 @@ namespace
 		}
 	}
 
+	// 23:0df8 - the ball leaves the sink: in normal play from sink 8, else from sink 17, 15 or 14 at random
+	void SinkExit()
+	{
+		if (InfoField() == 2)
+		{
+			ReleaseSink8(-1.0f);
+			return;
+		}
+		component_tag_base* sinks[3] = {&a_sink17, &a_sink15, &a_sink14};
+		auto n = Rand15() * 3 / 0x8000;
+		Send(*sinks[n > 2 ? 2 : n], MessageCode::TSinkResetTimer, -1.0f); // FT1 65
+	}
+
+	// 23:1188 - the four lane sinks' lights (v_lite524's MessageField) all lit: they flash out, a coin
+	float LaneSinks(float time)
+	{
+		if ((Field(v_lite524) & 0xf) == 0xf)
+		{
+			Lights524(true);
+			time = AwardCoin(time);
+		}
+		return time;
+	}
+
+	// 23:2089 - drop targets 5-9 all down (a_drop5's MessageField all five)
+	void Drops5Down()
+	{
+		Field(a_drop5) = 0x1f;
+		for (auto drop : {&a_drop5, &a_drop6, &a_drop7, &a_drop8, &a_drop9})
+			Send(*drop, MessageCode::TPopupTargetDisable, 0.0f); // FT1 53
+	}
+
+	// The first score of a sink with its text (3002, 2 s)
+	void SinkScore(TPinballComponent* caller)
+	{
+		Display(Format(3002, ScoreHit(caller, 0)).c_str(), 2.0f, 0);
+	}
+
+	// 23:62f4 / 65a6 / 6873 - sinks 17, 15, 14 (multiball light v_mlite44 / 107 / 106, lane light v_lite524 / 525 /
+	// 526 with bit 1 / 2 / 4, their light v_lite519 / 520 / 521). State 11: the next treasure. State 8: the
+	// multiball shot flashing there: done, its lights, the jackpot (sink 17) or the next treasure, the next shot,
+	// sink 8 lets go; else the score. State 6: tabb11. State 5: the score, tabb70, the award (1248). Normal play:
+	// the score, the lane light and its bit, maybe a coin. The ball leaves (SinkExit) except for a multiball shot;
+	// their light flashes 2 s
+	void LaneSinkRule(MessageCode code, TPinballComponent* caller, component_tag<TLight>& multi,
+	                  component_tag<TLight>& lane, int bit, component_tag<TLight>& light, bool jackpot, bool lightFirst)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		switch (InfoField())
+		{
+		case 11:
+			TreasureAward(0.0f);
+			SinkExit();
+			break;
+		case 8:
+			if (multi.Component && multi.Component->FlasherOnFlag) // +0x3c
+			{
+				Send(multi, MessageCode::TLightResetAndTurnOn, 0.0f);
+				Send(lane, MessageCode::TLightResetAndTurnOff, 0.0f);
+				Send(light, MessageCode::TLightResetAndTurnOff, 0.0f);
+				if (jackpot)
+					CollectJackpot(0.0f);
+				else
+					TreasureAward(0.0f);
+				NextMultiShot();
+				ReleaseSink8(-1.0f);
+			}
+			else
+			{
+				SinkScore(caller);
+				Play(tabb11wave);
+				SinkExit();
+			}
+			break;
+		case 6:
+			SinkExit();
+			Play(tabb11wave);
+			break;
+		case 5:
+			ScoreHit(caller, 0);
+			Play(tabb70wave);
+			Award1248(0.0f);
+			SinkExit();
+			break;
+		case 2:
+			if (lightFirst)
+				Send(light, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			SinkScore(caller);
+			Send(lane, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			Field(v_lite524) |= bit;
+			LaneSinks(2.0f);
+			Play(tabb11wave);
+			SinkExit();
+			break;
+		default:
+			SinkScore(caller);
+			Play(tabb11wave);
+			SinkExit();
+			break;
+		}
+		Send(light, MessageCode::TLightFlasherStartTimed, 2.0f);
+	}
+
+	void Rule_62f4(MessageCode c, TPinballComponent* p)
+	{
+		LaneSinkRule(c, p, v_mlite44, v_lite524, 1, v_lite519, true, false);
+	}
+	void Rule_65a6(MessageCode c, TPinballComponent* p)
+	{
+		LaneSinkRule(c, p, v_mlite107, v_lite525, 2, v_lite520, false, true);
+	}
+	void Rule_6873(MessageCode c, TPinballComponent* p)
+	{
+		LaneSinkRule(c, p, v_mlite106, v_lite526, 4, v_lite521, false, true);
+	}
+
+	// 23:6b40 - a_sink4 (the treasure chest). State 11: the treasure's tally starts (g_651c 1), its lights out.
+	// State 9: tabb27, v_lite570 on, v_lite567 flashes, sink 8 lets go. State 4: drops 5-9 down, the jackpot (the
+	// fathoms' timer restarted), sink 8 lets go. Else: blocker f at 0, v_lite567 flashes on, blockers c, f, g away,
+	// sink 8 lets go; in normal play with v_lite568 lit an extra ball, else the score (text 3003); tabb27
+	void Rule_6b40(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		switch (InfoField())
+		{
+		case 11:
+			Send(v_mlite51, MessageCode::TLightResetAndTurnOn, 0.0f);
+			Lights({&v_lite4, &v_lite5, &v_lite6, &v_lite7, &v_lite8, &v_lite568, &v_lite567},
+			       MessageCode::TLightResetAndTurnOff, 0.0f);
+			g_651c = 1;
+			return;
+		case 9:
+			Play(tabb27wave);
+			Send(v_lite570, MessageCode::TLightResetAndTurnOn, 0.0f);
+			Send(v_lite567, MessageCode::TLightFlasherStartTimed, 1.0f);
+			ReleaseSink8(-1.0f);
+			return;
+		case 4:
+		{
+			Drops5Down();
+			g_651c++;
+			auto time = CollectJackpot(0.0f);
+			Send(fathom_light_group, MessageCode::TLightGroupRestartNotifyTimer, time); // FT1 47
+			ReleaseSink8(-1.0f);
+			return;
+		}
+		default:
+			break;
+		}
+		Send(a_blocf, MessageCode::Ft1BlockerSetPosition, 0.0f);
+		Send(v_lite567, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+		for (auto blocker : {&a_blocc, &a_blocf, &a_blocg})
+			Send(*blocker, MessageCode::Ft1BlockerSetPosition, -1.0f);
+		ReleaseSink8(-1.0f);
+		if (InfoField() == 2 && LightOn(v_lite568))
+		{
+			Send(v_lite568, MessageCode::TLightResetAndTurnOff, 0.0f);
+			ExtraBallAward(0.0f);
+		}
+		else
+			Display(Format(3003, ScoreHit(caller, 0)).c_str(), 2.0f, 0);
+		Play(tabb27wave);
+	}
+
+	// 23:6eef / 7061 - sinks 9 and 12 (the orbits' multiball shots). State 11: the next treasure. State 8: the shot
+	// flashing there (v_mlite110 / 104): done, its orbit lights out, the next treasure, the next shot, sink 8 lets
+	// go; else the score (3002), tabb11, the ball leaves. Else the sink goes off and the other one lets the ball go
+	void OrbitSinkRule(MessageCode code, TPinballComponent* caller, component_tag<TLight>& multi,
+	                   component_tag_base& orbit, component_tag_base& other)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		switch (InfoField())
+		{
+		case 11:
+			TreasureAward(0.0f);
+			SinkExit();
+			break;
+		case 8:
+			if (multi.Component && multi.Component->FlasherOnFlag)
+			{
+				Send(multi, MessageCode::TLightResetAndTurnOn, 0.0f);
+				Send(orbit, MessageCode::TLightResetAndTurnOff, 0.0f);
+				TreasureAward(0.0f);
+				NextMultiShot();
+				ReleaseSink8(-1.0f);
+			}
+			else
+			{
+				SinkScore(caller);
+				Play(tabb11wave);
+				SinkExit();
+			}
+			break;
+		default:
+			if (caller)
+				caller->ActiveFlag = 0;
+			Send(other, MessageCode::TSinkResetTimer, 0.0f);
+			break;
+		}
+	}
+
+	void Rule_6eef(MessageCode c, TPinballComponent* p) { OrbitSinkRule(c, p, v_mlite110, left_orbit_light_group, a_sink12); }
+	void Rule_7061(MessageCode c, TPinballComponent* p) { OrbitSinkRule(c, p, v_mlite104, right_orbit_light_group, a_sink9); }
+
 	void Rule_98d7(MessageCode, TPinballComponent*) {} // TODO(23:98d7): s_oneway3
 	// 23:472d - the bumpers: in state 9 each hit 25,000 (tabb74) and every tenth the jackpot; in normal play every
 	// twelfth hit (a_bump1's MessageField) raises the bumpers' level (a_bump2's, up to 6; text 3001 with the new
@@ -2888,12 +3095,6 @@ namespace
 			break;
 		}
 	}
-	void Rule_62f4(MessageCode, TPinballComponent*) {} // TODO(23:62f4): a_sink17
-	void Rule_65a6(MessageCode, TPinballComponent*) {} // TODO(23:65a6): a_sink15
-	void Rule_6873(MessageCode, TPinballComponent*) {} // TODO(23:6873): a_sink14
-	void Rule_6b40(MessageCode, TPinballComponent*) {} // TODO(23:6b40): a_sink4
-	void Rule_6eef(MessageCode, TPinballComponent*) {} // TODO(23:6eef): a_sink9
-	void Rule_7061(MessageCode, TPinballComponent*) {} // TODO(23:7061): a_sink12
 	void Rule_734c(MessageCode, TPinballComponent*) {} // TODO(23:734c): a_sink5
 	void Rule_742b(MessageCode, TPinballComponent*) {} // TODO(23:742b): a_sink6
 	void Rule_750e(MessageCode, TPinballComponent*) {} // TODO(23:750e): a_sink7
