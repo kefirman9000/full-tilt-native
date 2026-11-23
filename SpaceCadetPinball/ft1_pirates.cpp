@@ -3417,10 +3417,123 @@ namespace
 			ScoreHit(caller, 0);
 		Play(tabb43wave);
 	}
-	void Rule_865a(MessageCode, TPinballComponent*) {} // TODO(23:865a): a_roll3
-	void Rule_8751(MessageCode, TPinballComponent*) {} // TODO(23:8751): a_roll5
-	void Rule_883b(MessageCode, TPinballComponent*) {} // TODO(23:883b): a_roll1
-	void Rule_8925(MessageCode, TPinballComponent*) {} // TODO(23:8925): a_roll2
+	// 23:3f73 - with v_lite529 lit: it flashes out (12c0) and a random award
+	float RandomAwardLit(float time)
+	{
+		if (!LightOn(v_lite529))
+			return time;
+		Send(v_lite529, MessageCode::TLightFlasherStartTimedThenStayOff, 1.0f); // 23:12c0
+		return RandomAward(time);
+	}
+
+	// 23:865a - a_roll3: in normal play its wind light (537) and the five checked; with no award there, v_lite529's
+	// random award; with none at all: tabb43, the picture "9" and the score
+	void Rule_865a(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		float time = 0.0f;
+		if (InfoField() == 2)
+		{
+			Send(v_lite537, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			time = LaneWinds(0.0f);
+		}
+		if (time == 0.0f)
+			time = RandomAwardLit(0.0f);
+		if (time != 0.0f)
+			return;
+		Play(tabb43wave);
+		Display("9", 2.0f, 1); // ds:0x223e
+		ScoreHit(caller, 0);
+	}
+
+	// 23:8751 / 883b - a_roll5 / a_roll1 (the inlanes): in normal play their wind light (534 / 535) and the five
+	// checked (no award: the picture "6" / "7"); tabb44 unless awarded; v_lite544 flashes on, kicker 2 and wall 610
+	// on (the kickback), the score
+	void InlaneRule(MessageCode code, TPinballComponent* caller, component_tag<TLight>& wind, const char* picture)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		bool sound = true;
+		if (InfoField() == 2)
+		{
+			Send(wind, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			if (LaneWinds(0.0f) == 0.0f)
+				Display(picture, 2.0f, 1);
+			else
+				sound = false;
+		}
+		if (sound)
+			Play(tabb44wave);
+		Send(v_lite544, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+		for (auto part : {&a_kick2, &s_bwal610})
+			if (auto comp = part->GetComponent())
+				comp->ActiveFlag = 1;
+		ScoreHit(caller, 0);
+	}
+
+	void Rule_8751(MessageCode c, TPinballComponent* p) { InlaneRule(c, p, v_lite534, "6"); } // ds:0x2238
+	void Rule_883b(MessageCode c, TPinballComponent* p) { InlaneRule(c, p, v_lite535, "7"); } // ds:0x223a
+
+	// 23:8925 - a_roll2: in state 5 its light (622) blinking is a Bermuda shot, else 50,000 (tabb12). In normal play its
+	// wind light (536) and the five checked (no award: the picture "8", tabb12). Then the south wind lights (0, 1,
+	// more lit: 622, 622 and 621, all flash on in normal play) give the score 0 / 1 / 2 (text 3010, 2 s after any
+	// award)
+	void Rule_8925(MessageCode code, TPinballComponent* caller)
+	{
+		if (code != MessageCode::ControlCollision)
+			return;
+		float time = 0.0f;
+		auto state = InfoField();
+		if (state == 5)
+		{
+			if (v_lite622.Component && v_lite622.Component->FlasherOnFlag)
+			{
+				BermudaShot();
+				return;
+			}
+			SpecialAddScore(caller, 50000);
+			Play(tabb12wave);
+			return;
+		}
+		if (state == 2)
+		{
+			Send(v_lite536, MessageCode::TLightFlasherStartTimedThenStayOn, 1.0f);
+			time = LaneWinds(0.0f);
+			if (time == 0.0f)
+			{
+				Display("8", 2.0f, 1); // ds:0x223c
+				Play(tabb12wave);
+			}
+		}
+		bool normal = state == 2;
+		auto flash = [](component_tag_base& part) {
+			Send(part, MessageCode::TLightFlasherStartTimedThenStayOn, 2.0f);
+		};
+		int index;
+		switch (Send(south_wind_light_group, MessageCode::TLightGroupGetOnCount, 0.0f))
+		{
+		case 0:
+			if (normal)
+				flash(v_lite622);
+			index = 0;
+			break;
+		case 1:
+			if (normal)
+			{
+				flash(v_lite622);
+				flash(v_lite621);
+			}
+			index = 1;
+			break;
+		default:
+			if (normal)
+				flash(south_wind_light_group);
+			index = 2;
+			break;
+		}
+		Display(Format(3010, ScoreHit(caller, index)).c_str(), 2.0f + time, 0);
+	}
 	void Rule_8b78(MessageCode, TPinballComponent*) {} // TODO(23:8b78): a_roll9
 	void Rule_8d6c(MessageCode, TPinballComponent*) {} // TODO(23:8d6c): a_roll8
 	void Rule_8f60(MessageCode, TPinballComponent*) {} // TODO(23:8f60): a_roll6
